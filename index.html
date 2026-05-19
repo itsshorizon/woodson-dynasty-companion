@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1410" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Woodson Clan" />
+  <title>Woodson Clan Championship</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+</head>
+<body>
+  <!-- Top ambient light bar — color pulses to active tab accent -->
+  <div class="ambient-bar" id="ambient-bar" aria-hidden="true"></div>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1 id="view-title">STANDINGS</h1>
+    </div>
+    <div class="header-right">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <div class="header-meta" id="header-meta"></div>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- Standings View -->
+    <section class="view active" id="view-standings">
+      <!-- League Front Page (latest newsletter, populated from Stein /newsletter) -->
+      <div class="front-page" id="front-page" hidden></div>
+
+      <div class="standings-split">
+        <div class="split-col">
+          <h3 class="split-h">Leaderboard</h3>
+          <div id="standings-content"></div>
+        </div>
+        <div class="split-col">
+          <h3 class="split-h">This Week</h3>
+          <div id="scores-content"></div>
+        </div>
+      </div>
+
+      <!-- Schedule Luck scatter plot: PF (x) vs PA (y) with median quadrants -->
+      <div class="card chart-card" id="schedule-luck-card">
+        <h2>Schedule Luck Index</h2>
+        <p class="chart-sub">Points For (right = strong offense) vs Points Against (down = easy schedule).<br/>Quadrants: <b>True Contenders</b> (lower-right), <b>Lucky Wins</b> (lower-left), <b>Unlucky Hard Schedules</b> (upper-right), <b>Rebuilders</b> (upper-left).</p>
+        <div class="chart-wrap"><canvas id="luck-chart"></canvas></div>
+      </div>
+
+      <!-- Press Room secret unlock (commish only) -->
+      <button class="press-room-trigger" id="press-room-trigger" aria-label="Commissioner Press Room">📰</button>
+    </section>
+
+    <!-- Rosters View -->
+    <section class="view" id="view-rosters">
+      <div class="team-pills" id="roster-team-pills"></div>
+      <div id="roster-content"></div>
+    </section>
+
+    <!-- Trade Desk View -->
+    <section class="view" id="view-trades">
+      <div class="trade-banner" id="trade-banner" hidden></div>
+
+      <!-- Trade Block (league-wide players on the block) -->
+      <div class="card" id="trade-block-card">
+        <h2>Trade Block</h2>
+        <div id="trade-block-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>New Trade Proposal</h2>
+        <div class="trade-builder">
+          <div class="trade-side">
+            <label>Your Team</label>
+            <select id="team-a-select"></select>
+            <div class="asset-section">
+              <h4>Players</h4>
+              <div class="asset-list" id="team-a-players"></div>
+            </div>
+            <div class="asset-section">
+              <h4>Draft Picks</h4>
+              <div class="asset-list" id="team-a-picks"></div>
+              <button class="btn-ghost btn-sm" id="add-pick-a">+ Add Pick</button>
+            </div>
+          </div>
+          <div class="trade-divider"><span>⇄</span></div>
+          <div class="trade-side">
+            <label>Trade Partner</label>
+            <select id="team-b-select"></select>
+            <div class="asset-section">
+              <h4>Players</h4>
+              <div class="asset-list" id="team-b-players"></div>
+            </div>
+            <div class="asset-section">
+              <h4>Draft Picks</h4>
+              <div class="asset-list" id="team-b-picks"></div>
+              <button class="btn-ghost btn-sm" id="add-pick-b">+ Add Pick</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary" id="submit-trade">Submit Trade</button>
+      </div>
+
+      <div class="card">
+        <h2>Pending Trades</h2>
+        <div id="pending-trades-list"></div>
+      </div>
+    </section>
+
+    <!-- My Team View -->
+    <section class="view" id="view-myteam">
+      <div id="myteam-content"></div>
+    </section>
+
+    <!-- Vault View (Draft Board + Historical Archives) -->
+    <section class="view" id="view-vault">
+      <!-- League-wide Extremes Record Book + All-Play toggle -->
+      <div class="card" id="extremes-card">
+        <h2>Record Book · 2022–2025</h2>
+        <div class="extremes-grid" id="extremes-grid"></div>
+        <div class="allplay-wrap">
+          <button class="btn-ghost" id="allplay-toggle">Show All-Play Standings</button>
+          <div class="allplay-table" id="allplay-table" hidden></div>
+        </div>
+      </div>
+
+      <div class="segmented vault-subnav" id="vault-subnav">
+        <button data-sub="board" class="seg-btn active">Draft Board</button>
+        <button data-sub="rivalry" class="seg-btn">Rivalry</button>
+        <button data-sub="resumes" class="seg-btn">Resumes</button>
+        <button data-sub="timemachine" class="seg-btn">Time Machine</button>
+        <button data-sub="playerindex" class="seg-btn">Players</button>
+        <button data-sub="managerindex" class="seg-btn">Managers</button>
+      </div>
+
+      <!-- Sub: Visual Draft Board -->
+      <div class="vault-section" id="vault-board">
+        <div class="segmented" id="board-year-toggle">
+          <button data-year="2027" class="seg-btn active">2027</button>
+          <button data-year="2028" class="seg-btn">2028</button>
+          <button data-year="2029" class="seg-btn">2029</button>
+        </div>
+        <div class="draft-board-wrap">
+          <div class="draft-board" id="draft-board"></div>
+        </div>
+        <div class="board-legend">
+          <span><span class="dot dot-original"></span>Original</span>
+          <span><span class="dot dot-traded"></span>Traded</span>
+        </div>
+      </div>
+
+      <!-- Sub: Rivalry Desk -->
+      <div class="vault-section" id="vault-rivalry" hidden>
+        <div class="card">
+          <h2>Rivalry Desk</h2>
+          <div class="rivalry-pickers">
+            <select id="rivalry-a"></select>
+            <span class="vs">VS</span>
+            <select id="rivalry-b"></select>
+          </div>
+          <button class="btn-primary" id="rivalry-compare">Compare</button>
+        </div>
+        <div id="rivalry-result"></div>
+      </div>
+
+      <!-- Sub: Manager Resumes -->
+      <div class="vault-section" id="vault-resumes" hidden>
+        <div class="card chart-card" id="dynasty-arc-card">
+          <h2>All-Time Dynasty Arc</h2>
+          <p class="chart-sub">Each manager's season Points For from 2022–2025. Click a name in the legend to toggle.</p>
+          <div class="chart-wrap chart-tall"><canvas id="arc-chart"></canvas></div>
+        </div>
+        <div class="resume-grid" id="resume-tiles"></div>
+        <div id="resume-detail"></div>
+      </div>
+
+      <!-- Sub: Master Player Index -->
+      <div class="vault-section" id="vault-playerindex" hidden>
+        <div class="card">
+          <h2>Master Player Index · 2022–2025</h2>
+          <p class="chart-sub">Lifetime ledger of every player who's been rostered. Click any row for their full profile.</p>
+          <div class="player-index-controls">
+            <input type="search" id="player-index-search" placeholder="Search by name..." />
+            <select id="player-index-pos-filter">
+              <option value="">All Positions</option>
+              <option>QB</option><option>RB</option><option>WR</option>
+              <option>TE</option><option>K</option><option>DST</option>
+            </select>
+          </div>
+          <div class="player-index-wrap">
+            <table class="player-index">
+              <thead>
+                <tr>
+                  <th data-sort="name">Player</th>
+                  <th data-sort="pos">Pos</th>
+                  <th data-sort="totalPts" class="num desc">Career Pts</th>
+                  <th data-sort="ppg" class="num">PPG</th>
+                  <th data-sort="high" class="num">High</th>
+                  <th data-sort="low" class="num">Low</th>
+                  <th data-sort="seasons" class="num">Yrs</th>
+                </tr>
+              </thead>
+              <tbody id="player-index-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub: Historical Manager Index -->
+      <div class="vault-section" id="vault-managerindex" hidden>
+        <!-- Career Ledger Table -->
+        <div class="card">
+          <h2>Historical Manager Index · 2022–2025</h2>
+          <p class="chart-sub">Lifetime ledger across every season. Click any column header to re-rank.</p>
+          <div class="manager-index-wrap">
+            <table class="manager-index">
+              <thead>
+                <tr>
+                  <th data-sort="name">Manager</th>
+                  <th data-sort="seasons" class="num">Yrs</th>
+                  <th data-sort="record">Record</th>
+                  <th data-sort="winPct" class="num desc">Win %</th>
+                  <th data-sort="careerPF" class="num">Career PF</th>
+                  <th data-sort="careerPPG" class="num">PPG</th>
+                  <th data-sort="allTimeHigh" class="num">High</th>
+                  <th data-sort="allTimeLow" class="num">Low</th>
+                </tr>
+              </thead>
+              <tbody id="manager-index-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Career Luck Matrix Scatter + Animated Trajectories -->
+        <div class="card chart-card">
+          <h2>Career Luck Matrix</h2>
+          <p class="chart-sub">Lifetime averages by default. Pick a season + press ▶ Play to watch teams drift through the quadrants week-by-week.</p>
+          <div class="playback-controls" id="luck-playback">
+            <select id="luck-playback-year">
+              <option value="">All-Time</option>
+              <option value="2022">2022 Season</option>
+              <option value="2023">2023 Season</option>
+              <option value="2024">2024 Season</option>
+              <option value="2025">2025 Season</option>
+            </select>
+            <button class="playback-btn" id="luck-playback-btn" disabled>▶ Play</button>
+            <input type="range" id="luck-playback-slider" min="1" max="14" value="14" disabled />
+            <span class="playback-week" id="luck-playback-label">Wk —</span>
+          </div>
+          <div class="chart-wrap"><canvas id="alltime-luck-chart"></canvas></div>
+        </div>
+
+        <!-- Volatility Index Floating Bars -->
+        <div class="card chart-card">
+          <h2>Volatility Index</h2>
+          <p class="chart-sub">Each manager's all-time low–to–high single-week range. The bright tick marks lifetime career PPG.</p>
+          <div class="chart-wrap chart-tall"><canvas id="volatility-chart"></canvas></div>
+        </div>
+
+        <!-- Rivalry Heatmap -->
+        <div class="card">
+          <h2>The Blood Feud Heatmap</h2>
+          <p class="chart-sub">Row manager's all-time win % vs column manager. Green = dominance, red = dominated, gray = .500 / no games. Tap any cell for details.</p>
+          <div class="heatmap-wrap">
+            <div class="heatmap" id="rivalry-heatmap"></div>
+          </div>
+          <div class="heatmap-tooltip" id="heatmap-tooltip" hidden></div>
+        </div>
+
+        <!-- All-Play Reality Timeline -->
+        <div class="card chart-card">
+          <h2>All-Play Reality vs Actual</h2>
+          <p class="chart-sub">Pick a manager. We plot their Actual win % alongside what their win % SHOULD have been if they'd played every other team every week. Gaps = schedule luck.</p>
+          <select id="allplay-manager-select" style="margin-bottom:10px;"></select>
+          <div class="chart-wrap"><canvas id="allplay-reality-chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Sub: Draft Time Machine -->
+      <div class="vault-section" id="vault-timemachine" hidden>
+        <div class="segmented" id="tm-year-toggle">
+          <button data-year="2025" class="seg-btn active">2025</button>
+          <button data-year="2024" class="seg-btn">2024</button>
+          <button data-year="2023" class="seg-btn">2023</button>
+          <button data-year="2022" class="seg-btn">2022</button>
+        </div>
+        <div class="card chart-card" id="steals-busts-card">
+          <h2>Steals &amp; Busts</h2>
+          <p class="chart-sub">X = Overall pick · Y = Season fantasy points. Lower-left = early bust, upper-right = late steal.</p>
+          <div class="chart-wrap"><canvas id="steals-chart"></canvas></div>
+        </div>
+        <div id="timemachine-content"></div>
+      </div>
+
+      <!-- Historical Trauma Ledger (persistent at base of Vault) -->
+      <div class="card" id="trauma-ledger-card">
+        <h2>📉 The Historical Trauma Ledger</h2>
+        <p class="chart-sub">All-time bad beats and great escapes across 2022–2025.</p>
+        <div class="trauma-split">
+          <div class="trauma-col">
+            <h3 class="trauma-h trauma-bad">💔 Top 5 Bad Beats</h3>
+            <p class="trauma-sub">Highest scores that still <b>lost</b>.</p>
+            <div id="trauma-bad-beats"></div>
+          </div>
+          <div class="trauma-col">
+            <h3 class="trauma-h trauma-escape">🍀 Top 5 Great Escapes</h3>
+            <p class="trauma-sub">Lowest scores that still <b>won</b>.</p>
+            <div id="trauma-escapes"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-view="standings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2 4 4 8-8 4 4"/></svg>
+      <span>Standings</span>
+    </button>
+    <button class="nav-btn" data-view="rosters">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
+      <span>Rosters</span>
+    </button>
+    <button class="nav-btn" data-view="myteam">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>
+      <span>My Team</span>
+    </button>
+    <button class="nav-btn" data-view="trades">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3M17 17H4l3 3"/></svg>
+      <span>Trades</span>
+    </button>
+    <button class="nav-btn" data-view="vault">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l9-3 9 3v6c0 5-4 9-9 10-5-1-9-5-9-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Vault</span>
+    </button>
+  </nav>
+
+  <!-- Commissioner Dashboard Modal -->
+  <div class="modal-overlay" id="commish-modal" hidden>
+    <div class="modal modal-lg">
+      <div class="modal-header commish-header">
+        <button class="modal-close" id="commish-close" aria-label="Close">×</button>
+        <h2>Commissioner Tools</h2>
+        <p>Force-resolve, edit, or delete any trade in the league.</p>
+      </div>
+      <div class="modal-body" id="commish-content"></div>
+    </div>
+  </div>
+
+  <!-- Commissioner Docs Modal (deployment workflow + rollover checklist) -->
+  <div class="modal-overlay" id="commish-docs-modal" hidden>
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <button class="modal-close" id="commish-docs-close" aria-label="Close">×</button>
+        <h2>📚 Commissioner Docs</h2>
+        <p>Internal operating manual — patch deployment + end-of-season rollover.</p>
+      </div>
+      <div class="modal-body">
+        <section class="docs-section">
+          <h3 class="docs-h">🛠 Patch Deployment Workflow</h3>
+          <ol class="docs-steps">
+            <li><b>Sandbox</b> — Never edit live code. Open the local repository folder and a terminal.</li>
+            <li><b>Snippet Handoff</b> — When using Claude Code, never paste the entire <code>app.js</code> file. Provide only the specific function snippets that need upgrading to preserve context windows.</li>
+            <li><b>Local QA</b> — Double-click <code>index.html</code> to verify visual changes locally before pushing.</li>
+            <li><b>GitHub Push</b> — Run <code>git add .</code>, then <code>git commit -m "patch notes"</code>, then <code>git push origin main</code>.</li>
+            <li><b>Live Refresh</b> — The GitHub Pages URL will automatically compile and update globally within ~60 seconds.</li>
+          </ol>
+        </section>
+
+        <section class="docs-section">
+          <h3 class="docs-h">🔄 End-of-Season Rollover Checklist</h3>
+          <ol class="docs-steps">
+            <li><b>Update <code>history.json</code></b> — Scrape the final season standings and points, then manually append the new year's data block into the static JSON file so the Vault graphs update automatically. (Run <code>node scrape-history.js</code> with the new year added to the <code>YEARS</code> array.)</li>
+            <li><b>Bump <code>CONFIG.SEASON</code></b> — Open <code>app.js</code> and update <code>CONFIG.SEASON</code> (e.g. from <code>2026</code> to <code>2027</code>) to point the live ESPN API at the new season slate.</li>
+            <li><b>Reset the Stein database</b> — Open the Google Sheet. Archive the old rows, then clear the rows inside the <code>trades</code>, <code>trade_block</code>, and <code>newsletter</code> tabs to provide a clean slate for the new year.</li>
+          </ol>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Commissioner Press Room Modal (newsletter generation) -->
+  <div class="modal-overlay" id="press-modal" hidden>
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <button class="modal-close" id="press-close" aria-label="Close">×</button>
+        <h2>📰 Commissioner Press Room</h2>
+        <p>Generate this week's league newsletter via Claude. Your API key stays in session memory only — never saved.</p>
+      </div>
+      <div class="modal-body" id="press-content">
+        <div class="press-step" id="press-step-key">
+          <label class="press-label">Anthropic API Key</label>
+          <input type="password" id="press-key" placeholder="sk-ant-..." autocomplete="off" />
+          <label class="press-label" style="margin-top:10px;">Model</label>
+          <select id="press-model">
+            <option value="claude-sonnet-4-6">Sonnet 4.6 (recommended — fast + cheap)</option>
+            <option value="claude-opus-4-7">Opus 4.7 (best writing, more expensive)</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5 (cheapest, lighter prose)</option>
+          </select>
+          <label class="press-label" style="margin-top:10px;">Week #</label>
+          <input type="number" id="press-week" value="1" min="1" max="17" />
+          <button class="btn-primary" id="press-generate">Generate Newsletter</button>
+        </div>
+        <div class="press-step" id="press-step-draft" hidden>
+          <label class="press-label">Headline</label>
+          <input type="text" id="press-headline" />
+          <label class="press-label" style="margin-top:10px;">Story</label>
+          <textarea id="press-story" rows="14"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn-ghost" id="press-regen">↻ Regenerate</button>
+            <button class="btn-primary" id="press-publish">🚀 Publish to League</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Particle burst overlay canvas (transparent fullscreen layer) -->
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <!-- Player Profile Modal -->
+  <div class="modal-overlay" id="player-profile-modal" hidden>
+    <div class="modal modal-lg">
+      <div class="modal-header" id="player-profile-header">
+        <button class="modal-close" id="player-profile-close" aria-label="Close">×</button>
+        <!-- Filled by renderPlayerProfile -->
+      </div>
+      <div class="modal-body" id="player-profile-body"></div>
+    </div>
+  </div>
+
+  <!-- Team Picker Modal -->
+  <div class="modal-overlay" id="team-picker" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Who's Your Team?</h2>
+        <p>Pick the team you manage. You can change this later.</p>
+      </div>
+      <div class="modal-body" id="team-picker-list"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
