@@ -150,6 +150,44 @@ async function fetchJSON(url, opts) {
 function teamById(id) { return state.teams.find((t) => t.id === id); }
 function teamByName(name) { return state.teams.find((t) => t.name === name); }
 function teamName(id) { return teamById(id)?.name || `Team ${id}`; }
+
+/* ----------------------- Draft Ownership Matching (Beta 1.2) -----------------------
+ * Decouples draft-pick ownership from volatile team-name strings. The draft_picks
+ * sheet may carry an 'Owner ID' column holding the current owner's stable team.id.
+ * All ownership checks prefer that ID, then fall back to a case-insensitive,
+ * trimmed text comparison against the team's name / abbrev / owner attributes.
+ * --------------------------------------------------------------------------------- */
+
+// Does `value` (a free-text owner string from the sheet) refer to `team`?
+function teamMatchesText(value, team) {
+  if (value == null || !team) return false;
+  const v = String(value).toLowerCase().trim();
+  if (!v) return false;
+  return [team.name, team.abbrev, team.owner].some(
+    (attr) => attr && String(attr).toLowerCase().trim() === v
+  );
+}
+
+// Is this draft_picks row CURRENTLY owned by `team`? ID first, text fallback.
+function pickCurrentlyOwnedBy(row, team) {
+  if (!row || !team) return false;
+  const ownerId = row['Owner ID'];
+  if (ownerId != null && String(ownerId).trim() !== '') {
+    return parseInt(ownerId, 10) === team.id;
+  }
+  return teamMatchesText(row['Current Owner'], team);
+}
+
+// Resolve the current-owner team object for a draft_picks row. ID first, then name.
+function resolveCurrentOwnerTeam(row) {
+  if (!row) return null;
+  const ownerId = row['Owner ID'];
+  if (ownerId != null && String(ownerId).trim() !== '') {
+    const byId = teamById(parseInt(ownerId, 10));
+    if (byId) return byId;
+  }
+  return teamByName(row['Current Owner']) || null;
+}
 function myTeam() { return teamById(state.myTeamId); }
 function myTeamName() { return myTeam()?.name || null; }
 
@@ -324,26 +362,32 @@ async function deleteTrade(tradeId) {
   return res.json();
 }
 
-// Update a single draft pick row's Current Owner.
+// Update a single draft pick row's Current Owner AND stamp the stable 'Owner ID'
+// column so future ownership reads can be ID-driven (text remains for legacy compat).
 async function updateDraftPickOwner(year, round, originalOwner, newOwner) {
+  const newOwnerTeam = teamByName(newOwner);
+  const setPayload = { 'Current Owner': newOwner };
+  if (newOwnerTeam) setPayload['Owner ID'] = newOwnerTeam.id;
   const res = await fetch(`${CONFIG.SHEETS_BASE}/draft_picks`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       condition: { Year: String(year), Round: String(round), 'Original Owner': originalOwner },
-      set: { 'Current Owner': newOwner },
+      set: setPayload,
     }),
   });
   if (!res.ok) throw new Error(`Pick update failed: ${res.status}`);
   return res.json();
 }
 
-// Apply an accepted trade to the draft_picks sheet: every pick swaps Current Owner.
+// Apply an accepted trade to the draft_picks sheet: every pick swaps Current Owner
+// AND records the recipient's stable team.id into 'Owner ID'. Legacy string-only
+// rows keep working because updateDraftPickOwner still writes 'Current Owner' too.
 async function applyTradeToDraftPicks(trade) {
   const offered = safeParse(trade.assestsOffered) || {};
   const requested = safeParse(trade.assetsRequested) || {};
-  const proposing = trade.teamProposing;
-  const receiving = trade.teamReceiving;
+  const proposing = trade.teamProposing;   // team name
+  const receiving = trade.teamReceiving;    // team name
 
   const tasks = [];
   // proposing's picks go to receiving
@@ -808,12 +852,12 @@ function renderTradeAssets(side) {
 }
 
 // Phantom Pick Protection: only allow selecting picks the proposing team CURRENTLY owns.
-// Cross-references the live 'Current Owner' column on the draft_picks sheet.
+// Tier 1: match the row's 'Owner ID' against teamId. Tier 2: robust text fallback.
 function ownedPicksFor(teamId) {
   const team = teamById(teamId);
   if (!team) return [];
   return state.draftPicks
-    .filter((p) => p['Current Owner'] === team.name)
+    .filter((p) => pickCurrentlyOwnedBy(p, team))
     .map((p) => ({ year: parseInt(p.Year, 10), round: parseInt(p.Round, 10), origOwner: p['Original Owner'] }));
 }
 
@@ -1552,20 +1596,22 @@ function renderDraftBoard() {
   for (let round = 1; round <= CONFIG.DRAFT_ROUNDS; round++) {
     cells.push(`<div class="board-round-label">R${round}</div>`);
     slotOrder.forEach((origTeam, slotIdx) => {
+      // Find this slot's row by original owner (the pick's permanent identity), robust text match
       const row = state.draftPicks.find((p) =>
         String(p.Year) === String(year) &&
         String(p.Round) === String(round) &&
-        p['Original Owner'] === origTeam.name
+        teamMatchesText(p['Original Owner'], origTeam)
       );
-      const currentOwner = row ? row['Current Owner'] : origTeam.name;
-      const isTraded = currentOwner && currentOwner !== origTeam.name;
+      // Resolve CURRENT owner via 'Owner ID' first, then 'Current Owner' text
+      const currentTeam = row ? resolveCurrentOwnerTeam(row) : origTeam;
+      const currentOwnerName = currentTeam?.name || (row ? row['Current Owner'] : origTeam.name);
+      const isTraded = currentTeam ? currentTeam.id !== origTeam.id : Boolean(currentOwnerName && currentOwnerName !== origTeam.name);
       const pickLabel = `${round}.${String(slotIdx + 1).padStart(2, '0')}`;
-      const currentTeam = teamByName(currentOwner);
       const tradeFlag = isTraded
-        ? `<div class="pick-trade-flag">→ ${escapeHtml(currentTeam?.abbrev || currentOwner)}</div>`
+        ? `<div class="pick-trade-flag">→ ${escapeHtml(currentTeam?.abbrev || currentOwnerName)}</div>`
         : '';
       cells.push(`
-        <div class="board-cell ${isTraded ? 'traded' : ''}" title="${escapeHtml(origTeam.name)} R${round} → ${escapeHtml(currentOwner || '—')}">
+        <div class="board-cell ${isTraded ? 'traded' : ''}" title="${escapeHtml(origTeam.name)} R${round} → ${escapeHtml(currentOwnerName || '—')}">
           <div class="pick-num">${pickLabel}</div>
           <div class="pick-owner">${escapeHtml(origTeam.abbrev || origTeam.name.slice(0, 6))}</div>
           ${tradeFlag}
@@ -2294,23 +2340,28 @@ function renderDraftPills() {
 }
 
 function getPickStatus(year, round, viewedTeamId) {
+  const viewedTeam = teamById(viewedTeamId);
   const viewedName = teamName(viewedTeamId);
-  // Find the row for the viewed team's OWN pick of this year/round
+
+  // The viewed team's OWN pick for this slot (matched by original owner identity)
   const ownRow = state.draftPicks.find((p) =>
     String(p.Year) === String(year) &&
     String(p.Round) === String(round) &&
-    p['Original Owner'] === viewedName
+    teamMatchesText(p['Original Owner'], viewedTeam)
   );
-  const currentOwnerName = ownRow ? ownRow['Current Owner'] : viewedName;
-  const currentOwner = teamByName(currentOwnerName)?.id ?? viewedTeamId;
+  let currentOwner = viewedTeamId;
+  let currentOwnerName = viewedName;
+  if (ownRow) {
+    const ownerTeam = resolveCurrentOwnerTeam(ownRow);
+    currentOwner = ownerTeam?.id ?? viewedTeamId;
+    currentOwnerName = ownerTeam?.name ?? ownRow['Current Owner'] ?? viewedName;
+  }
 
-  // Picks they acquired from others (current=them, original=someone else)
-  const acquired = state.draftPicks.filter((p) =>
-    String(p.Year) === String(year) &&
-    String(p.Round) === String(round) &&
-    p['Current Owner'] === viewedName &&
-    p['Original Owner'] !== viewedName
-  ).map((p) => ({
+  // Picks acquired from others: currently owned by viewed team, originally someone else's
+  const acquired = state.draftPicks.filter((p) => {
+    if (String(p.Year) !== String(year) || String(p.Round) !== String(round)) return false;
+    return pickCurrentlyOwnedBy(p, viewedTeam) && !teamMatchesText(p['Original Owner'], viewedTeam);
+  }).map((p) => ({
     originalOwnerName: p['Original Owner'],
     originalTeamId: teamByName(p['Original Owner'])?.id,
   }));
@@ -2479,7 +2530,8 @@ function tradesForMe() {
 }
 
 function draftSummaryForMe(teamId) {
-  // Per-year breakdown: { 2027: {owned, gained, lost, total}, 2028: ..., 2029: ... }
+  // Per-year breakdown computed off the now ID-aware getPickStatus(), so inventory
+  // balances stay correct even when 'Current Owner' text drifts from team.name.
   const byYear = {};
   CONFIG.DRAFT_YEARS.forEach((year) => {
     let owned = 0, gained = 0, lost = 0;
