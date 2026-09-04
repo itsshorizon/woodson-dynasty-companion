@@ -1317,6 +1317,28 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   margin-right: 4px;
 }
 
+/* ---------- Trade Partner SMS Alert modal body ---------- */
+#trade-partner-alert .modal { max-width: 380px; text-align: center; }
+#trade-partner-alert .alert-lead {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--tab-accent);
+  letter-spacing: -0.01em;
+  margin: 8px 0 6px;
+}
+#trade-partner-alert .alert-sub {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0 0 18px;
+  font-weight: 600;
+}
+#trade-partner-alert .btn-primary { margin-top: 0; }
+#trade-partner-alert .btn-ghost {
+  margin-top: 10px;
+  border-style: solid;
+  background: transparent;
+}
+
 /* ---------- App Version Tag (hidden commish docs trigger) ---------- */
 .app-version-tag {
   display: block;

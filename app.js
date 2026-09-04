@@ -364,9 +364,12 @@ async function deleteTrade(tradeId) {
 
 // Update a single draft pick row's Current Owner AND stamp the stable 'Owner ID'
 // column so future ownership reads can be ID-driven (text remains for legacy compat).
+// Beta 1.3: always writes BOTH 'Current Owner': team.name AND 'Owner ID': team.id.
 async function updateDraftPickOwner(year, round, originalOwner, newOwner) {
   const newOwnerTeam = teamByName(newOwner);
-  const setPayload = { 'Current Owner': newOwner };
+  const setPayload = {
+    'Current Owner': newOwnerTeam ? newOwnerTeam.name : newOwner,
+  };
   if (newOwnerTeam) setPayload['Owner ID'] = newOwnerTeam.id;
   const res = await fetch(`${CONFIG.SHEETS_BASE}/draft_picks`, {
     method: 'PUT',
@@ -380,23 +383,44 @@ async function updateDraftPickOwner(year, round, originalOwner, newOwner) {
   return res.json();
 }
 
-// Apply an accepted trade to the draft_picks sheet: every pick swaps Current Owner
-// AND records the recipient's stable team.id into 'Owner ID'. Legacy string-only
-// rows keep working because updateDraftPickOwner still writes 'Current Owner' too.
+// Apply an accepted trade to the draft_picks sheet. Beta 1.3 refactor:
+// NEVER assume teamProposing/teamReceiving is the pick's Original Owner — traded
+// picks often carry someone ELSE's original stamp. For each pick, look up the
+// exact sheet row by (year, round, currently-owned-by-source-team) and use that
+// row's verified p['Original Owner'] string in the PUT condition so Stein always
+// finds it. Falls back to the payload's origOwner (embedded at trade-creation)
+// when live sheet state can't confirm ownership.
 async function applyTradeToDraftPicks(trade) {
   const offered = safeParse(trade.assestsOffered) || {};
   const requested = safeParse(trade.assetsRequested) || {};
   const proposing = trade.teamProposing;   // team name
   const receiving = trade.teamReceiving;    // team name
+  const proposingTeam = teamById(trade.teamAId) || teamByName(proposing);
+  const receivingTeam = teamById(trade.teamBId) || teamByName(receiving);
+
+  // Resolve the exact 'Original Owner' string for a pick by matching against
+  // the sheet row currently owned by `sourceTeam` at that year/round.
+  const resolveOrigOwner = (pick, sourceTeam, fallbackName) => {
+    if (sourceTeam) {
+      const row = state.draftPicks.find((p) =>
+        String(p.Year) === String(pick.year) &&
+        String(p.Round) === String(pick.round) &&
+        pickCurrentlyOwnedBy(p, sourceTeam)
+      );
+      if (row && row['Original Owner']) return row['Original Owner'];
+    }
+    // Fallbacks: payload's embedded origOwner (set at trade creation time), then legacy source name
+    return pick.origOwner || fallbackName;
+  };
 
   const tasks = [];
-  // proposing's picks go to receiving
   (offered.picks || []).forEach((p) => {
-    tasks.push(updateDraftPickOwner(p.year, p.round, proposing, receiving));
+    const origOwner = resolveOrigOwner(p, proposingTeam, proposing);
+    tasks.push(updateDraftPickOwner(p.year, p.round, origOwner, receiving));
   });
-  // receiving's picks go to proposing
   (requested.picks || []).forEach((p) => {
-    tasks.push(updateDraftPickOwner(p.year, p.round, receiving, proposing));
+    const origOwner = resolveOrigOwner(p, receivingTeam, receiving);
+    tasks.push(updateDraftPickOwner(p.year, p.round, origOwner, proposing));
   });
 
   if (!tasks.length) return;
@@ -412,10 +436,19 @@ async function applyTradeToDraftPicks(trade) {
 
 /* ----------------------- Trade Block API ----------------------- */
 
+// Beta 1.3 — defensive sanitizer strips ghost/empty rows returned by Stein
+// (Sheets often leaves stub rows with null cells after deletes/edits).
+function sanitizeTradeBlockRows(rows) {
+  return (Array.isArray(rows) ? rows : []).filter((e) =>
+    e && e.playerName && e.playerName !== 'null' && e.playerName !== '—' &&
+    e.playerId && String(e.playerId) !== 'null' && e.entryId
+  );
+}
+
 async function loadTradeBlock() {
   try {
     const data = await fetchJSON(`${CONFIG.SHEETS_BASE}/trade_block`);
-    state.tradeBlock = Array.isArray(data) ? data : [];
+    state.tradeBlock = sanitizeTradeBlockRows(data);
     state.tradeBlockMissing = false;
   } catch (err) {
     // Sheet probably doesn't exist yet (Stein returns "Unable to parse range")
@@ -447,6 +480,9 @@ async function addToTradeBlock(player, owner) {
 }
 
 async function removeFromTradeBlock(entryId) {
+  // Optimistic local removal — the card disappears instantly, before the network
+  // round-trip resolves, eliminating the "ghost box" flicker on slow Sheets writes.
+  state.tradeBlock = state.tradeBlock.filter((e) => e.entryId !== entryId);
   const res = await fetch(`${CONFIG.SHEETS_BASE}/trade_block`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
@@ -759,6 +795,14 @@ function populateTradeTeamSelects() {
   $('#add-pick-a').onclick = () => addPickRow('a');
   $('#add-pick-b').onclick = () => addPickRow('b');
   $('#submit-trade').onclick = submitTrade;
+
+  // Beta 1.3 proposal lockdown: users can only propose AS their own team.
+  if (state.myTeamId) {
+    aSel.value = String(state.myTeamId);
+    aSel.disabled = true;
+    aSel.title = 'Locked to your team. Change "My Team" from the My Team tab.';
+    renderTradeAssets('a');
+  }
 }
 
 function applyTradePrefill() {
@@ -791,12 +835,15 @@ function renderTradeBlockSection() {
     `;
     return;
   }
-  if (!state.tradeBlock.length) {
+  // Beta 1.3 secondary guard: re-sanitize before rendering in case any ghost rows
+  // slipped through (e.g. a mid-request state mutation, or legacy in-memory noise).
+  const validEntries = sanitizeTradeBlockRows(state.tradeBlock);
+  if (!validEntries.length) {
     el.innerHTML = empty('No players on the block. Put yours up from the My Team tab.');
     return;
   }
 
-  el.innerHTML = state.tradeBlock.map((entry) => {
+  el.innerHTML = validEntries.map((entry) => {
     const interested = safeParse(entry.interestedTeamIds) || [];
     // Look up owner by ID first (reliable), fall back to name (handles legacy/typo'd rows)
     const ownerTeam = teamById(parseInt(entry.ownerTeamId, 10))
@@ -904,7 +951,9 @@ function addPickRow(side) {
       .map((r) => {
         const p = available.find((q) => q.year === y && q.round === r);
         const ownerNote = p.origOwner !== teamById(teamId).name ? ` (from ${p.origOwner})` : '';
-        return `<option value="${r}">Round ${r}${ownerNote}</option>`;
+        // Beta 1.3: embed the row's true 'Original Owner' string so the trade payload
+        // preserves the exact sheet identity — no guessing at PUT-condition time.
+        return `<option value="${r}" data-orig-owner="${escapeHtml(p.origOwner)}">Round ${r}${ownerNote}</option>`;
       }).join('');
   };
   yearSel.onchange = refreshRounds;
@@ -920,10 +969,15 @@ function collectSideAssets(side) {
     name: c.dataset.name,
     pos: c.dataset.pos,
   }));
-  const picks = $$(`#team-${side}-picks .pick-row`).map((r) => ({
-    year: parseInt(r.querySelector('.pick-year').value, 10),
-    round: parseInt(r.querySelector('.pick-round').value, 10),
-  }));
+  const picks = $$(`#team-${side}-picks .pick-row`).map((r) => {
+    const selOpt = r.querySelector('.pick-round option:checked');
+    const origOwner = selOpt?.dataset?.origOwner || '';
+    return {
+      year: parseInt(r.querySelector('.pick-year').value, 10),
+      round: parseInt(r.querySelector('.pick-round').value, 10),
+      origOwner,
+    };
+  });
   return { teamId, players, picks };
 }
 
@@ -937,10 +991,14 @@ async function submitTrade() {
   if (!b.players.length && !b.picks.length) { toast('Partner side is empty', 'error'); return; }
 
   // Match Stein sheet schema exactly. Includes the 'assestsOffered' typo from the sheet.
+  // Beta 1.3: explicit teamAId/teamBId columns give downstream tools stable ID handles,
+  // and each pick preserves its sheet-verified origOwner for exact PUT targeting.
   const trade = {
     tradeId: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     teamProposing: teamName(a.teamId),
     teamReceiving: teamName(b.teamId),
+    teamAId: a.teamId,
+    teamBId: b.teamId,
     assestsOffered: JSON.stringify({ teamId: a.teamId, players: a.players, picks: a.picks }),
     assetsRequested: JSON.stringify({ teamId: b.teamId, players: b.players, picks: b.picks }),
     status: 'Pending',
@@ -950,20 +1008,54 @@ async function submitTrade() {
   try {
     await postTrade(trade);
     toast('Trade submitted', 'success');
-    $('#team-a-select').value = '';
+    // Preserve the locked side-A team selection on reset; clear only side-B + assets
+    if (!state.myTeamId) $('#team-a-select').value = '';
     $('#team-b-select').value = '';
     $('#team-a-players').innerHTML = '';
     $('#team-b-players').innerHTML = '';
     $('#team-a-picks').innerHTML = '';
     $('#team-b-picks').innerHTML = '';
+    // Re-render side A's roster since we didn't clear the selection
+    if (state.myTeamId) renderTradeAssets('a');
     await loadPendingTrades();
     renderPendingTrades();
+    // Beta 1.3: 1-tap SMS alert modal so the partner hears about the offer immediately
+    showTradePartnerAlert(trade);
   } catch (err) {
     console.error(err);
     toast('Submit failed', 'error');
   } finally {
     $('#submit-trade').disabled = false;
   }
+}
+
+// Post-submit modal: banner + one-tap "Text partner" button (Web Share on mobile, sms: fallback).
+function showTradePartnerAlert(trade) {
+  const partnerName = trade.teamReceiving || 'your trade partner';
+  const modal = $('#trade-partner-alert');
+  if (!modal) return;
+  const url = window.location.href.split('#')[0];
+  const smsBody = `🏈 Trade offer sent to ${partnerName} in the Woodson Clan Championship. Check the Dynasty HQ app: ${url}`;
+  $('#trade-partner-alert-body').innerHTML = `
+    <p class="alert-lead">Trade Proposal Sent!</p>
+    <p class="alert-sub">📱 Text <b>${escapeHtml(partnerName)}</b> to notify them.</p>
+    <button class="btn-primary" id="trade-partner-text-btn">📱 Text ${escapeHtml(partnerName)}</button>
+    <button class="btn-ghost" id="trade-partner-dismiss">Close</button>
+  `;
+  modal.hidden = false;
+  const close = () => { modal.hidden = true; };
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+  $('#trade-partner-dismiss').onclick = close;
+  $('#trade-partner-text-btn').onclick = async () => {
+    const shareData = { title: 'Trade Proposal Sent', text: smsBody, url };
+    if (navigator.share && (typeof navigator.canShare !== 'function' || navigator.canShare(shareData))) {
+      try { await navigator.share(shareData); close(); return; }
+      catch (err) { if (err.name === 'AbortError') return; /* fall through */ }
+    }
+    // Fallback: open the OS SMS composer with the body pre-filled
+    window.location.href = `sms:?&body=${encodeURIComponent(smsBody)}`;
+    close();
+  };
 }
 
 function safeParse(v) {
@@ -2760,7 +2852,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Alpha v2.6</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.3 - Draft Ready</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
