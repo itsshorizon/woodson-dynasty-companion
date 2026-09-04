@@ -109,26 +109,44 @@ function triggerParticleBurst(x, y, colors) {
 }
 function _particleStep() {
   if (!_particleCtx) { _particleRAF = null; return; }
+
+  // Full-bleed clear: reset the DPR transform so clearRect covers the physical
+  // pixel buffer, not the CSS-space rectangle (retina/DPR-safe).
+  _particleCtx.save();
+  _particleCtx.setTransform(1, 0, 0, 1, 0, 0);
   _particleCtx.clearRect(0, 0, _particleCanvas.width, _particleCanvas.height);
+  _particleCtx.restore();
+
   _particles = _particles.filter((p) => p.life > 0);
+
+  // No particles left → cleanly exit and null the RAF handle so the next burst can start fresh.
+  if (_particles.length === 0) {
+    _particleRAF = null;
+    return;
+  }
+
   _particles.forEach((p) => {
     p.vx *= 0.985;
     p.vy = p.vy * 0.985 + p.gravity;
     p.x += p.vx;
     p.y += p.vy;
     p.life -= p.decay;
+
+    // Clamp radius: a negative arc radius throws InvalidStateError and freezes the RAF loop.
+    const currentRadius = Math.max(0, p.size * p.life);
+    if (currentRadius <= 0) return;
+
     _particleCtx.globalAlpha = Math.max(0, p.life);
     _particleCtx.fillStyle = p.color;
     _particleCtx.shadowColor = p.color;
     _particleCtx.shadowBlur = 12;
     _particleCtx.beginPath();
-    _particleCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    _particleCtx.arc(p.x, p.y, currentRadius, 0, Math.PI * 2);
     _particleCtx.fill();
   });
   _particleCtx.globalAlpha = 1;
   _particleCtx.shadowBlur = 0;
-  if (_particles.length) _particleRAF = requestAnimationFrame(_particleStep);
-  else _particleRAF = null;
+  _particleRAF = requestAnimationFrame(_particleStep);
 }
 // Color palette resolver: returns CSS colors for two teams based on their team id parity
 function paletteForTrade(teamAId, teamBId) {
