@@ -413,23 +413,28 @@ async function applyTradeToDraftPicks(trade) {
     return pick.origOwner || fallbackName;
   };
 
-  const tasks = [];
-  (offered.picks || []).forEach((p) => {
-    const origOwner = resolveOrigOwner(p, proposingTeam, proposing);
-    tasks.push(updateDraftPickOwner(p.year, p.round, origOwner, receiving));
-  });
-  (requested.picks || []).forEach((p) => {
-    const origOwner = resolveOrigOwner(p, receivingTeam, receiving);
-    tasks.push(updateDraftPickOwner(p.year, p.round, origOwner, proposing));
-  });
-
-  if (!tasks.length) return;
-  const results = await Promise.allSettled(tasks);
-  const failed = results.filter((r) => r.status === 'rejected');
-  if (failed.length) {
-    console.warn('Some pick updates failed:', failed);
-    toast(`${failed.length} pick update(s) failed`, 'error');
+  // Beta 1.4: sequential await loop replaces Promise.allSettled to avoid
+  // hammering Stein and tripping its rate-limiter on multi-pick trades.
+  // Each PUT completes before the next fires — deterministic, gentle on the API.
+  let failed = 0;
+  for (const p of (offered.picks || [])) {
+    try {
+      await updateDraftPickOwner(p.year, p.round, p.origOwner || proposing, receiving);
+    } catch (err) {
+      console.warn('Offered pick update failed:', p, err);
+      failed++;
+    }
   }
+  for (const p of (requested.picks || [])) {
+    try {
+      await updateDraftPickOwner(p.year, p.round, p.origOwner || receiving, proposing);
+    } catch (err) {
+      console.warn('Requested pick update failed:', p, err);
+      failed++;
+    }
+  }
+  if (failed) toast(`${failed} pick update(s) failed`, 'error');
+
   // Refresh cached draft data so UI reflects new ownership
   await loadDraftPicks();
 }
@@ -1008,6 +1013,16 @@ async function submitTrade() {
   try {
     await postTrade(trade);
     toast('Trade submitted', 'success');
+    // Beta 1.4: fire the native share sheet automatically (falls back to sms:).
+    // Runs right after the success toast so the user is still inside the tap gesture chain.
+    const text = `🏈 TRADE OFFER: ${trade.teamProposing} just sent a proposal to ${trade.teamReceiving}! Open the app to review: https://itsshorizon.github.io/woodson-dynasty-companion/`;
+    try {
+      if (navigator.share && (typeof navigator.canShare !== 'function' || navigator.canShare({ text }))) {
+        await navigator.share({ title: 'Trade Offer', text });
+      } else {
+        window.open('sms:?&body=' + encodeURIComponent(text));
+      }
+    } catch (err) { /* user dismissed share sheet — no-op */ }
     // Preserve the locked side-A team selection on reset; clear only side-B + assets
     if (!state.myTeamId) $('#team-a-select').value = '';
     $('#team-b-select').value = '';
@@ -1019,8 +1034,6 @@ async function submitTrade() {
     if (state.myTeamId) renderTradeAssets('a');
     await loadPendingTrades();
     renderPendingTrades();
-    // Beta 1.3: 1-tap SMS alert modal so the partner hears about the offer immediately
-    showTradePartnerAlert(trade);
   } catch (err) {
     console.error(err);
     toast('Submit failed', 'error');
@@ -2852,7 +2865,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.3 - Draft Ready</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.4 - Draft Ready</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
