@@ -807,25 +807,42 @@ async function handlePlayerAction(btn) {
 
 /* ----------------------- Trade Desk ----------------------- */
 
+// Beta 1.5 — Trade Desk Security Patch.
+// Side A is HARD-LOCKED to the user's identity: only their own team is in the
+// dropdown at all (not just visually disabled), so no manager can ever propose
+// a trade AS another owner. Side B lists every other team (self excluded).
 function populateTradeTeamSelects() {
   const aSel = $('#team-a-select'), bSel = $('#team-b-select');
-  const opts = '<option value="">Select team...</option>' +
-    state.teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-  aSel.innerHTML = opts;
-  bSel.innerHTML = opts;
-  aSel.onchange = () => renderTradeAssets('a');
+  if (!aSel || !bSel) return;
+
+  const my = state.myTeamId ? teamById(state.myTeamId) : null;
+
+  if (my) {
+    aSel.innerHTML = `<option value="${my.id}">${escapeHtml(my.name)}</option>`;
+    aSel.disabled = true;
+    aSel.title = 'Locked to your team. Change "My Team" from the My Team tab.';
+    // Side B: every OTHER team (self is not tradeable with self)
+    bSel.innerHTML = '<option value="">Select trade partner...</option>' +
+      state.teams
+        .filter((t) => t.id !== my.id)
+        .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+        .join('');
+    bSel.disabled = false;
+    // Preload the user's roster on side A
+    renderTradeAssets('a');
+  } else {
+    aSel.innerHTML = '<option value="">Choose your team in My Team first</option>';
+    aSel.disabled = true;
+    aSel.title = 'Set your identity on the My Team tab before proposing trades.';
+    bSel.innerHTML = '<option value="">Select trade partner...</option>' +
+      state.teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    bSel.disabled = false;
+  }
+
   bSel.onchange = () => renderTradeAssets('b');
   $('#add-pick-a').onclick = () => addPickRow('a');
   $('#add-pick-b').onclick = () => addPickRow('b');
   $('#submit-trade').onclick = submitTrade;
-
-  // Beta 1.3 proposal lockdown: users can only propose AS their own team.
-  if (state.myTeamId) {
-    aSel.value = String(state.myTeamId);
-    aSel.disabled = true;
-    aSel.title = 'Locked to your team. Change "My Team" from the My Team tab.';
-    renderTradeAssets('a');
-  }
 }
 
 function applyTradePrefill() {
@@ -3162,6 +3179,8 @@ function setView(name) {
     }
   }, 580);
   if (name === 'trades') {
+    // Beta 1.5: refresh the identity lock on every tab entry so team switches propagate instantly
+    populateTradeTeamSelects();
     loadAllTrades().then(renderPendingTrades);
     loadTradeBlock().then(renderTradeBlockSection);
     // Apply any prefill from "Trade For" navigation

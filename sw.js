@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'dynasty-v22';
+const CACHE_VERSION = 'dynasty-v24';
 const CORE_ASSETS = [
   './',
   './index.html',
