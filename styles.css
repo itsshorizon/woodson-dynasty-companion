@@ -1339,6 +1339,147 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   background: transparent;
 }
 
+/* ---------- Expandable Draft Asset Detail (Beta 1.7) ---------- */
+.draft-summary-card {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.draft-summary-card.active {
+  border-color: var(--tab-accent);
+  background: rgba(var(--tab-accent-rgb), 0.08);
+}
+.draft-summary-card:hover { transform: translateY(-1px); }
+.myteam-draft-detail {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.draft-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.draft-detail-owned    { border-left-color: #a8ff3d; }
+.draft-detail-acquired { border-left-color: #4cc9f0; }
+.draft-detail-traded   { border-left-color: #ff4d6d; opacity: 0.85; }
+.draft-detail-info { min-width: 0; }
+.draft-detail-slot {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+.draft-detail-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  font-weight: 600;
+}
+.draft-detail-badge {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.draft-detail-badge.owned    { background: rgba(168,255,61,0.15); color: #a8ff3d; }
+.draft-detail-badge.acquired { background: rgba(76,201,240,0.15); color: #4cc9f0; }
+.draft-detail-badge.traded   { background: rgba(255,77,109,0.15); color: #ff4d6d; }
+
+/* ---------- Player Search Inputs (Rosters + Trade Desk, Beta 1.7) ---------- */
+.search-input {
+  width: 100%;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 10px 16px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--tab-accent);
+  box-shadow: 0 0 0 3px var(--tab-glow);
+}
+.search-input::placeholder { color: var(--text-mute); }
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.search-result {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.search-result:hover {
+  border-color: var(--tab-accent);
+  background: rgba(var(--tab-accent-rgb), 0.06);
+}
+.search-result .player-photo,
+.search-result .player-photo-fallback,
+.search-result .player-photo-wrap {
+  width: 44px;
+  height: 44px;
+}
+.search-result .search-name {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result .search-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+.owner-pill {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--bg-elev-2);
+  color: var(--tab-accent);
+  border: 1px solid var(--tab-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.search-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-mute);
+  font-size: 13px;
+  font-style: italic;
+}
+
 /* ---------- App Version Tag (hidden commish docs trigger) ---------- */
 .app-version-tag {
   display: block;

@@ -480,7 +480,10 @@ async function loadTradeBlock() {
   }
 }
 
-async function addToTradeBlock(player, owner) {
+// Beta 1.7 — `onBlock` distinguishes a real owner-listed block entry ('true')
+// from an interest-only shadow row someone else created to track their interest.
+// The trade-block panel only shows onBlock='true' rows; interest-only rows stay hidden.
+async function addToTradeBlock(player, owner, onBlock = true) {
   const entry = {
     entryId: 'tb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     playerId: String(player.id),
@@ -491,6 +494,7 @@ async function addToTradeBlock(player, owner) {
     ownterTeamName: owner.name,
     ownerTeamName: owner.name, // also write the correctly-spelled column if it exists
     interestedTeamIds: '[]',
+    onBlock: String(onBlock),
     createdAt: new Date().toISOString(),
   };
   const res = await fetch(`${CONFIG.SHEETS_BASE}/trade_block`, {
@@ -722,6 +726,115 @@ function renderRoster() {
   wirePlayerActions(el);
 }
 
+/* -------- Player Search (Rosters + Trade Desk, Beta 1.7) -------- */
+
+// Cross-league player search. Optionally exclude one team (used by Trade Desk).
+function searchPlayers(query, excludeTeamId = null) {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  const results = [];
+  state.teams.forEach((t) => {
+    if (excludeTeamId != null && t.id === excludeTeamId) return;
+    // Match on team name / owner name too so "search manager" works from the same box
+    const teamHit = t.name.toLowerCase().includes(q) || (t.owner && t.owner.toLowerCase().includes(q));
+    t.roster.forEach((p) => {
+      if (p.name.toLowerCase().includes(q) || teamHit) results.push({ player: p, team: t });
+    });
+  });
+  return results.slice(0, 50); // cap the DOM cost on very short queries like "a"
+}
+
+function renderPlayerSearchResults(results, containerId, onClickResult) {
+  const container = $(`#${containerId}`);
+  if (!container) return;
+  if (!results.length) {
+    container.innerHTML = `<div class="search-empty">No players match your search.</div>`;
+    return;
+  }
+  container.innerHTML = results.map((r, i) => `
+    <div class="search-result" data-idx="${i}">
+      ${playerPhotoHTML(r.player)}
+      <div>
+        <div class="search-name">${escapeHtml(r.player.name)}</div>
+        <div class="search-meta">${escapeHtml(r.player.pos)} · ${escapeHtml(r.player.slot || '')}</div>
+      </div>
+      <span class="owner-pill">${escapeHtml(r.team.name)}</span>
+    </div>
+  `).join('');
+  container.querySelectorAll('.search-result').forEach((row) => {
+    row.onclick = () => onClickResult(results[parseInt(row.dataset.idx, 10)]);
+  });
+}
+
+function wireRosterSearch() {
+  const input = $('#roster-player-search');
+  if (!input || input.dataset.wired) return;
+  input.dataset.wired = '1';
+  input.oninput = () => {
+    const q = input.value;
+    const pills = $('#roster-team-pills');
+    const content = $('#roster-content');
+    if (!q.trim()) {
+      // Empty search → restore standard team roster view
+      if (pills) pills.hidden = false;
+      if (content) content.hidden = false;
+      const existing = $('#roster-search-results');
+      if (existing) existing.remove();
+      return;
+    }
+    if (pills) pills.hidden = true;
+    if (content) content.hidden = true;
+    let results = $('#roster-search-results');
+    if (!results) {
+      results = document.createElement('div');
+      results.id = 'roster-search-results';
+      results.className = 'search-results';
+      content.parentNode.insertBefore(results, content.nextSibling);
+    }
+    renderPlayerSearchResults(searchPlayers(q), 'roster-search-results', (r) => {
+      openPlayerProfile(r.player.id);
+    });
+  };
+}
+
+function wireTradeSearch() {
+  const input = $('#trade-player-search');
+  if (!input || input.dataset.wired) return;
+  input.dataset.wired = '1';
+  input.oninput = () => {
+    const q = input.value;
+    let results = $('#trade-search-results');
+    if (!q.trim()) {
+      if (results) results.remove();
+      return;
+    }
+    if (!results) {
+      results = document.createElement('div');
+      results.id = 'trade-search-results';
+      results.className = 'search-results';
+      input.parentNode.insertBefore(results, input.nextSibling);
+    }
+    renderPlayerSearchResults(
+      searchPlayers(q, state.myTeamId),
+      'trade-search-results',
+      (r) => {
+        const bSel = $('#team-b-select');
+        if (bSel) {
+          bSel.value = String(r.team.id);
+          renderTradeAssets('b');
+          // Wait a tick so the checkbox exists after renderTradeAssets rebuilds the list
+          setTimeout(() => {
+            const cb = $(`#team-b-players input[value="${r.player.id}"]`);
+            if (cb) cb.checked = true;
+          }, 20);
+        }
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+      }
+    );
+  };
+}
+
 function wirePlayerActions(root) {
   root.querySelectorAll('.player-action').forEach((btn) => {
     btn.onclick = (e) => handlePlayerAction(btn);
@@ -746,7 +859,7 @@ async function handlePlayerAction(btn) {
         await removeFromTradeBlock(existing.entryId);
         toast('Removed from block', 'success');
       } else {
-        await addToTradeBlock(player, me);
+        await addToTradeBlock(player, me, true);
         toast('On the trade block', 'success');
       }
       await loadTradeBlock();
@@ -773,7 +886,9 @@ async function handlePlayerAction(btn) {
           const owner = teamById(ownerId);
           const player = owner?.roster.find((p) => p.id === playerId);
           if (!player || !owner) return;
-          await addToTradeBlock(player, owner);
+          // Beta 1.7: interest-only shadow row — NOT publicly on the block. Owner sees
+          // the interested teamIds in their My Team alerts; nobody else sees this row.
+          await addToTradeBlock(player, owner, false);
           await loadTradeBlock();
           entry = findBlockEntry(playerId);
           if (!entry) return;
@@ -877,7 +992,9 @@ function renderTradeBlockSection() {
   }
   // Beta 1.3 secondary guard: re-sanitize before rendering in case any ghost rows
   // slipped through (e.g. a mid-request state mutation, or legacy in-memory noise).
-  const validEntries = sanitizeTradeBlockRows(state.tradeBlock);
+  // Beta 1.7: also filter out interest-only shadow rows — only true block entries render publicly.
+  const validEntries = sanitizeTradeBlockRows(state.tradeBlock)
+    .filter((e) => e.onBlock !== 'false' && e.onBlock !== false);
   if (!validEntries.length) {
     el.innerHTML = empty('No players on the block. Put yours up from the My Team tab.');
     return;
@@ -905,7 +1022,7 @@ function renderTradeBlockSection() {
         ${playerPhotoHTML(pseudoPlayer)}
         <div class="block-info">
           <div class="block-player">${escapeHtml(entry.playerName)} <span class="block-pos pos-${entry.playerPos}">${escapeHtml(entry.playerPos)}</span></div>
-          <div class="block-owner">Owned by ${escapeHtml(ownerName)} • ${interested.length} interested</div>
+          <div class="block-owner">Owned by ${escapeHtml(ownerName)}${isOwner ? ` • ${interested.length} interested` : ''}</div>
           ${isOwner && interested.length ? `<div class="block-interest-list">From: ${interested.map((id) => escapeHtml(teamName(parseInt(id, 10)))).join(', ')}</div>` : ''}
         </div>
         <div class="block-actions">
@@ -1124,13 +1241,16 @@ function renderAssetItems(side) {
 
 function renderPendingTrades() {
   const el = $('#pending-trades-list');
-  const me = myTeamName();
-  // Trade Desk only shows trades the user is part of (proposing or receiving)
-  const mine = me
-    ? state.pendingTrades.filter((t) => t.teamProposing === me || t.teamReceiving === me)
-    : [];
-
-  if (!me) { el.innerHTML = empty('Pick your team on the My Team tab to see your trades'); return; }
+  // Beta 1.7 privacy audit: check both stable teamAId/teamBId AND legacy names
+  // so no trade ever leaks to a non-participant, even if one field is missing.
+  const myId = state.myTeamId;
+  const myName = myTeamName();
+  if (!myId) { el.innerHTML = empty('Pick your team on the My Team tab to see your trades'); return; }
+  const mine = state.pendingTrades.filter((t) => {
+    const isProposer = (t.teamAId && Number(t.teamAId) === myId) || (t.teamProposing && t.teamProposing === myName);
+    const isReceiver = (t.teamBId && Number(t.teamBId) === myId) || (t.teamReceiving && t.teamReceiving === myName);
+    return isProposer || isReceiver;
+  });
   if (!mine.length) { el.innerHTML = empty('No pending trades involve you'); return; }
 
   el.innerHTML = mine.map((t) => {
@@ -2670,22 +2790,62 @@ function tradesForMe() {
 }
 
 function draftSummaryForMe(teamId) {
-  // Per-year breakdown computed off the now ID-aware getPickStatus(), so inventory
-  // balances stay correct even when 'Current Owner' text drifts from team.name.
+  // Beta 1.7: also compile per-year `picks[]` arrays so the UI can render an
+  // itemized breakdown when a year card is expanded (green owned / blue acquired
+  // / red traded), not just aggregate counts.
   const byYear = {};
   CONFIG.DRAFT_YEARS.forEach((year) => {
     let owned = 0, gained = 0, lost = 0;
+    const picks = [];
     for (let round = 1; round <= CONFIG.DRAFT_ROUNDS; round++) {
-      const { currentOwner, acquired } = getPickStatus(year, round, teamId);
-      if (currentOwner === teamId) owned++; else lost++;
-      gained += acquired.length;
+      const { currentOwner, currentOwnerName, acquired } = getPickStatus(year, round, teamId);
+      if (currentOwner === teamId) {
+        owned++;
+        picks.push({ round, kind: 'owned', origOwnerName: teamName(teamId) });
+      } else {
+        lost++;
+        picks.push({ round, kind: 'traded', origOwnerName: teamName(teamId), currentOwnerName });
+      }
+      acquired.forEach((a) => {
+        gained++;
+        picks.push({ round, kind: 'acquired', origOwnerName: a.originalOwnerName });
+      });
     }
-    byYear[year] = { owned, gained, lost, total: owned + gained };
+    // Sort picks by round for a clean top-to-bottom read
+    picks.sort((a, b) => a.round - b.round || (a.kind === 'owned' ? -1 : 1));
+    byYear[year] = { owned, gained, lost, total: owned + gained, picks };
   });
   const total = Object.values(byYear).reduce((s, y) => s + y.total, 0);
   const gainedAll = Object.values(byYear).reduce((s, y) => s + y.gained, 0);
   const lostAll = Object.values(byYear).reduce((s, y) => s + y.lost, 0);
   return { byYear, total, gained: gainedAll, lost: lostAll };
+}
+
+// Render the itemized pick breakdown for one selected year (Beta 1.7).
+function renderMyTeamDraftDetail(teamId, year) {
+  const stats = draftSummaryForMe(teamId).byYear[year];
+  if (!stats || !stats.picks.length) return `<div class="empty">No picks for ${year}.</div>`;
+  return stats.picks.map((p) => {
+    const slot = projectedPickSlot(p.origOwnerName);
+    const slotLabel = slot ? `Round ${p.round} · Proj ${fmtPickLabel(p.round, slot)}` : `Round ${p.round}`;
+    let badgeClass = 'owned', badgeText = 'Own', sub = 'Original pick';
+    if (p.kind === 'acquired') {
+      badgeClass = 'acquired'; badgeText = 'Acquired';
+      sub = `From ${p.origOwnerName}`;
+    } else if (p.kind === 'traded') {
+      badgeClass = 'traded'; badgeText = 'Traded';
+      sub = `Traded to ${p.currentOwnerName}`;
+    }
+    return `
+      <div class="draft-detail-row draft-detail-${badgeClass}">
+        <div class="draft-detail-info">
+          <div class="draft-detail-slot">${escapeHtml(slotLabel)}</div>
+          <div class="draft-detail-sub">${escapeHtml(sub)}</div>
+        </div>
+        <span class="draft-detail-badge ${badgeClass}">${badgeText}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 // Find a player anywhere on a current roster (used by Trade Regret to look up live stats)
@@ -2856,26 +3016,30 @@ function renderMyTeam() {
     <!-- Interest Alerts: who's eyeing your players -->
     ${renderMyInterestAlerts(team)}
 
-    <!-- Draft assets by year -->
+    <!-- Draft assets by year (Beta 1.7: cards are interactive; click expands detail) -->
     <div class="myteam-section">
       <div class="myteam-section-header">
         <h3>Draft Assets</h3>
         <span class="count">${draftStats.total} picks · ${draftStats.gained}+ / ${draftStats.lost}-</span>
       </div>
       <div class="draft-summary">
-        ${CONFIG.DRAFT_YEARS.map((y) => {
+        ${CONFIG.DRAFT_YEARS.map((y, idx) => {
           const yr = draftStats.byYear[y];
+          const activeCls = idx === 0 ? ' active' : '';
           return `
-            <div class="draft-summary-card">
+            <button type="button" class="draft-summary-card${activeCls}" data-year="${y}">
               <div class="draft-summary-year">${y}</div>
               <div class="draft-summary-count">${yr.total}</div>
               <div class="draft-summary-label">
                 ${yr.gained ? `<span style="color:#6f96ff">+${yr.gained}</span> ` : ''}${yr.lost ? `<span style="color:var(--red)">-${yr.lost}</span>` : ''}
                 ${!yr.gained && !yr.lost ? 'All original' : ''}
               </div>
-            </div>
+            </button>
           `;
         }).join('')}
+      </div>
+      <div id="myteam-draft-detail" class="myteam-draft-detail">
+        ${renderMyTeamDraftDetail(team.id, CONFIG.DRAFT_YEARS[0])}
       </div>
     </div>
 
@@ -2900,7 +3064,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.4 - Draft Ready</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.7 - Draft Ready</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -2909,6 +3073,15 @@ function renderMyTeam() {
   wirePlayerActions(el);
   const docsTrigger = $('#commish-docs-trigger');
   if (docsTrigger) docsTrigger.onclick = openCommishDocsModal;
+  // Beta 1.7: draft-asset year cards toggle the itemized detail below them
+  $$('.draft-summary-card[data-year]').forEach((card) => {
+    card.onclick = () => {
+      const year = parseInt(card.dataset.year, 10);
+      $$('.draft-summary-card[data-year]').forEach((c) => c.classList.toggle('active', c === card));
+      const detail = $('#myteam-draft-detail');
+      if (detail) detail.innerHTML = renderMyTeamDraftDetail(team.id, year);
+    };
+  });
 }
 
 /* -------- Commissioner Docs Modal (V2.6) -------- */
@@ -3183,6 +3356,7 @@ function setView(name) {
     populateTradeTeamSelects();
     loadAllTrades().then(renderPendingTrades);
     loadTradeBlock().then(renderTradeBlockSection);
+    wireTradeSearch();
     // Apply any prefill from "Trade For" navigation
     setTimeout(applyTradePrefill, 50);
   }
@@ -3190,7 +3364,7 @@ function setView(name) {
     loadAllTrades().then(renderMyTeam);
     loadTradeBlock(); // refresh for badges
   }
-  if (name === 'rosters') loadTradeBlock().then(renderRoster);
+  if (name === 'rosters') { loadTradeBlock().then(renderRoster); wireRosterSearch(); }
   if (name === 'vault') initVaultView();
 }
 
@@ -3408,24 +3582,21 @@ function renderConsistencySummaryAggregate(trade) {
 
 /* -------- Trade Matchmaker -------- */
 
+// Beta 1.7 — rank surplus/deficit by TOTAL projected points at each position,
+// not by average. Dynasty rosters run deep (5–8 RBs, etc.); total production is
+// what actually moves the needle in weekly matchups, not per-player efficiency.
 function calculateTeamNeeds(team) {
   const totals = { QB: 0, RB: 0, WR: 0, TE: 0 };
-  const counts = { QB: 0, RB: 0, WR: 0, TE: 0 };
   team.roster.forEach((p) => {
     if (totals[p.pos] == null) return;
     const proj = projectedPoints(p);
-    if (proj != null) { totals[p.pos] += proj; counts[p.pos] += 1; }
+    if (proj != null) totals[p.pos] += proj;
   });
-  // Compute average per position so different roster sizes don't skew
-  const avg = {};
-  Object.keys(totals).forEach((pos) => { avg[pos] = counts[pos] ? totals[pos] / counts[pos] : 0; });
-
-  // Surplus = strongest avg, deficit = weakest avg (excluding zero positions)
-  const ranked = Object.entries(avg).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const ranked = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   if (!ranked.length) return null;
   return {
-    surplus: { pos: ranked[0][0], avg: ranked[0][1] },
-    deficit: { pos: ranked[ranked.length - 1][0], avg: ranked[ranked.length - 1][1] },
+    surplus: { pos: ranked[0][0], total: ranked[0][1] },
+    deficit: { pos: ranked[ranked.length - 1][0], total: ranked[ranked.length - 1][1] },
     totals,
   };
 }
@@ -3436,7 +3607,6 @@ function findSuggestedTradePartner(myTeamId) {
   const mine = calculateTeamNeeds(me);
   if (!mine) return null;
 
-  // Score every other team by how well their surplus aligns to my deficit (and vice versa)
   let best = null;
   state.teams.filter((t) => t.id !== myTeamId).forEach((t) => {
     const them = calculateTeamNeeds(t);
@@ -3445,8 +3615,8 @@ function findSuggestedTradePartner(myTeamId) {
     let score = 0;
     if (them.surplus.pos === mine.deficit.pos) score += 100;
     if (them.deficit.pos === mine.surplus.pos) score += 100;
-    // Also reward magnitude of fit: bigger their surplus + bigger my deficit gap = better
-    score += them.surplus.avg + (mine.surplus.avg - mine.deficit.avg);
+    // Reward magnitude of fit using totals — bigger positional depth = better trade leverage
+    score += them.surplus.total + (mine.surplus.total - mine.deficit.total);
     if (!best || score > best.score) best = { team: t, them, score };
   });
   return { mine, ...best };
@@ -3463,19 +3633,19 @@ function renderMatchmakerBlock(team) {
         <div class="matchmaker-need">
           <div class="label">Your Surplus</div>
           <div class="pos-tag ${POS_COLORS[r.mine.surplus.pos] || ''}">${r.mine.surplus.pos}</div>
-          <div class="pts">${r.mine.surplus.avg.toFixed(1)} avg proj/player</div>
+          <div class="pts">${r.mine.surplus.total.toFixed(1)} total proj pts</div>
         </div>
         <div class="matchmaker-need">
           <div class="label">Your Deficit</div>
           <div class="pos-tag ${POS_COLORS[r.mine.deficit.pos] || ''}">${r.mine.deficit.pos}</div>
-          <div class="pts">${r.mine.deficit.avg.toFixed(1)} avg proj/player</div>
+          <div class="pts">${r.mine.deficit.total.toFixed(1)} total proj pts</div>
         </div>
       </div>
       <div class="matchmaker-suggest">
         <div class="label">Suggested Trade Partner</div>
         <div class="partner">${escapeHtml(r.team.name)}</div>
         <div class="reason">
-          They're strong at <b>${r.them.surplus.pos}</b> (${r.them.surplus.avg.toFixed(1)} avg) and weak at <b>${r.them.deficit.pos}</b> (${r.them.deficit.avg.toFixed(1)} avg).
+          They're loaded at <b>${r.them.surplus.pos}</b> (${r.them.surplus.total.toFixed(1)} total proj) and thin at <b>${r.them.deficit.pos}</b> (${r.them.deficit.total.toFixed(1)} total proj).
           Send them ${r.mine.surplus.pos} help in exchange for a ${r.mine.deficit.pos} upgrade.
         </div>
       </div>
@@ -4731,11 +4901,23 @@ function wireLuckPlayback() {
 
 /* End V2.5 additions */
 
+// Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
+const BUILD_ID = '1.5.0';
+if (localStorage.getItem('app_build') !== BUILD_ID) {
+  localStorage.setItem('app_build', BUILD_ID);
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
       .then((reg) => console.log('SW registered', reg.scope))
       .catch((err) => console.warn('SW registration failed', err));
+  });
+  // Beta 1.7: auto-reload once when a new SW takes control (skipWaiting + clients.claim
+  // fire this on the next visit after a deploy). Guarded so we only reload one time.
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
   });
 }
 
