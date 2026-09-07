@@ -484,8 +484,12 @@ async function loadTradeBlock() {
 // from an interest-only shadow row someone else created to track their interest.
 // The trade-block panel only shows onBlock='true' rows; interest-only rows stay hidden.
 async function addToTradeBlock(player, owner, onBlock = true) {
+  // Beta 1.8: entryId prefix IS the visibility flag. 'tb_' rows show publicly on
+  // the trade block; 'int_' rows are private interest signals visible only to the
+  // owner via My Team alerts. Filter-safe even if the onBlock column ever drops.
+  const rand = '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   const entry = {
-    entryId: 'tb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    entryId: (onBlock ? 'tb' : 'int') + rand,
     playerId: String(player.id),
     playerName: player.name,
     playerPos: player.pos,
@@ -992,9 +996,10 @@ function renderTradeBlockSection() {
   }
   // Beta 1.3 secondary guard: re-sanitize before rendering in case any ghost rows
   // slipped through (e.g. a mid-request state mutation, or legacy in-memory noise).
-  // Beta 1.7: also filter out interest-only shadow rows — only true block entries render publicly.
+  // Beta 1.8: strictly filter to 'tb_'-prefixed entryIds. Interest-only 'int_' rows
+  // stay hidden from the public block even if a legacy row lacks the onBlock column.
   const validEntries = sanitizeTradeBlockRows(state.tradeBlock)
-    .filter((e) => e.onBlock !== 'false' && e.onBlock !== false);
+    .filter((e) => e.entryId && e.entryId.startsWith('tb_'));
   if (!validEntries.length) {
     el.innerHTML = empty('No players on the block. Put yours up from the My Team tab.');
     return;
@@ -3010,8 +3015,8 @@ function renderMyTeam() {
       </div>
     </div>
 
-    <!-- Smart Trade Matchmaker -->
-    ${renderMatchmakerBlock(team)}
+    <!-- Smart Trade Matchmaker (Beta 1.8 carousel — populated by updateMM below) -->
+    <div id="mm-wrap"></div>
 
     <!-- Interest Alerts: who's eyeing your players -->
     ${renderMyInterestAlerts(team)}
@@ -3064,7 +3069,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.7 - Draft Ready</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.6 - Matchmaker Live</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -3082,6 +3087,25 @@ function renderMyTeam() {
       if (detail) detail.innerHTML = renderMyTeamDraftDetail(team.id, year);
     };
   });
+
+  // Beta 1.8: hydrate the Matchmaker carousel (top 5 Z-Score partners).
+  _mmPartners = findSuggestedTradePartners(team.id).slice(0, 5);
+  _mmIndex = 0;
+  const updateMM = () => {
+    const wrap = $('#mm-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = renderMatchmakerBlockHTML();
+    const prev = $('#mm-prev'), next = $('#mm-next');
+    if (prev) prev.onclick = () => {
+      _mmIndex = (_mmIndex - 1 + _mmPartners.length) % _mmPartners.length;
+      updateMM();
+    };
+    if (next) next.onclick = () => {
+      _mmIndex = (_mmIndex + 1) % _mmPartners.length;
+      updateMM();
+    };
+  };
+  updateMM();
 }
 
 /* -------- Commissioner Docs Modal (V2.6) -------- */
@@ -3582,71 +3606,120 @@ function renderConsistencySummaryAggregate(trade) {
 
 /* -------- Trade Matchmaker -------- */
 
-// Beta 1.7 — rank surplus/deficit by TOTAL projected points at each position,
-// not by average. Dynasty rosters run deep (5–8 RBs, etc.); total production is
-// what actually moves the needle in weekly matchups, not per-player efficiency.
-function calculateTeamNeeds(team) {
+/* -------- Smart Trade Matchmaker (Beta 1.8 — League-relative Z-Scores) --------
+ * Old logic ranked positions by a team's own internal points; a team could be
+ * "strong at RB" while still being the worst RB team in the league. The new
+ * engine anchors every position against the league mean + stdDev, so surplus/
+ * deficit reflects REAL trade leverage. Also serves the top 5 partners in a
+ * navigable carousel instead of a single hard-coded suggestion.
+ * ------------------------------------------------------------------------- */
+
+let _mmPartners = [];
+let _mmIndex = 0;
+
+const POS_KEYS = ['QB', 'RB', 'WR', 'TE'];
+
+function _teamPositionalTotals(team) {
   const totals = { QB: 0, RB: 0, WR: 0, TE: 0 };
   team.roster.forEach((p) => {
     if (totals[p.pos] == null) return;
     const proj = projectedPoints(p);
     if (proj != null) totals[p.pos] += proj;
   });
-  const ranked = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  if (!ranked.length) return null;
-  return {
-    surplus: { pos: ranked[0][0], total: ranked[0][1] },
-    deficit: { pos: ranked[ranked.length - 1][0], total: ranked[ranked.length - 1][1] },
-    totals,
-  };
+  return totals;
 }
 
-function findSuggestedTradePartner(myTeamId) {
-  const me = teamById(myTeamId);
-  if (!me) return null;
-  const mine = calculateTeamNeeds(me);
-  if (!mine) return null;
-
-  let best = null;
-  state.teams.filter((t) => t.id !== myTeamId).forEach((t) => {
-    const them = calculateTeamNeeds(t);
-    if (!them) return;
-    // Perfect match: their surplus == my deficit AND their deficit == my surplus
-    let score = 0;
-    if (them.surplus.pos === mine.deficit.pos) score += 100;
-    if (them.deficit.pos === mine.surplus.pos) score += 100;
-    // Reward magnitude of fit using totals — bigger positional depth = better trade leverage
-    score += them.surplus.total + (mine.surplus.total - mine.deficit.total);
-    if (!best || score > best.score) best = { team: t, them, score };
+function calculateLeagueAverages() {
+  const perPos = { QB: [], RB: [], WR: [], TE: [] };
+  state.teams.forEach((t) => {
+    const totals = _teamPositionalTotals(t);
+    POS_KEYS.forEach((pos) => { if (totals[pos] > 0) perPos[pos].push(totals[pos]); });
   });
-  return { mine, ...best };
+  const out = {};
+  POS_KEYS.forEach((pos) => {
+    const arr = perPos[pos];
+    const n = arr.length;
+    const mean = n ? arr.reduce((s, x) => s + x, 0) / n : 0;
+    const variance = n ? arr.reduce((s, x) => s + (x - mean) ** 2, 0) / n : 0;
+    // Floor stdDev at 1 to prevent division-by-zero on flat position distributions
+    out[pos] = { mean, stdDev: Math.max(1, Math.sqrt(variance)) };
+  });
+  return out;
 }
 
-function renderMatchmakerBlock(team) {
-  const r = findSuggestedTradePartner(team.id);
+function calculateTeamNeeds(team, leagueAvg) {
+  const totals = _teamPositionalTotals(team);
+  const scores = POS_KEYS.map((pos) => {
+    const pts = totals[pos] || 0;
+    const { mean, stdDev } = leagueAvg[pos];
+    const diff = pts - mean;
+    const zScore = diff / stdDev;
+    return { pos, pts, mean, stdDev, diff, zScore };
+  });
+  // Surplus = highest z-score; deficit = lowest z-score
+  const sorted = [...scores].sort((a, b) => b.zScore - a.zScore);
+  return { surplus: sorted[0], deficit: sorted[sorted.length - 1], scores };
+}
+
+function findSuggestedTradePartners(myTeamId) {
+  const me = teamById(myTeamId);
+  if (!me) return [];
+  const leagueAvg = calculateLeagueAverages();
+  const mine = calculateTeamNeeds(me, leagueAvg);
+  const partners = state.teams
+    .filter((t) => t.id !== myTeamId)
+    .map((t) => {
+      const them = calculateTeamNeeds(t, leagueAvg);
+      // Trade fit: partner's surplus at MY deficit position minus their z-score at MY surplus.
+      // Higher = they have what I need AND want what I can spare.
+      const partnerAtMyDeficit = them.scores.find((s) => s.pos === mine.deficit.pos);
+      const partnerAtMySurplus = them.scores.find((s) => s.pos === mine.surplus.pos);
+      const matchScore = (partnerAtMyDeficit?.zScore || 0) - (partnerAtMySurplus?.zScore || 0);
+      return { team: t, them, mine, matchScore };
+    })
+    .sort((a, b) => b.matchScore - a.matchScore);
+  return partners;
+}
+
+function renderMatchmakerBlockHTML() {
+  if (!_mmPartners.length) return '';
+  const r = _mmPartners[_mmIndex];
   if (!r || !r.team) return '';
   const POS_COLORS = { QB: 'pos-QB', RB: 'pos-RB', WR: 'pos-WR', TE: 'pos-TE' };
+  const partnerSurplus = r.them.surplus;
+  const partnerDeficit = r.them.deficit;
+  const mySurplus = r.mine.surplus;
+  const myDeficit = r.mine.deficit;
+  const fmtDiff = (d) => `${d >= 0 ? '+' : ''}${d.toFixed(1)}`;
   return `
     <div class="matchmaker-card">
-      <h4>🎯 Smart Trade Matchmaker</h4>
+      <div class="mm-header">
+        <h4>🎯 Smart Trade Matchmaker</h4>
+        <div class="mm-nav">
+          <button type="button" id="mm-prev" aria-label="Previous partner">‹</button>
+          <span class="mm-count">${_mmIndex + 1} of ${_mmPartners.length}</span>
+          <button type="button" id="mm-next" aria-label="Next partner">›</button>
+        </div>
+      </div>
       <div class="matchmaker-needs">
         <div class="matchmaker-need">
           <div class="label">Your Surplus</div>
-          <div class="pos-tag ${POS_COLORS[r.mine.surplus.pos] || ''}">${r.mine.surplus.pos}</div>
-          <div class="pts">${r.mine.surplus.total.toFixed(1)} total proj pts</div>
+          <div class="pos-tag ${POS_COLORS[mySurplus.pos] || ''}">${mySurplus.pos}</div>
+          <div class="pts">${fmtDiff(mySurplus.diff)} pts vs avg</div>
         </div>
         <div class="matchmaker-need">
           <div class="label">Your Deficit</div>
-          <div class="pos-tag ${POS_COLORS[r.mine.deficit.pos] || ''}">${r.mine.deficit.pos}</div>
-          <div class="pts">${r.mine.deficit.total.toFixed(1)} total proj pts</div>
+          <div class="pos-tag ${POS_COLORS[myDeficit.pos] || ''}">${myDeficit.pos}</div>
+          <div class="pts">${fmtDiff(myDeficit.diff)} pts vs avg</div>
         </div>
       </div>
       <div class="matchmaker-suggest">
         <div class="label">Suggested Trade Partner</div>
         <div class="partner">${escapeHtml(r.team.name)}</div>
         <div class="reason">
-          They're loaded at <b>${r.them.surplus.pos}</b> (${r.them.surplus.total.toFixed(1)} total proj) and thin at <b>${r.them.deficit.pos}</b> (${r.them.deficit.total.toFixed(1)} total proj).
-          Send them ${r.mine.surplus.pos} help in exchange for a ${r.mine.deficit.pos} upgrade.
+          They have a surplus at <b>${partnerSurplus.pos}</b> (${fmtDiff(partnerSurplus.diff)} pts vs avg)
+          and a deficit at <b>${partnerDeficit.pos}</b> (${fmtDiff(partnerDeficit.diff)} pts vs avg).
+          Send them <b>${mySurplus.pos}</b> help in exchange for a <b>${myDeficit.pos}</b> upgrade!
         </div>
       </div>
     </div>
