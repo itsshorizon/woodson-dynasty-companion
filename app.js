@@ -966,16 +966,47 @@ function populateTradeTeamSelects() {
 
 function applyTradePrefill() {
   if (!state.tradePrefill) return;
-  const { teamA, teamB, playerIds } = state.tradePrefill;
-  $('#team-a-select').value = String(teamA);
-  $('#team-b-select').value = String(teamB);
+  const { teamA, teamB, playerIds, aPlayerIds, aPicks, bPlayerIds, bPicks } = state.tradePrefill;
+  const aSel = $('#team-a-select'), bSel = $('#team-b-select');
+  // Side A is normally locked to state.myTeamId — temporarily allow the prefill to set it
+  const wasDisabled = aSel.disabled;
+  aSel.disabled = false;
+  aSel.value = String(teamA);
+  bSel.value = String(teamB);
+  aSel.disabled = wasDisabled;
   renderTradeAssets('a');
   renderTradeAssets('b');
-  // Check the prefilled players on side B (since we navigated FROM their player)
+  // Legacy: single 'playerIds' array targets side B (from "Trade For" flow)
   (playerIds || []).forEach((pid) => {
     const cb = $(`#team-b-players input[value="${pid}"]`);
     if (cb) cb.checked = true;
   });
+  // Beta 1.7 counteroffer: fill both sides' players + picks from the flipped original
+  (aPlayerIds || []).forEach((pid) => {
+    const cb = $(`#team-a-players input[value="${pid}"]`);
+    if (cb) cb.checked = true;
+  });
+  (bPlayerIds || []).forEach((pid) => {
+    const cb = $(`#team-b-players input[value="${pid}"]`);
+    if (cb) cb.checked = true;
+  });
+  // Rebuild pick rows: addPickRow reads live from the selected team's ownedPicksFor,
+  // so we spawn one blank row per pick then set its year/round to match the flip.
+  const seedPicks = (side, picks) => {
+    if (!picks || !picks.length) return;
+    picks.forEach((p) => {
+      addPickRow(side);
+      const container = $(`#team-${side}-picks`);
+      const row = container.lastElementChild;
+      if (!row) return;
+      const yearSel = row.querySelector('.pick-year');
+      const roundSel = row.querySelector('.pick-round');
+      if (yearSel) { yearSel.value = String(p.year); yearSel.dispatchEvent(new Event('change')); }
+      if (roundSel) roundSel.value = String(p.round);
+    });
+  };
+  seedPicks('a', aPicks);
+  seedPicks('b', bPicks);
   state.tradePrefill = null;
 }
 
@@ -1263,11 +1294,12 @@ function renderPendingTrades() {
     const requested = safeParse(t.assetsRequested) || {};
     const proposing = t.teamProposing || teamName(offered.teamId) || 'Unknown';
     const receiving = t.teamReceiving || teamName(requested.teamId) || 'Unknown';
+    const role = myRoleInTrade(t);
 
     return `
       <div class="trade-card" data-trade-id="${escapeHtml(t.tradeId || '')}">
         <div class="trade-header">
-          <span>Trade Proposal</span>
+          <span>${role === 'proposer' ? 'Your Offer' : 'Trade Proposal'}</span>
           <span class="trade-status">${escapeHtml(t.status)}</span>
         </div>
         <div class="trade-teams">
@@ -1283,8 +1315,7 @@ function renderPendingTrades() {
         ${renderConsistencySummary(t)}
         ${renderConsistencySummaryAggregate(t)}
         <div class="trade-actions">
-          <button class="btn-accept" data-action="accept">Accept</button>
-          <button class="btn-reject" data-action="reject">Reject</button>
+          ${tradeActionButtonsHTML(role)}
         </div>
       </div>
     `;
@@ -1301,14 +1332,21 @@ function renderPendingTrades() {
 
     btn.disabled = true;
     try {
-      const newStatus = action === 'accept' ? 'Accepted' : 'Rejected';
+      if (action === 'counter') {
+        await handleCounteroffer(trade);
+        return;
+      }
+      const statusMap = { accept: 'Accepted', reject: 'Rejected', cancel: 'Cancelled' };
+      const toastMap = { accept: 'Trade Accepted', reject: 'Trade declined', cancel: 'Trade offer cancelled' };
+      const newStatus = statusMap[action];
+      if (!newStatus) return;
       if (action === 'accept') {
         const r = btn.getBoundingClientRect();
         triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
           paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
       }
       await updateTradeStatus(tradeId, newStatus);
-      toast(`Trade ${newStatus}`, 'success');
+      toast(toastMap[action], 'success');
       if (action === 'accept') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
       await loadPendingTrades();
       renderPendingTrades();
@@ -2784,14 +2822,47 @@ function showTeamPicker() {
 
 /* ----------------------- My Team view ----------------------- */
 
+// Beta 1.7 — splits pending trades into incoming (I'm receiver) vs outgoing
+// (I'm proposer) using ID-first matching with a legacy name fallback.
 function tradesForMe() {
   const me = teamById(state.myTeamId);
-  if (!me) return { incoming: [], history: [] };
-  const isMine = (t) => t.teamProposing === me.name || t.teamReceiving === me.name;
+  if (!me) return { incoming: [], outgoing: [], history: [] };
+  const myId = me.id;
+  const myName = me.name;
+  const isProposer = (t) => (t.teamAId && Number(t.teamAId) === myId) || t.teamProposing === myName;
+  const isReceiver = (t) => (t.teamBId && Number(t.teamBId) === myId) || t.teamReceiving === myName;
+  const isMine = (t) => isProposer(t) || isReceiver(t);
   return {
-    incoming: state.allTrades.filter((t) => t.status === 'Pending' && t.teamReceiving === me.name),
-    history: state.allTrades.filter((t) => isMine(t) && t.status !== 'Pending'),
+    incoming: state.allTrades.filter((t) => t.status === 'Pending' && isReceiver(t)),
+    outgoing: state.allTrades.filter((t) => t.status === 'Pending' && isProposer(t)),
+    history:  state.allTrades.filter((t) => isMine(t) && t.status !== 'Pending'),
   };
+}
+
+// Beta 1.7 — determines the user's role in a given trade for action gating.
+function myRoleInTrade(t) {
+  const me = teamById(state.myTeamId);
+  if (!me) return null;
+  const asProposer = (t.teamAId && Number(t.teamAId) === me.id) || t.teamProposing === me.name;
+  const asReceiver = (t.teamBId && Number(t.teamBId) === me.id) || t.teamReceiving === me.name;
+  if (asProposer) return 'proposer';
+  if (asReceiver) return 'receiver';
+  return null;
+}
+
+// Role-scoped action button set. Proposers ONLY see Cancel; receivers see Accept/Counter/Decline.
+function tradeActionButtonsHTML(role) {
+  if (role === 'proposer') {
+    return `<button class="btn-cancel" data-action="cancel">Cancel Offer</button>`;
+  }
+  if (role === 'receiver') {
+    return `
+      <button class="btn-accept" data-action="accept">Accept</button>
+      <button class="btn-counter" data-action="counter">Counteroffer</button>
+      <button class="btn-reject" data-action="reject">Decline</button>
+    `;
+  }
+  return '';
 }
 
 function draftSummaryForMe(teamId) {
@@ -2978,7 +3049,7 @@ function renderMyTeam() {
   const team = teamById(state.myTeamId);
   if (!team) { el.innerHTML = empty('Team not found. Try changing teams.'); return; }
 
-  const { incoming, history } = tradesForMe();
+  const { incoming, outgoing, history } = tradesForMe();
   const draftStats = draftSummaryForMe(team.id);
 
   el.innerHTML = `
@@ -3004,7 +3075,7 @@ function renderMyTeam() {
       ${isCommish() ? `<button class="commish-launch" id="open-commish-btn">★ Commissioner Tools</button>` : ''}
     </div>
 
-    <!-- Incoming pending -->
+    <!-- Incoming pending (I'm the receiver — I can Accept / Counter / Decline) -->
     <div class="myteam-section">
       <div class="myteam-section-header">
         <h3>Incoming Trade Offers</h3>
@@ -3012,6 +3083,17 @@ function renderMyTeam() {
       </div>
       <div id="myteam-incoming-list">
         ${incoming.length ? incoming.map(renderIncomingTradeCard).join('') : empty('No pending offers')}
+      </div>
+    </div>
+
+    <!-- Outgoing pending (I'm the proposer — I can only Cancel) -->
+    <div class="myteam-section">
+      <div class="myteam-section-header">
+        <h3>Outgoing Trade Offers</h3>
+        <span class="count">${outgoing.length}</span>
+      </div>
+      <div id="myteam-outgoing-list">
+        ${outgoing.length ? outgoing.map(renderIncomingTradeCard).join('') : empty('No pending outgoing offers')}
       </div>
     </div>
 
@@ -3069,7 +3151,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.6 - Matchmaker Live</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.7 - Trade Security Live</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -3245,59 +3327,114 @@ async function handleCommishAction(btn) {
 function renderIncomingTradeCard(t) {
   const offered = safeParse(t.assestsOffered) || {};
   const requested = safeParse(t.assetsRequested) || {};
+  const role = myRoleInTrade(t);
+  // Card copy shifts based on role: outgoing (I'm proposer) reads "You sent" / "You'd get";
+  // incoming (I'm receiver) reads "You give" / "You get".
+  const isProposer = role === 'proposer';
+  const header = isProposer ? `To ${escapeHtml(t.teamReceiving)}` : `From ${escapeHtml(t.teamProposing)}`;
+  const leftLabel = isProposer ? 'You send' : 'You give';
+  const rightLabel = isProposer ? 'You get in return' : 'You get';
+  const leftSide = isProposer ? offered : requested;
+  const rightSide = isProposer ? requested : offered;
   return `
     <div class="trade-card" data-trade-id="${escapeHtml(t.tradeId || '')}">
       <div class="trade-header">
-        <span>From ${escapeHtml(t.teamProposing)}</span>
+        <span>${header}</span>
         <span class="trade-status">${escapeHtml(t.status)}</span>
       </div>
       <div class="trade-teams">
         <div class="trade-team">
-          <h5>You give</h5>
-          ${renderAssetItems(requested)}
+          <h5>${leftLabel}</h5>
+          ${renderAssetItems(leftSide)}
         </div>
         <div class="trade-team">
-          <h5>You get</h5>
-          ${renderAssetItems(offered)}
+          <h5>${rightLabel}</h5>
+          ${renderAssetItems(rightSide)}
         </div>
       </div>
       <div class="trade-actions">
-        <button class="btn-accept" data-action="accept">Accept</button>
-        <button class="btn-reject" data-action="reject">Reject</button>
+        ${tradeActionButtonsHTML(role)}
       </div>
     </div>
   `;
 }
 
-function wireIncomingActions() {
-  const container = $('#myteam-incoming-list');
-  if (!container) return;
-  container.onclick = async (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const card = btn.closest('.trade-card');
-    const tradeId = card.dataset.tradeId;
-    const trade = state.allTrades.find((x) => x.tradeId === tradeId);
-    if (!trade) return;
-    btn.disabled = true;
-    try {
-      const newStatus = btn.dataset.action === 'accept' ? 'Accepted' : 'Rejected';
-      if (newStatus === 'Accepted') {
-        const r = btn.getBoundingClientRect();
-        triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
-          paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
-      }
-      await updateTradeStatus(tradeId, newStatus);
-      if (newStatus === 'Accepted') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
-      toast(`Trade ${newStatus}`, 'success');
-      await loadAllTrades();
-      renderMyTeam();
-    } catch (err) {
-      console.error(err);
-      toast('Update failed', 'error');
-      btn.disabled = false;
+// Shared action handler for both #myteam-incoming-list and #myteam-outgoing-list.
+async function handleMyTeamTradeAction(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.trade-card');
+  const tradeId = card.dataset.tradeId;
+  const trade = state.allTrades.find((x) => x.tradeId === tradeId);
+  if (!trade) return;
+  const action = btn.dataset.action;
+  btn.disabled = true;
+  try {
+    if (action === 'counter') {
+      await handleCounteroffer(trade);
+      return; // handleCounteroffer navigates to Trade Desk; nothing else to do here
     }
+    const statusMap = { accept: 'Accepted', reject: 'Rejected', cancel: 'Cancelled' };
+    const toastMap = { accept: 'Trade Accepted', reject: 'Trade declined', cancel: 'Trade offer cancelled' };
+    const newStatus = statusMap[action];
+    if (!newStatus) return;
+    if (action === 'accept') {
+      const r = btn.getBoundingClientRect();
+      triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
+        paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
+    }
+    await updateTradeStatus(tradeId, newStatus);
+    if (action === 'accept') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
+    toast(toastMap[action], 'success');
+    await loadAllTrades();
+    renderMyTeam();
+  } catch (err) {
+    console.error(err);
+    toast('Update failed', 'error');
+    btn.disabled = false;
+  }
+}
+
+function wireIncomingActions() {
+  const inList = $('#myteam-incoming-list');
+  const outList = $('#myteam-outgoing-list');
+  if (inList) inList.onclick = handleMyTeamTradeAction;
+  if (outList) outList.onclick = handleMyTeamTradeAction;
+}
+
+/* -------- Counteroffer engine (Beta 1.7) --------
+ * A counteroffer marks the original trade 'Countered' (so it stops lingering as
+ * Pending) and opens the Trade Desk with the assets FLIPPED — what they wanted
+ * from me now sits on my side, what they were offering now sits on their side —
+ * ready for me to tweak before hitting Submit as a fresh proposal.
+ */
+async function handleCounteroffer(trade) {
+  try {
+    await updateTradeStatus(trade.tradeId, 'Countered');
+  } catch (err) {
+    console.error('Failed to mark original as Countered:', err);
+    toast('Could not start counteroffer', 'error');
+    return;
+  }
+  const offered = safeParse(trade.assestsOffered) || {};
+  const requested = safeParse(trade.assetsRequested) || {};
+  const originalProposerId = (trade.teamAId && Number(trade.teamAId)) || teamByName(trade.teamProposing)?.id || offered.teamId;
+  const originalReceiverId = (trade.teamBId && Number(trade.teamBId)) || teamByName(trade.teamReceiving)?.id || requested.teamId;
+
+  // Flip: user (original receiver) becomes side A; original proposer becomes side B.
+  // Side A's assets = what THEY originally asked from ME (requested). Side B's assets = what THEY were offering (offered).
+  state.tradePrefill = {
+    teamA: originalReceiverId,
+    teamB: originalProposerId,
+    aPlayerIds: (requested.players || []).map((p) => p.id),
+    aPicks: requested.picks || [],
+    bPlayerIds: (offered.players || []).map((p) => p.id),
+    bPicks: offered.picks || [],
+    counterOf: trade.tradeId,
   };
+  await loadAllTrades();
+  toast('Counteroffer started — tweak the assets and hit Submit', 'success');
+  setView('trades');
 }
 
 /* ----------------------- Theme ----------------------- */
@@ -3433,6 +3570,59 @@ async function boot() {
   loadDraftPicks();
   loadTradeBlock();
   wirePressRoom();
+  // Beta 1.7: fire the version check after boot so viewers always land on the freshest bundle
+  checkForAppUpdates();
+}
+
+// Beta 1.7 — bypass every cache to fetch a fresh version.json. Prompt viewers to
+// hard-refresh (unregister SW + nuke caches) whenever the deployed version differs
+// from the one they last accepted.
+async function checkForAppUpdates() {
+  try {
+    const res = await fetch('./version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.version) return;
+    const stored = localStorage.getItem('app_version');
+    if (stored === data.version) return;
+
+    // Inject the fullscreen, un-dismissible update modal
+    let modal = $('#update-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'update-modal';
+      modal.innerHTML = `
+        <div class="update-modal-card">
+          <div class="update-emoji">🚀</div>
+          <h2>New Update Available!</h2>
+          <p>${escapeHtml(data.notes || 'Tap below to load the latest features.')}</p>
+          <button id="btn-force-refresh" type="button">⚡ Refresh &amp; Update Now</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    $('#btn-force-refresh').onclick = async () => {
+      const btn = $('#btn-force-refresh');
+      if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+      try {
+        localStorage.setItem('app_version', data.version);
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+      } catch (err) {
+        console.warn('Cache wipe failed (continuing to reload):', err);
+      }
+      window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
+    };
+  } catch (err) {
+    console.warn('Update check failed:', err);
+  }
 }
 
 /* ===========================================================

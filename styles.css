@@ -1339,6 +1339,99 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   background: transparent;
 }
 
+/* ---------- Trade Role Action Buttons (Beta 1.7) ---------- */
+.btn-counter {
+  flex: 1;
+  border: 0;
+  padding: 11px;
+  border-radius: 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: transparent;
+  color: var(--blue);
+  border: 2px solid var(--blue);
+}
+.btn-counter:hover { background: rgba(37,99,255,0.08); }
+.btn-cancel {
+  flex: 1;
+  border: 0;
+  padding: 11px;
+  border-radius: 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: transparent;
+  color: #ff9433;
+  border: 2px solid #ff9433;
+}
+.btn-cancel:hover { background: rgba(255,148,51,0.08); }
+
+/* ---------- Fullscreen Update Modal (Beta 1.7) ---------- */
+#update-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(6, 12, 9, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fade 0.3s ease;
+}
+#update-modal .update-modal-card {
+  max-width: 420px;
+  width: 100%;
+  background: var(--bg-elev);
+  border: 2px solid var(--green);
+  border-radius: var(--radius);
+  padding: 32px 24px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 60px rgba(168,255,61,0.35);
+}
+#update-modal .update-emoji { font-size: 56px; line-height: 1; margin-bottom: 12px; }
+#update-modal h2 {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+#update-modal p {
+  margin: 0 0 24px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+#btn-force-refresh {
+  display: block;
+  width: 100%;
+  background: var(--green);
+  color: #0a1410;
+  border: 2px solid var(--blue);
+  padding: 18px;
+  border-radius: 12px;
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--blue), 0 0 24px rgba(168,255,61,0.4);
+  transition: transform 0.1s;
+}
+#btn-force-refresh:hover { filter: brightness(1.08); }
+#btn-force-refresh:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--blue); }
+#btn-force-refresh:disabled { opacity: 0.7; cursor: wait; }
+
 /* ---------- Matchmaker Carousel Header (Beta 1.8) ---------- */
 .mm-header {
   display: flex;
