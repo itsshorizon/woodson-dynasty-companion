@@ -292,8 +292,9 @@ function parseMatchups(raw) {
   return schedule
     .filter((m) => m.matchupPeriodId === period)
     .map((m) => ({
-      home: { teamId: m.home?.teamId, score: m.home?.totalPoints ?? 0 },
-      away: { teamId: m.away?.teamId, score: m.away?.totalPoints ?? 0 },
+      // Beta 1.8: prefer the in-progress live tally; fall back to finalized totals postgame.
+      home: { teamId: m.home?.teamId, score: m.home?.totalPointsLive ?? m.home?.totalPoints ?? 0 },
+      away: { teamId: m.away?.teamId, score: m.away?.totalPointsLive ?? m.away?.totalPoints ?? 0 },
       winner: m.winner,
     }));
 }
@@ -303,7 +304,7 @@ async function loadLeagueData() {
   meta.textContent = `Loading ${CONFIG.SEASON}...`;
   meta.classList.remove('err');
   try {
-    const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mStandings', 'mSettings']);
+    const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mStandings', 'mSettings']);
     state.teams = parseTeams(raw).sort((a, b) => a.playoffSeed - b.playoffSeed);
     state.matchups = parseMatchups(raw);
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
@@ -3151,7 +3152,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.7 - Trade Security Live</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.8 - Live Scoring</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -3562,6 +3563,19 @@ async function boot() {
     if (!state.myTeamId && state.teams.length) {
       setTimeout(showTeamPicker, 400);
     }
+
+    // Beta 1.8: Sunday live-scoring poll. Runs every 30s but ONLY refreshes when the
+    // user is on the Standings tab, so we don't step on their Trade Desk / Vault work.
+    setInterval(async () => {
+      if (document.body.dataset.theme === 'standings') {
+        const refreshed = await loadLeagueData();
+        if (refreshed) {
+          renderStandings();
+          renderScores();
+          setTimeout(renderScheduleLuckChart, 50);
+        }
+      }
+    }, 30000);
   } else {
     $('#standings-content').innerHTML = empty('ESPN data unavailable.');
   }
@@ -5181,7 +5195,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.5.0';
+const BUILD_ID = '1.8.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
