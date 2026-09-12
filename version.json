@@ -1,4 +1,9 @@
 {
-  "version": "1.7.0",
-  "notes": "Trade Security, Counteroffers, and Auto-Refresh"
+  "version": "1.7.1",
+  "title": "Beta 1.7 - Trade Security & Refresh",
+  "notes": [
+    "Strict role security: proposers can only cancel, receivers can accept or decline",
+    "Counteroffer engine: pre-loads and inverts existing offers for fast tweaking",
+    "Instant update detection with one-tap hard refresh"
+  ]
 }

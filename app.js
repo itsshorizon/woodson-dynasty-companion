@@ -3586,6 +3586,17 @@ async function checkForAppUpdates() {
     const stored = localStorage.getItem('app_version');
     if (stored === data.version) return;
 
+    // Beta 1.7.1: build expandable patch-notes block. Accepts array (preferred) or string.
+    let notesHtml = '';
+    if (Array.isArray(data.notes)) {
+      notesHtml = `<ul>${data.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`;
+    } else if (data.notes) {
+      notesHtml = `<p>${escapeHtml(data.notes)}</p>`;
+    } else {
+      notesHtml = `<p>Tap below to load the latest features.</p>`;
+    }
+    const headline = escapeHtml(data.title || 'New Update Available!');
+
     // Inject the fullscreen, un-dismissible update modal
     let modal = $('#update-modal');
     if (!modal) {
@@ -3594,8 +3605,13 @@ async function checkForAppUpdates() {
       modal.innerHTML = `
         <div class="update-modal-card">
           <div class="update-emoji">🚀</div>
-          <h2>New Update Available!</h2>
-          <p>${escapeHtml(data.notes || 'Tap below to load the latest features.')}</p>
+          <h2>${headline}</h2>
+          <details class="update-notes-collapse">
+            <summary>What's New in v${escapeHtml(data.version)} ▾</summary>
+            <div class="update-notes-content">
+              ${notesHtml}
+            </div>
+          </details>
           <button id="btn-force-refresh" type="button">⚡ Refresh &amp; Update Now</button>
         </div>
       `;

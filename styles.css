@@ -1411,6 +1411,33 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   font-size: 14px;
   line-height: 1.5;
 }
+/* Expandable patch-notes block inside the update modal (Beta 1.7.1) */
+.update-notes-collapse {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+.update-notes-collapse summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent, #4cc9f0);
+  outline: none;
+  list-style: none;
+}
+.update-notes-collapse summary::-webkit-details-marker { display: none; }
+.update-notes-content {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-dim, #ccc);
+  margin-top: 8px;
+}
+.update-notes-content ul { padding-left: 18px; margin: 0; }
+.update-notes-content li { margin-bottom: 4px; }
+.update-notes-content p { margin: 0; }
+
 #btn-force-refresh {
   display: block;
   width: 100%;
