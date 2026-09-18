@@ -1,8 +1,9 @@
 {
-  "version": "1.8.0",
-  "title": "Beta 1.8 - Live Scoring",
+  "version": "1.9.0",
+  "title": "Beta 1.9 - Trade Block Fix",
   "notes": [
     "Live Sunday scoring enabled",
-    "Standings tab auto-refreshes every 30 seconds"
+    "Standings tab auto-refreshes every 30 seconds",
+    "Fixed a visibility bug where private interest alerts prevented owners from listing players on the block."
   ]
 }

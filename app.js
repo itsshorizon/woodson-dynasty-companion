@@ -484,10 +484,13 @@ async function loadTradeBlock() {
 // Beta 1.7 — `onBlock` distinguishes a real owner-listed block entry ('true')
 // from an interest-only shadow row someone else created to track their interest.
 // The trade-block panel only shows onBlock='true' rows; interest-only rows stay hidden.
-async function addToTradeBlock(player, owner, onBlock = true) {
+async function addToTradeBlock(player, owner, onBlock = true, initialInterest = '[]') {
   // Beta 1.8: entryId prefix IS the visibility flag. 'tb_' rows show publicly on
   // the trade block; 'int_' rows are private interest signals visible only to the
-  // owner via My Team alerts. Filter-safe even if the onBlock column ever drops.
+  // owner via My Team alerts.
+  // Beta 1.9: removed the `onBlock` payload field — Stein strips unmapped columns
+  // anyway, so the prefix is now our SOLE source of truth. `initialInterest`
+  // lets an upgrade (int_ → tb_) preserve any queued interest signals.
   const rand = '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   const entry = {
     entryId: (onBlock ? 'tb' : 'int') + rand,
@@ -498,8 +501,7 @@ async function addToTradeBlock(player, owner, onBlock = true) {
     // NOTE: sheet column is misspelled "ownterTeamName" — match it so the value persists.
     ownterTeamName: owner.name,
     ownerTeamName: owner.name, // also write the correctly-spelled column if it exists
-    interestedTeamIds: '[]',
-    onBlock: String(onBlock),
+    interestedTeamIds: initialInterest,
     createdAt: new Date().toISOString(),
   };
   const res = await fetch(`${CONFIG.SHEETS_BASE}/trade_block`, {
@@ -672,17 +674,20 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
   const points = (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
 
   const blockEntry = findBlockEntry(player.id);
-  const isBlocked = !!blockEntry;
+  // Beta 1.9: strict prefix checks. An int_ row (private interest signal) must
+  // NOT read as "on the block" — that was hiding the "☆ Block" button from owners
+  // whenever another manager had already expressed interest.
+  const isPubliclyBlocked = blockEntry && blockEntry.entryId && blockEntry.entryId.startsWith('tb_');
+  const hasInterest = blockEntry && (safeParse(blockEntry.interestedTeamIds) || []).map(String).includes(String(state.myTeamId));
   let actions = '';
   if (context === 'mine') {
-    actions = `<button class="player-action ${isBlocked ? 'on' : ''}" data-action="toggle-block" data-player-id="${player.id}">${isBlocked ? '★ On Block' : '☆ Block'}</button>`;
+    actions = `<button class="player-action ${isPubliclyBlocked ? 'on' : ''}" data-action="toggle-block" data-player-id="${player.id}">${isPubliclyBlocked ? '★ On Block' : '☆ Block'}</button>`;
   } else if (context === 'other' && ownerTeam) {
-    const interested = isBlocked && (safeParse(blockEntry.interestedTeamIds) || []).map(String).includes(String(state.myTeamId));
     // "Interested" is always available — even if player isn't formally on the block.
-    // Clicking it creates a block entry if none exists, so owner can see the signal.
+    // Clicking it creates an int_ shadow row if none exists, so owner can see the signal.
     actions = `
       <button class="player-action" data-action="trade-for" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
-      <button class="player-action ${interested ? 'on' : ''}" data-action="mark-interest" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}">${interested ? '✓ Interested' : '+ Interested'}</button>
+      <button class="player-action ${hasInterest ? 'on' : ''}" data-action="mark-interest" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}">${hasInterest ? '✓ Interested' : '+ Interested'}</button>
     `;
   }
 
@@ -690,7 +695,7 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
     <div class="player-row pos-row-${player.pos}" data-player-id="${player.id}">
       ${playerPhotoHTML(player)}
       <div class="player-info">
-        <div class="player-name">${escapeHtml(player.name)}${isBlocked ? ' <span class="block-tag">ON BLOCK</span>' : ''}</div>
+        <div class="player-name">${escapeHtml(player.name)}${isPubliclyBlocked ? ' <span class="block-tag">ON BLOCK</span>' : ''}</div>
         <div class="player-meta">${escapeHtml(player.slot)}${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? ' • ' + escapeHtml(player.injuryStatus) : ''}${points ? ' • ' + points : ''}</div>
         ${actions ? `<div class="player-actions">${actions}</div>` : ''}
       </div>
@@ -860,11 +865,23 @@ async function handlePlayerAction(btn) {
       const me = myTeam();
       const player = me.roster.find((p) => p.id === playerId);
       const existing = findBlockEntry(playerId);
+      // Beta 1.9: three cases —
+      //   1. tb_ row exists  → unblock (delete row)
+      //   2. int_ row exists → upgrade: delete the int_ shadow, re-create as tb_,
+      //      preserving any interest signals so we don't lose who was watching
+      //   3. no row          → fresh tb_ create
       if (existing) {
-        await removeFromTradeBlock(existing.entryId);
-        toast('Removed from block', 'success');
+        if (existing.entryId.startsWith('tb_')) {
+          await removeFromTradeBlock(existing.entryId);
+          toast('Removed from block', 'success');
+        } else {
+          const currentInterest = existing.interestedTeamIds || '[]';
+          await removeFromTradeBlock(existing.entryId);
+          await addToTradeBlock(player, me, true, currentInterest);
+          toast('On the trade block', 'success');
+        }
       } else {
-        await addToTradeBlock(player, me, true);
+        await addToTradeBlock(player, me, true, '[]');
         toast('On the trade block', 'success');
       }
       await loadTradeBlock();
@@ -893,7 +910,7 @@ async function handlePlayerAction(btn) {
           if (!player || !owner) return;
           // Beta 1.7: interest-only shadow row — NOT publicly on the block. Owner sees
           // the interested teamIds in their My Team alerts; nobody else sees this row.
-          await addToTradeBlock(player, owner, false);
+          await addToTradeBlock(player, owner, false, '[]');
           await loadTradeBlock();
           entry = findBlockEntry(playerId);
           if (!entry) return;
@@ -3152,7 +3169,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.8 - Live Scoring</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.9 - Trade Block Fix</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -5195,7 +5212,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.8.0';
+const BUILD_ID = '1.9.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
