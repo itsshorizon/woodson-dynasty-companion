@@ -304,7 +304,9 @@ async function loadLeagueData() {
   meta.textContent = `Loading ${CONFIG.SEASON}...`;
   meta.classList.remove('err');
   try {
-    const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mStandings', 'mSettings']);
+    // Beta 1.10: mStatProj unlocks per-scoringPeriod stat logs so weeklyActualLog(player)
+    // can return true week-by-week PPG + consistency instead of a single-week snapshot.
+    const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mStandings', 'mSettings', 'mStatProj']);
     state.teams = parseTeams(raw).sort((a, b) => a.playoffSeed - b.playoffSeed);
     state.matchups = parseMatchups(raw);
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
@@ -3169,7 +3171,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.9 - Trade Block Fix</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.10 - Archive & Analytics</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -3972,8 +3974,9 @@ async function loadFrontPage() {
     const data = await fetchJSON(`${CONFIG.SHEETS_BASE}/newsletter`);
     const rows = Array.isArray(data) ? data : [];
     if (!rows.length) { el.hidden = true; return; }
-    // Pick most recent by createdAt (or last row if no timestamps)
-    rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    // Beta 1.10: sort by weekNumber DESC — bypasses the missing createdAt column
+    // that was making stale releases stick to the front page.
+    rows.sort((a, b) => (parseInt(b.weekNumber, 10) || 0) - (parseInt(a.weekNumber, 10) || 0));
     const latest = rows[0];
     if (!latest.headline && !latest.storyText) { el.hidden = true; return; }
     el.innerHTML = `
@@ -3981,16 +3984,35 @@ async function loadFrontPage() {
       <h2 class="fp-headline">${escapeHtml(latest.headline || 'Untitled')}</h2>
       <div class="fp-story">${escapeHtml(latest.storyText || '')}</div>
       <button class="fp-toggle" id="fp-toggle">Read more ↓</button>
+      <button class="fp-toggle" id="fp-archive-btn" style="margin-left:10px;">View Archive 📚</button>
     `;
     el.hidden = false;
     $('#fp-toggle').onclick = (e) => {
       const expanded = el.classList.toggle('expanded');
       e.currentTarget.textContent = expanded ? 'Collapse ↑' : 'Read more ↓';
     };
+    $('#fp-archive-btn').onclick = () => openNewsletterArchive(rows);
   } catch (err) {
     // Sheet missing or empty — silently hide
     el.hidden = true;
   }
+}
+
+// Beta 1.10 — pop the full newsletter history (already sorted DESC by weekNumber)
+function openNewsletterArchive(rows) {
+  const modal = $('#archive-modal');
+  const body = $('#archive-body');
+  if (!modal || !body) return;
+  body.innerHTML = rows.map((r) => `
+    <div class="archive-article">
+      <h3>Week ${escapeHtml(r.weekNumber || '?')}: ${escapeHtml(r.headline || 'Untitled')}</h3>
+      <div style="white-space: pre-wrap; font-size:13px; color:var(--text-dim);">${escapeHtml(r.storyText || '')}</div>
+    </div>
+  `).join('');
+  modal.hidden = false;
+  const close = () => { modal.hidden = true; };
+  $('#archive-close').onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
 }
 
 /* -------- Commissioner Press Room (Anthropic-powered newsletter) -------- */
@@ -5212,7 +5234,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.9.0';
+const BUILD_ID = '1.10.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

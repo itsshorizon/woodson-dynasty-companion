@@ -1,9 +1,9 @@
 {
-  "version": "1.9.0",
-  "title": "Beta 1.9 - Trade Block Fix",
+  "version": "1.10.0",
+  "title": "Beta 1.10 - Archive & Analytics",
   "notes": [
-    "Live Sunday scoring enabled",
-    "Standings tab auto-refreshes every 30 seconds",
-    "Fixed a visibility bug where private interest alerts prevented owners from listing players on the block."
+    "Fixed a bug where player PPG calculations were only using 1 week of data",
+    "Added a Newsletter Archive to view past weekly recaps",
+    "Fixed Front Page sorting to correctly display the newest release"
   ]
 }

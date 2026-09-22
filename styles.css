@@ -1339,6 +1339,27 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   background: transparent;
 }
 
+/* ---------- Newsletter Archive Modal (Beta 1.10) ---------- */
+#archive-body { padding: 4px 0; }
+#archive-body .archive-article {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+}
+#archive-body .archive-article:last-child {
+  border-bottom: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+#archive-body h3 {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+#archive-body div[style] { line-height: 1.55; }
+
 /* ---------- Trade Role Action Buttons (Beta 1.7) ---------- */
 .btn-counter {
   flex: 1;
