@@ -36,6 +36,12 @@ jobs:
       - name: Build values
         run: node pipeline/build-values.js
 
+      # Copies team logos into data/logos/ so the app doesn't depend on
+      # third-party image hosts. A failure here never blocks trade values.
+      - name: Cache team logos
+        run: node pipeline/cache-logos.js
+        continue-on-error: true
+
       - name: Engine tests against fresh data
         run: node --test tests/*.test.js
 

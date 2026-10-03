@@ -1,11 +1,8 @@
 {
-  "version": "1.13.0",
-  "title": "🎨 Fresh Coat of Paint",
+  "version": "1.13.1",
+  "title": "🛡️ Custom Logos Fixed",
   "notes": [
-    "🏈 Tap any matchup in This Week to see both lineups, player by player.",
-    "🛡️ Team logos now show on the leaderboard, scores, rosters, and trade dropdowns.",
-    "📸 Player headshots in the trade builder.",
-    "🔽 Every dropdown in the app got a new look, with search on long lists.",
-    "🛠️ FIXED: records and points no longer spill off the leaderboard cards."
+    "🖼️ Custom team logos now load. The app keeps its own copy, refreshed nightly.",
+    "⭐ Your team logo now sits next to your name on My Team."
   ]
 }
