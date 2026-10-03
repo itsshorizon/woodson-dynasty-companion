@@ -24,6 +24,7 @@ const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'FLEX', 'OP', 'BE', 'IR']
 const state = {
   teams: [],
   matchups: [],
+  schedule: [],            // full ESPN schedule for the season (luck math)
   boxscores: {},           // { [week]: { byTeam: { [teamId]: players[] }, live } }
   expandedMatchups: new Set(),
   logoIndex: { cached: {}, custom: {}, version: '' }, // see loadLogoIndex()
@@ -318,6 +319,7 @@ async function loadLeagueData() {
     const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mStandings', 'mSettings', 'mStatProj']);
     state.teams = parseTeams(raw).sort((a, b) => a.playoffSeed - b.playoffSeed);
     state.matchups = parseMatchups(raw);
+    state.schedule = raw.schedule || [];
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
     meta.textContent = `${CONFIG.SEASON} • Wk ${state.currentWeek} • ${state.teams.length} Teams`;
     return true;
@@ -842,7 +844,9 @@ function teamOptionAttrs(team, sub = team.owner) {
 //   'mine'  → "Block" / "Unblock" toggle
 //   'other' → "Trade For" + (conditional) "Interested"
 //   'none'  → no buttons
-function renderPlayerRow(player, ownerTeam, context = 'none') {
+// At-a-glance stats shared by roster rows and the trade block:
+// positional rank, season points (or projection), and PPG.
+function playerStatsLineHTML(player) {
   const proj = projectedPoints(player);
   const act = actualPoints(player);
   const ppg = ppgFor(player);
@@ -854,8 +858,12 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
     : '';
   const ppgChunk = ppg != null ? ` · <b style="color:var(--text);">${ppg.toFixed(1)}</b> <span class="stat-lbl">PPG</span>` : '';
   const rankChunk = rank ? `<span class="pos-rank">${escapeHtml(rank)}</span>` : '';
+  return (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
+}
+
+function renderPlayerRow(player, ownerTeam, context = 'none') {
   const valueChunk = typeof tcValueChipHTML === 'function' ? tcValueChipHTML(player.id) : '';
-  const points = (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
+  const points = playerStatsLineHTML(player);
 
   const blockEntry = findBlockEntry(player.id);
   // Beta 1.9: strict prefix checks. An int_ row (private interest signal) must
@@ -1251,25 +1259,29 @@ function renderTradeBlockSection() {
     const meId = state.myTeamId;
     const youInterested = interested.map(String).includes(String(meId));
 
-    // Reconstruct a player-like object so playerPhotoHTML can render the ESPN headshot.
-    const pseudoPlayer = {
-      id: parseInt(entry.playerId, 10),
-      name: entry.playerName,
-      pos: entry.playerPos,
-    };
+    // Prefer the live roster player (stats, injury); fall back to the sheet row if dropped.
+    const pid = parseInt(entry.playerId, 10);
+    const live = findPlayerAnywhere(pid);
+    const player = live || { id: pid, name: entry.playerName, pos: entry.playerPos };
+    const injury = live?.injuryStatus && live.injuryStatus !== 'ACTIVE'
+      ? `<span class="block-injury">${escapeHtml(live.injuryStatus)}</span> • ` : '';
+    const stats = live ? playerStatsLineHTML(live) : '<span class="stat-lbl">No longer rostered</span>';
+    const value = live && typeof tcValueChipHTML === 'function' ? tcValueChipHTML(pid) : '';
 
     return `
-      <div class="block-entry">
-        ${playerPhotoHTML(pseudoPlayer)}
+      <div class="block-entry ${live ? 'clickable' : ''}" ${live ? `data-player-id="${pid}"` : ''}>
+        ${playerPhotoHTML(player)}
         <div class="block-info">
-          <div class="block-player">${escapeHtml(entry.playerName)} <span class="block-pos pos-${entry.playerPos}">${escapeHtml(entry.playerPos)}</span></div>
+          <div class="block-player">${escapeHtml(player.name)} <span class="block-pos pos-${escapeHtml(player.pos)}">${escapeHtml(player.pos)}</span></div>
+          ${stats ? `<div class="player-meta block-stats">${injury}${stats}</div>` : ''}
+          ${value ? `<div class="player-meta tv-row-val-line">${value}</div>` : ''}
           <div class="block-owner">Owned by ${escapeHtml(ownerName)}${isOwner ? ` • ${interested.length} interested` : ''}</div>
           ${isOwner && interested.length ? `<div class="block-interest-list">From: ${interested.map((id) => escapeHtml(teamName(parseInt(id, 10)))).join(', ')}</div>` : ''}
         </div>
         <div class="block-actions">
           ${isOwner
             ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}">★ Unblock</button>`
-            : ownerTeam ? `
+            : ownerTeam && live ? `
               <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
               <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}">${youInterested ? '✓ Interested' : '+ Interested'}</button>
             ` : ''}
@@ -1696,34 +1708,247 @@ const quadrantLinePlugin = {
 };
 
 // Draw thick-ring data dots with the team initials inside.
+/* ----------------------- Luck: wins vs expected wins -----------------------
+ * Expected wins for a week = share of the league you outscored that week
+ * (beat 9 of 11 teams = 0.82). Luck = actual wins - expected wins.
+ * Callers cap throughWeek at the regular season (regularSeasonWeeks), since
+ * consolation brackets keep every team playing into the playoffs. Weeks where
+ * not every team has a final score (in progress, byes) are skipped.
+ * --------------------------------------------------------------------------- */
+
+// Regular-season length = games on any team's ESPN record (raw or parsed team).
+function regularSeasonWeeks(teams) {
+  return Math.max(0, ...(teams || []).map((t) => {
+    const r = t.record?.overall || t;
+    return (r.wins || 0) + (r.losses || 0) + (r.ties || 0);
+  }));
+}
+
+function computeSeasonLuck(schedule, throughWeek = Infinity) {
+  const byWeek = new Map(); // week -> Map(teamId -> { pts, opp })
+  (schedule || []).forEach((m) => {
+    const wk = m.matchupPeriodId;
+    if (!wk || wk > throughWeek || !m.home || !m.away || m.winner === 'UNDECIDED') return;
+    const hp = m.home.totalPoints || 0, ap = m.away.totalPoints || 0;
+    if (!hp || !ap) return;
+    if (!byWeek.has(wk)) byWeek.set(wk, new Map());
+    const week = byWeek.get(wk);
+    if (!week.has(m.home.teamId)) week.set(m.home.teamId, { pts: hp, opp: ap });
+    if (!week.has(m.away.teamId)) week.set(m.away.teamId, { pts: ap, opp: hp });
+  });
+  const fullWeek = Math.max(0, ...[...byWeek.values()].map((w) => w.size));
+  const out = {};
+  byWeek.forEach((week) => {
+    if (week.size < fullWeek || week.size < 2) return;
+    const rows = [...week];
+    rows.forEach(([id, r]) => {
+      let beat = 0;
+      rows.forEach(([oid, o]) => { if (oid !== id) beat += r.pts > o.pts ? 1 : r.pts === o.pts ? 0.5 : 0; });
+      const slot = (out[id] = out[id] || { wins: 0, expWins: 0, games: 0 });
+      slot.expWins += beat / (rows.length - 1);
+      slot.wins += r.pts > r.opp ? 1 : r.pts === r.opp ? 0.5 : 0;
+      slot.games += 1;
+    });
+  });
+  Object.values(out).forEach((v) => { v.luck = v.wins - v.expWins; });
+  return out;
+}
+
+// Career luck per manager: each season's luck, mapped team -> member and summed.
+function computeCareerLuck() {
+  const out = {};
+  Object.values(state.history).forEach((season) => {
+    const luck = computeSeasonLuck(season.schedule, regularSeasonWeeks(season.teams));
+    Object.entries(luck).forEach(([teamId, v]) => {
+      const memberId = season.teamToMemberId?.[teamId];
+      if (!memberId) return;
+      const slot = (out[memberId] = out[memberId] || { wins: 0, expWins: 0, games: 0 });
+      slot.wins += v.wins; slot.expWins += v.expWins; slot.games += v.games;
+    });
+  });
+  Object.values(out).forEach((v) => { v.luck = v.wins - v.expWins; });
+  return out;
+}
+
+// Shared tooltip line for the luck scatters.
+function luckTooltip(p, pfLabel = 'PF', paLabel = 'PA') {
+  const base = `${p.label}: ${pfLabel} ${p.x.toFixed(1)} / ${paLabel} ${p.y.toFixed(1)}`;
+  if (!p.luck) return base;
+  const { wins, expWins, luck } = p.luck;
+  const verdict = Math.abs(luck) < 0.05 ? 'right on expected'
+    : `${luck > 0 ? 'lucky' : 'unlucky'} by ${Math.abs(luck).toFixed(1)}`;
+  return [base, `${fmtWins(wins)} W, expected ${expWins.toFixed(1)} · ${verdict}`];
+}
+const fmtWins = (w) => (Number.isInteger(w) ? String(w) : w.toFixed(1));
+
+/* Team rings for the luck scatters.
+ * Crowded teams get spread apart for legibility: each ring is nudged off its
+ * neighbors (badge included), and when it moves, a small dot plus a thin
+ * leader line mark the team's true position. Hover and tap target the ring
+ * where it's drawn, not the hidden data point underneath.
+ */
+const RING_R = 16;
+
+function layoutRings(chart) {
+  const meta = chart.getDatasetMeta(0);
+  const data = chart.data.datasets[0].data;
+  const { left, right, top, bottom } = chart.chartArea;
+  const r = RING_R, pad = 3;
+  const nodes = meta.data.map((pt, i) => {
+    const hasBadge = Math.abs(data[i]?.luck?.luck ?? 0) >= 0.5;
+    // Footprint: ring plus the luck badge hanging below it.
+    return { i, tx: pt.x, ty: pt.y, x: pt.x, y: pt.y, below: hasBadge ? r + 15 : r + pad };
+  });
+  // A ring may move, but its center never leaves its true quadrant, or the
+  // chart would tell a different story than the data.
+  const xMid = chart.$medX != null ? chart.scales.x.getPixelForValue(chart.$medX) : null;
+  const yMid = chart.$medY != null ? chart.scales.y.getPixelForValue(chart.$medY) : null;
+  const keep = 6;
+  const clamp = (n) => {
+    n.x = Math.min(right - r - 2, Math.max(left + r + 2, n.x));
+    n.y = Math.min(bottom - n.below, Math.max(top + r + 2, n.y));
+    if (xMid != null) n.x = n.tx >= xMid ? Math.max(n.x, xMid + keep) : Math.min(n.x, xMid - keep);
+    if (yMid != null) n.y = n.ty >= yMid ? Math.max(n.y, yMid + keep) : Math.min(n.y, yMid - keep);
+  };
+  // Quadrant corner labels (drawn by quadrantLinePlugin) are fixed obstacles.
+  chart.ctx.save();
+  chart.ctx.font = 'bold 11px Inter, sans-serif';
+  const w = (t) => chart.ctx.measureText(t).width;
+  const labels = [
+    { x1: left + 4, x2: left + 12 + w('REBUILDERS'), y1: top, y2: top + 23 },
+    { x1: right - 74, x2: right - 66 + w('UNLUCKY'), y1: top, y2: top + 23 },
+    { x1: left + 4, x2: left + 12 + w('LUCKY WINS'), y1: bottom - 23, y2: bottom },
+    { x1: right - 90, x2: right - 82 + w('CONTENDERS'), y1: bottom - 23, y2: bottom },
+  ];
+  chart.ctx.restore();
+  const avoidLabels = (n) => {
+    labels.forEach((L) => {
+      const ox = Math.min(n.x + r + pad, L.x2) - Math.max(n.x - r - pad, L.x1);
+      const oy = Math.min(n.y + n.below, L.y2) - Math.max(n.y - r - pad, L.y1);
+      if (ox <= 0 || oy <= 0) return;
+      const atTop = L.y1 === top;
+      // Move whichever way is shorter: off the label vertically or sideways.
+      const dy = atTop ? L.y2 - (n.y - r - pad) : -((n.y + n.below) - L.y1);
+      const dx = n.x < (L.x1 + L.x2) / 2 ? -((n.x + r + pad) - L.x1) : L.x2 - (n.x - r - pad);
+      if (Math.abs(dy) <= Math.abs(dx)) n.y += dy; else n.x += dx;
+    });
+  };
+  for (let it = 0; it < 150; it++) {
+    // Gentle pull home first, so the last step of each pass is separation.
+    nodes.forEach((n) => { n.x += (n.tx - n.x) * 0.02; n.y += (n.ty - n.y) * 0.02; });
+    let moved = false;
+    for (let a = 0; a < nodes.length; a++) {
+      for (let b = a + 1; b < nodes.length; b++) {
+        const A = nodes[a], B = nodes[b];
+        const ox = 2 * (r + pad) - Math.abs(A.x - B.x);
+        const oy = Math.min(A.y + A.below, B.y + B.below) - Math.max(A.y - r - pad, B.y - r - pad);
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        // Push apart along whichever axis needs less movement.
+        if (ox < oy) {
+          const d = (A.x <= B.x ? -1 : 1) * ox / 2;
+          A.x += d; B.x -= d;
+        } else {
+          const d = (A.y <= B.y ? -1 : 1) * oy / 2;
+          A.y += d; B.y -= d;
+        }
+      }
+    }
+    nodes.forEach((n) => { avoidLabels(n); clamp(n); });
+    if (!moved) break;
+  }
+  return nodes;
+}
+
+if (typeof Chart !== 'undefined' && Chart.Tooltip?.positioners) {
+  // Anchor tooltips above the drawn ring rather than the true data point.
+  Chart.Tooltip.positioners.ringAnchor = function (items) {
+    const n = this.chart.$ringNodes?.find((node) => node.i === items[0]?.index);
+    return n ? { x: n.x, y: n.y - RING_R } : false;
+  };
+}
+
 const teamRingPlugin = {
   id: 'teamRings',
   afterDatasetsDraw(chart) {
     const meta = chart.getDatasetMeta(0);
     if (!meta || !meta.data) return;
     const ctx = chart.ctx;
+    const r = RING_R;
+    const nodes = layoutRings(chart);
+    chart.$ringNodes = nodes;
+    const data = chart.data.datasets[0].data;
     ctx.save();
-    meta.data.forEach((pt, i) => {
-      const raw = chart.data.datasets[0].data[i];
+
+    // 1) True-position markers + leader lines for rings that moved.
+    nodes.forEach((n) => {
+      const dx = n.x - n.tx, dy = n.y - n.ty;
+      const dist = Math.hypot(dx, dy);
+      if (dist < r * 0.6) return;
+      ctx.strokeStyle = 'rgba(76, 201, 240, 0.55)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(n.tx, n.ty);
+      ctx.lineTo(n.x - (dx / dist) * r, n.y - (dy / dist) * r);
+      ctx.stroke();
+      ctx.fillStyle = '#4cc9f0';
+      ctx.beginPath();
+      ctx.arc(n.tx, n.ty, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 2) Rings, initials, luck badges.
+    nodes.forEach((n) => {
+      const raw = data[n.i];
       const initials = (raw.abbrev || raw.label || '?').slice(0, 3).toUpperCase();
-      const x = pt.x, y = pt.y;
-      const r = 16;
-      // Ring
+      const { x, y } = n;
+      const hovered = chart.$ringHover === n.i;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(10, 20, 16, 0.85)';
+      ctx.fillStyle = 'rgba(10, 20, 16, 0.92)';
       ctx.fill();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = '#4cc9f0';
+      ctx.lineWidth = hovered ? 4.5 : 3.5;
+      ctx.strokeStyle = hovered ? '#ffffff' : '#4cc9f0';
       ctx.stroke();
-      // Initials
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(initials, x, y + 0.5);
+      // Luck badge: wins above/below expected, skipped when close to zero.
+      const luck = raw.luck?.luck;
+      if (luck != null && Math.abs(luck) >= 0.5) {
+        const txt = `${luck > 0 ? '+' : '−'}${Math.abs(luck).toFixed(1)}`;
+        ctx.font = 'bold 9px Inter, sans-serif';
+        const w = ctx.measureText(txt).width + 8;
+        const by = y + r + 7;
+        ctx.fillStyle = luck > 0 ? 'rgba(241, 196, 15, 0.95)' : 'rgba(76, 201, 240, 0.95)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - w / 2, by - 6, w, 12, 6); else ctx.rect(x - w / 2, by - 6, w, 12);
+        ctx.fill();
+        ctx.fillStyle = '#0a1410';
+        ctx.fillText(txt, x, by + 0.5);
+      }
     });
     ctx.restore();
+  },
+  // Hit-test the drawn rings (the dataset's own points have no hit area).
+  afterEvent(chart, args) {
+    const e = args.event;
+    const nodes = chart.$ringNodes;
+    if (!nodes || !chart.tooltip) return;
+    let hit = -1;
+    if (e.type !== 'mouseout') {
+      let best = RING_R + 6;
+      nodes.forEach((n) => {
+        const d = Math.hypot(e.x - n.x, e.y - n.y);
+        if (d <= best) { best = d; hit = n.i; }
+      });
+    }
+    if (hit === (chart.$ringHover ?? -1) && e.type === 'mousemove') return;
+    chart.$ringHover = hit;
+    chart.tooltip.setActiveElements(hit >= 0 ? [{ datasetIndex: 0, index: hit }] : [], { x: e.x, y: e.y });
+    args.changed = true;
   },
 };
 
@@ -1735,11 +1960,13 @@ function renderScheduleLuckChart() {
   // bounds when returning to the tab via the slide transition).
   if (_luckChart) { _luckChart.destroy(); _luckChart = null; }
 
-  const points = state.teams.map((t, i) => ({
+  const luck = computeSeasonLuck(state.schedule, regularSeasonWeeks(state.teams));
+  const points = state.teams.map((t) => ({
     x: t.pf,
     y: t.pa,
     label: t.name,
     abbrev: t.abbrev || t.name.slice(0, 6),
+    luck: luck[t.id] || null,
   }));
   const medX = _median(points.map((p) => p.x));
   const medY = _median(points.map((p) => p.y));
@@ -1750,9 +1977,10 @@ function renderScheduleLuckChart() {
       datasets: [{
         label: 'Teams',
         data: points,
-        // Custom ring + initials are drawn by teamRingPlugin; hide default points.
-        pointRadius: 16,
-        pointHoverRadius: 18,
+        // Rings are drawn (and hit-tested) by teamRingPlugin; no native points.
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(0,0,0,0)',
       }],
@@ -1763,17 +1991,15 @@ function renderScheduleLuckChart() {
       plugins: {
         legend: { display: false },
         tooltip: {
+          position: 'ringAnchor',
           callbacks: {
-            label: (ctx) => {
-              const p = ctx.raw;
-              return `${p.label}: PF ${p.x.toFixed(1)} / PA ${p.y.toFixed(1)}`;
-            },
+            label: (ctx) => luckTooltip(ctx.raw),
           },
         },
       },
       scales: {
-        x: { title: { display: true, text: 'Points For →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { reverse: true, title: { display: true, text: 'Points Against ↓', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { grace: '6%', title: { display: true, text: 'Points For →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { grace: '6%', title: { display: true, text: 'Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
@@ -4670,7 +4896,7 @@ function historicalCareerArcHTML(playerId) {
 document.addEventListener('click', (e) => {
   // Ignore if the click was on an actionable button or its descendants
   if (e.target.closest('.player-action, button, input, label, select, a')) return;
-  const row = e.target.closest('.player-row');
+  const row = e.target.closest('.player-row, .block-entry.clickable');
   if (!row) return;
   // Try several signals: data-player-id, the photo's player-id, or first checkbox value
   let pid = parseInt(row.dataset.playerId, 10);
@@ -4921,10 +5147,7 @@ let _alltimeLuckChart = null;
 function renderAllTimeLuckChart() {
   const canvas = $('#alltime-luck-chart');
   if (!canvas || typeof Chart === 'undefined') return;
-  const rows = computeManagerLedger();
-  const data = rows
-    .filter((r) => r.avgPF > 0)
-    .map((r) => ({ x: r.avgPF, y: r.avgPA, label: r.name, abbrev: r.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 3) }));
+  const data = _luckAllTimeData();
   if (!data.length) return;
   const medX = _median(data.map((d) => d.x));
   const medY = _median(data.map((d) => d.y));
@@ -4936,7 +5159,9 @@ function renderAllTimeLuckChart() {
       datasets: [{
         label: 'Managers',
         data,
-        pointRadius: 16,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(0,0,0,0)',
       }],
@@ -4946,11 +5171,11 @@ function renderAllTimeLuckChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.raw.label}: avg PF ${ctx.raw.x.toFixed(1)} / avg PA ${ctx.raw.y.toFixed(1)}` } },
+        tooltip: { position: 'ringAnchor', callbacks: { label: (ctx) => luckTooltip(ctx.raw, 'avg PF', 'avg PA') } },
       },
       scales: {
-        x: { title: { display: true, text: 'Lifetime Avg PF →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { reverse: true, title: { display: true, text: 'Lifetime Avg PA ↓', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { grace: '6%', title: { display: true, text: 'Lifetime Avg PF →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { grace: '6%', title: { display: true, text: 'Avg Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
@@ -5384,9 +5609,10 @@ function _luckSeasonDataThrough(year, throughWeek) {
     if (accum[h.teamId]) { accum[h.teamId].pf += hp; accum[h.teamId].pa += ap; accum[h.teamId].n++; }
     if (accum[a.teamId]) { accum[a.teamId].pf += ap; accum[a.teamId].pa += hp; accum[a.teamId].n++; }
   });
-  return Object.values(accum)
-    .filter((r) => r.n > 0)
-    .map((r) => ({ x: r.pf / r.n, y: r.pa / r.n, label: r.name, abbrev: r.abbrev }));
+  const luck = computeSeasonLuck(season.schedule, Math.min(throughWeek, regularSeasonWeeks(season.teams)));
+  return Object.entries(accum)
+    .filter(([, r]) => r.n > 0)
+    .map(([id, r]) => ({ x: r.pf / r.n, y: r.pa / r.n, label: r.name, abbrev: r.abbrev, luck: luck[id] || null }));
 }
 
 // Rewrite the existing alltime-luck-chart data + medians and trigger a smooth update.
@@ -5402,11 +5628,13 @@ function _updateLuckChartFor(year, week) {
 
 function _luckAllTimeData() {
   const rows = computeManagerLedger();
+  const luck = computeCareerLuck();
   return rows
     .filter((r) => r.avgPF > 0)
     .map((r) => ({
       x: r.avgPF, y: r.avgPA, label: r.name,
       abbrev: r.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 3),
+      luck: luck[r.id] || null,
     }));
 }
 
@@ -5484,7 +5712,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.16.0';
+const BUILD_ID = '1.16.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

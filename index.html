@@ -54,8 +54,8 @@
       <!-- Schedule Luck scatter plot: PF (x) vs PA (y) with median quadrants -->
       <div class="card chart-card" id="schedule-luck-card">
         <h2>Schedule Luck Index</h2>
-        <p class="chart-sub">Points For (right = strong offense) vs Points Against (down = easy schedule).<br/>Quadrants: <b>True Contenders</b> (lower-right), <b>Lucky Wins</b> (lower-left), <b>Unlucky Hard Schedules</b> (upper-right), <b>Rebuilders</b> (upper-left).</p>
-        <div class="chart-wrap"><canvas id="luck-chart"></canvas></div>
+        <p class="chart-sub">Points For (right = strong offense) vs Points Against (up = tough schedule).<br/>Quadrants: <b>True Contenders</b> (lower-right), <b>Lucky Wins</b> (lower-left), <b>Unlucky Hard Schedules</b> (upper-right), <b>Rebuilders</b> (upper-left).<br/>Badge = wins above (<b style="color:var(--yellow);">+</b>) or below (<b style="color:#4cc9f0;">−</b>) what your weekly scores earned.</p>
+        <div class="chart-wrap chart-luck"><canvas id="luck-chart"></canvas></div>
       </div>
 
       <!-- Press Room secret unlock (commish only) -->
@@ -284,7 +284,7 @@
         <!-- Career Luck Matrix Scatter + Animated Trajectories -->
         <div class="card chart-card">
           <h2>Career Luck Matrix</h2>
-          <p class="chart-sub">Lifetime averages by default. Pick a season + press ▶ Play to watch teams drift through the quadrants week-by-week.</p>
+          <p class="chart-sub">Lifetime averages by default (up = tougher schedules). Pick a season + press ▶ Play to watch teams drift through the quadrants week-by-week. Badge = career wins above or below expected.</p>
           <div class="playback-controls" id="luck-playback">
             <select id="luck-playback-year">
               <option value="">All-Time</option>
@@ -297,7 +297,7 @@
             <input type="range" id="luck-playback-slider" min="1" max="14" value="14" disabled />
             <span class="playback-week" id="luck-playback-label">Wk —</span>
           </div>
-          <div class="chart-wrap"><canvas id="alltime-luck-chart"></canvas></div>
+          <div class="chart-wrap chart-luck"><canvas id="alltime-luck-chart"></canvas></div>
         </div>
 
         <!-- Volatility Index Floating Bars -->

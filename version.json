@@ -1,10 +1,10 @@
 {
-  "version": "1.16.0",
-  "title": "🔍 Smarter Trade Finder",
+  "version": "1.16.1",
+  "title": "🍀 Luck, Fixed",
   "notes": [
-    "🔍 Trade Finder only suggests deals that help BOTH teams. No more pointless pick-for-pick swaps.",
-    "🎚️ New filters: choose players or picks on each side, and deal size (1 for 1, 2 for 1, 1 for 2, 2 for 2).",
-    "💬 Every idea explains why it helps you and why they'd say yes, plus player headshots.",
-    "🎯 FIXED: draft picks for a couple of teams weren't getting their early/mid/late value. Pick values now step smoothly by slot."
+    "🛠️ FIXED: the Schedule Luck chart had its up/down flipped, so teams landed in the wrong quadrant. Same fix in the Vault's Career Luck Matrix.",
+    "🍀 New luck badge on every team: wins above (+) or below (−) what your weekly scores earned.",
+    "🔍 Crowded luck charts now spread teams apart. A small dot and line show each team's exact spot.",
+    "📋 Trade Block players now show their value and stats. Tap a card to open the full profile."
   ]
 }
