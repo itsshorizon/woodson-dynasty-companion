@@ -11,3 +11,9 @@ node_modules/
 
 # Empty placeholder repo
 woodson-dynasty-app/
+
+# Data job dependencies
+pipeline/node_modules/
+
+# Local Claude Code preview config
+.claude/

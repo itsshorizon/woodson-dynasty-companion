@@ -1,9 +1,11 @@
 {
-  "version": "1.10.0",
-  "title": "Beta 1.10 - Archive & Analytics",
+  "version": "1.11.0",
+  "title": "Beta 1.11 - Trade Calculator",
   "notes": [
-    "Fixed a bug where player PPG calculations were only using 1 week of data",
-    "Added a Newsletter Archive to view past weekly recaps",
-    "Fixed Front Page sorting to correctly display the newest release"
+    "New fairness meter on every trade: see at a glance whether a deal is Fair, a Slight edge, Lopsided, or a Fleece",
+    "Values blend FantasyCalc and DynastyProcess, refreshed daily and tuned to our scoring (TE premium, 6-pt passing TDs, 3 FLEX)",
+    "Getting the best player counts: stacking bench pieces no longer adds up to a stud",
+    "Trade Finder suggests fair deals that help both teams",
+    "Player profiles now show dynasty value, age outlook, NFL contract, injury history and stats"
   ]
 }

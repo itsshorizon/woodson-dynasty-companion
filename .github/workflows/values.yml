@@ -1,0 +1,52 @@
+name: Refresh trade values
+
+on:
+  schedule:
+    # 6am Eastern daily, plus a Monday-night refresh after the weekend's games
+    - cron: '0 10 * * *'
+    - cron: '0 4 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trade-values
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pipeline/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix pipeline
+
+      - name: Engine tests
+        run: node --test tests/*.test.js
+
+      - name: Build values
+        run: node pipeline/build-values.js
+
+      - name: Engine tests against fresh data
+        run: node --test tests/*.test.js
+
+      - name: Commit data
+        run: |
+          if git diff --quiet -- data && [ -z "$(git ls-files --others --exclude-standard data)" ]; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "values-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "Refresh trade values $(date -u +%Y-%m-%d)"
+          git push

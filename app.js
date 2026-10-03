@@ -1332,6 +1332,7 @@ function renderPendingTrades() {
             ${renderAssetItems(requested)}
           </div>
         </div>
+        ${typeof tcGradeHTML === 'function' ? tcGradeHTML(t) : ''}
         ${renderConsistencySummary(t)}
         ${renderConsistencySummaryAggregate(t)}
         <div class="trade-actions">
@@ -3305,6 +3306,7 @@ function renderCommishTrade(t) {
         <b>${escapeHtml(t.teamProposing)}</b> sent: ${escapeHtml(summarize(offered))}<br>
         <b>${escapeHtml(t.teamReceiving)}</b> sent: ${escapeHtml(summarize(requested))}
       </div>
+      ${typeof tcGradeHTML === 'function' ? tcGradeHTML(t) : ''}
       <div class="commish-actions">
         ${status !== 'accepted' ? `<button class="commish-btn" data-cmd="accept">Force Accept</button>` : ''}
         ${status !== 'rejected' ? `<button class="commish-btn" data-cmd="reject">Force Reject</button>` : ''}
@@ -3540,6 +3542,8 @@ function setView(name) {
     wireTradeSearch();
     // Apply any prefill from "Trade For" navigation
     setTimeout(applyTradePrefill, 50);
+    // Trade calculator: values, live meter, finder (trade-calc.js)
+    if (typeof tcInitTradesView === 'function') tcInitTradesView();
   }
   if (name === 'myteam') {
     loadAllTrades().then(renderMyTeam);
@@ -4337,6 +4341,8 @@ function openPlayerProfile(playerId) {
 
   // Append Historical Career Arc (scans state.history across all years)
   body.insertAdjacentHTML('beforeend', historicalCareerArcHTML(playerId));
+  // Dynasty Outlook: trade values, contract, injuries (trade-calc.js)
+  if (typeof tcEnhanceProfile === 'function') tcEnhanceProfile(playerId);
 
   $('#player-profile-modal').hidden = false;
 
@@ -5234,7 +5240,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.10.0';
+const BUILD_ID = '1.11.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

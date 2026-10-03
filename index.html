@@ -111,7 +111,19 @@
             </div>
           </div>
         </div>
+        <div id="trade-meter" aria-live="polite"></div>
         <button class="btn-primary" id="submit-trade">Submit Trade</button>
+      </div>
+
+      <div class="card" id="trade-finder-card" hidden>
+        <h2>Trade Finder</h2>
+        <p class="tv-note">Fair deals that help both teams, built from real rosters and picks.</p>
+        <div class="tv-finder-controls">
+          <select id="finder-partner" aria-label="Trade partner"></select>
+          <select id="finder-target" aria-label="Player you want"></select>
+        </div>
+        <button class="btn-ghost" id="finder-run" type="button">Find fair trades</button>
+        <div id="finder-results"></div>
       </div>
 
       <div class="card">
@@ -473,5 +485,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="app.js"></script>
+  <script src="trade-engine.js"></script>
+  <script src="trade-calc.js"></script>
 </body>
 </html>

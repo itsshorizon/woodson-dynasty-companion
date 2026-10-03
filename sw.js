@@ -1,9 +1,11 @@
-const CACHE_NAME = 'wcc-v1.10';
+const CACHE_NAME = 'wcc-v1.11';
 const CORE_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './trade-engine.js',
+  './trade-calc.js',
   './manifest.json',
   './history.json'
 ];
@@ -28,7 +30,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  const isApi = url.hostname.includes('espn.com') || url.hostname.includes('steinhq.com');
+  // Trade values refresh daily, so treat them like API data (network-first).
+  const isApi = url.hostname.includes('espn.com') || url.hostname.includes('steinhq.com')
+    || (url.origin === self.location.origin && url.pathname.includes('/data/'));
 
   if (isApi) {
     // Network-first for API: fall back to cache when offline

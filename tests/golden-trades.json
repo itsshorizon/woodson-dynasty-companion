@@ -1,0 +1,60 @@
+{
+  "about": "Calibration trades. Each one lists the verdicts a seasoned dynasty manager would accept. Values are synthetic so the expectations don't drift with the daily data. Edit or add cases here before changing alpha/beta in data/engine-config.json.",
+  "values": {
+    "replacement": { "ALL": 600, "QB": 600, "RB": 400, "WR": 600, "TE": 250 },
+    "picks": {
+      "2027-1-any": 2400, "2027-1-early": 4000, "2027-1-mid": 2600, "2027-1-late": 2100,
+      "2027-2-any": 1250, "2027-3-any": 700, "2027-4-any": 450,
+      "2028-1-any": 2000, "2028-2-any": 1100, "2028-3-any": 630, "2028-4-any": 430
+    },
+    "players": {
+      "star_rb":   { "n": "Star RB (RB1)",      "p": "RB", "a": 24, "dv": 9500, "wn": 9800, "fc": 9600, "dp": 9400, "cf": 0.95 },
+      "wr1":       { "n": "WR1",                "p": "WR", "a": 25, "dv": 9000, "wn": 9000, "fc": 9100, "dp": 8900, "cf": 0.95 },
+      "top5":      { "n": "Top-5 WR",           "p": "WR", "a": 26, "dv": 8500, "wn": 8600, "fc": 8400, "dp": 8600, "cf": 0.95 },
+      "wr10":      { "n": "WR10",               "p": "WR", "a": 26, "dv": 7000, "wn": 7100, "fc": 7000, "dp": 7000, "cf": 0.95 },
+      "wr15a":     { "n": "WR15 A",             "p": "WR", "a": 25, "dv": 6000, "wn": 6000, "fc": 6000, "dp": 6000, "cf": 0.95 },
+      "wr15b":     { "n": "WR15 B",             "p": "WR", "a": 26, "dv": 6000, "wn": 6100, "fc": 6000, "dp": 6000, "cf": 0.95 },
+      "rb15":      { "n": "RB15",               "p": "RB", "a": 25, "dv": 6000, "wn": 6200, "fc": 6100, "dp": 5900, "cf": 0.95 },
+      "rookie_wr": { "n": "Rookie WR (WR59 now)", "p": "WR", "a": 22, "dv": 6500, "wn": 1800, "fc": 6300, "dp": 6700, "cf": 0.9 },
+      "vet_wr":    { "n": "Vet WR (29)",        "p": "WR", "a": 29, "dv": 6500, "wn": 7400, "fc": 6600, "dp": 6400, "cf": 0.95 },
+      "mid_a":     { "n": "Mid A",              "p": "RB", "a": 26, "dv": 4000, "wn": 4200, "fc": 4000, "dp": 4000, "cf": 0.9 },
+      "mid_b":     { "n": "Mid B",              "p": "WR", "a": 25, "dv": 4000, "wn": 3900, "fc": 4000, "dp": 4000, "cf": 0.9 },
+      "mid_c":     { "n": "Mid C",              "p": "WR", "a": 27, "dv": 4000, "wn": 4100, "fc": 4000, "dp": 4000, "cf": 0.9 },
+      "bench1":    { "n": "Bench 1",            "p": "WR", "a": 26, "dv": 2000, "wn": 2000, "fc": 2000, "dp": 2000, "cf": 0.85 },
+      "bench2":    { "n": "Bench 2",            "p": "RB", "a": 25, "dv": 2000, "wn": 2100, "fc": 2000, "dp": 2000, "cf": 0.85 },
+      "bench3":    { "n": "Bench 3",            "p": "WR", "a": 27, "dv": 2000, "wn": 1900, "fc": 2000, "dp": 2000, "cf": 0.85 },
+      "bench4":    { "n": "Bench 4",            "p": "TE", "a": 26, "dv": 2000, "wn": 2000, "fc": 2000, "dp": 2000, "cf": 0.85 },
+      "bench5":    { "n": "Bench 5",            "p": "RB", "a": 24, "dv": 2000, "wn": 1800, "fc": 2000, "dp": 2000, "cf": 0.85 },
+      "old_te3":   { "n": "36yo TE (TE3 now)",  "p": "TE", "a": 36, "dv": 1300, "wn": 6500, "fc": 1450, "dp": 1150, "cf": 0.85 },
+      "waiver":    { "n": "Waiver guy",         "p": "WR", "a": 27, "dv": 300,  "wn": 300,  "fc": 300,  "dp": 300,  "cf": 0.8 }
+    }
+  },
+  "trades": [
+    { "name": "Five bench players for a top-5 player is a fleece",
+      "a": ["bench1", "bench2", "bench3", "bench4", "bench5"], "b": ["top5"],
+      "expect": ["fleece"], "winner": "b" },
+    { "name": "Two WR15s for a WR1 is fair",
+      "a": ["wr15a", "wr15b"], "b": ["wr1"], "expect": ["fair", "slight"] },
+    { "name": "Equal 1-for-1 is fair",
+      "a": ["wr15a"], "b": ["rb15"], "expect": ["fair"] },
+    { "name": "WR1 for WR10 straight up is lopsided",
+      "a": ["wr1"], "b": ["wr10"], "expect": ["lopsided", "fleece"], "winner": "a" },
+    { "name": "WR1 for WR10 + early 1st is close",
+      "a": ["wr1"], "b": ["wr10", "pick:2027-1:early"], "expect": ["fair", "slight"] },
+    { "name": "Three mid players for a star: star side wins",
+      "a": ["mid_a", "mid_b", "mid_c"], "b": ["star_rb"], "expect": ["lopsided", "fleece"], "winner": "b" },
+    { "name": "Old TE3 for a 2nd-round pick is about fair",
+      "a": ["old_te3"], "b": ["pick:2027-2"], "expect": ["fair", "slight"] },
+    { "name": "Rookie WR (WR59 now) holds value against a peer vet",
+      "a": ["rookie_wr"], "b": ["vet_wr"], "expect": ["fair"] },
+    { "name": "Two firsts for a star: star side wins",
+      "a": ["pick:2027-1", "pick:2028-1"], "b": ["star_rb"], "expect": ["lopsided", "fleece"], "winner": "b" },
+    { "name": "A 1st for a 1st + 2nd a year later is close",
+      "a": ["pick:2027-1"], "b": ["pick:2028-1", "pick:2028-2"], "expect": ["fair", "slight"] },
+    { "name": "Mid player + 1st for WR15: the better player wins (commissioner to confirm)",
+      "a": ["mid_a", "pick:2027-1"], "b": ["wr15a"], "expect": ["slight", "lopsided"], "winner": "b",
+      "review": "Raw sum favours the 2-piece side (6400 vs 6000). Under 'always get the best player' the WR15 side should win. Confirm this matches league expectations." },
+    { "name": "Two mid players for one WR15 doesn't beat the better player",
+      "a": ["mid_b", "mid_c"], "b": ["wr15a"], "expect": ["fair", "slight"] }
+  ]
+}

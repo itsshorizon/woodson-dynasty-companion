@@ -1,0 +1,17 @@
+{
+  "name": "woodson-values-pipeline",
+  "private": true,
+  "description": "Nightly job that builds data/values.json and data/player-details.json for the trade calculator",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build-values.js",
+    "dry-run": "node build-values.js --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "hyparquet": "^1.31.2",
+    "hyparquet-compressors": "^1.1.2"
+  }
+}
