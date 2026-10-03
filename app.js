@@ -3572,6 +3572,7 @@ function renderIncomingTradeCard(t) {
           ${renderAssetItems(rightSide)}
         </div>
       </div>
+      ${typeof tcTradeAnalysisHTML === 'function' ? tcTradeAnalysisHTML(t, state.myTeamId) : ''}
       <div class="trade-actions">
         ${tradeActionButtonsHTML(role)}
       </div>
@@ -3735,7 +3736,10 @@ function setView(name) {
   if (name === 'trades') {
     // Beta 1.5: refresh the identity lock on every tab entry so team switches propagate instantly
     populateTradeTeamSelects();
-    loadAllTrades().then(renderPendingTrades);
+    loadAllTrades().then(() => {
+      renderPendingTrades();
+      if (typeof tcRenderTradeFeed === 'function') tcRenderTradeFeed();
+    });
     loadTradeBlock().then(renderTradeBlockSection);
     wireTradeSearch();
     // Apply any prefill from "Trade For" navigation
@@ -5478,7 +5482,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.14.0';
+const BUILD_ID = '1.15.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

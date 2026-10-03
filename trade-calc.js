@@ -257,7 +257,7 @@ function tcMeterHTML(opts) {
   return `
     <div class="tv-meter" data-band="${bandKey}">
       <div class="tv-verdict">
-        <div class="tv-band">${escapeHtml(v.title)}${r.empty || r.band.key === 'fair' ? '' : ` <span class="tv-pct">${pct}%</span>`}</div>
+        <div class="tv-band">${escapeHtml(v.title)}${r.empty || r.band.key === 'fair' ? '' : ` <span class="tv-pct">${pct >= 95 ? '95%+' : `${pct}%`}</span>`}</div>
         <div class="tv-sub">${escapeHtml(v.sub)}</div>
       </div>
       ${r.empty ? '' : tcMeterSVG(r)}
@@ -290,7 +290,7 @@ function tcFitHTML(r, opts) {
     const fit = TradeEngine.fitScore(gets, gives, win.label, TC.ctx);
     const fitWord = fit > 600 ? 'Good fit' : fit < -600 ? 'Poor fit' : 'Neutral fit';
     const lineupTxt = lineup == null || Math.abs(lineup) < 0.05 ? '±0.0' : `${lineup > 0 ? '+' : ''}${lineup.toFixed(1)}`;
-    const isMe = teamId === state.myTeamId;
+    const isMe = teamId === state.myTeamId && !opts.readOnly;
     return `
       <div class="tv-fit-card">
         <div class="tv-fit-head">
@@ -783,23 +783,126 @@ function tcWireBuilder() {
   });
 }
 
-/* ----------------------- Pending trades ----------------------- */
+/* ----------------------- Stored trades: analysis + league feed ----------------------- */
 
-// Compact grade for a stored trade (proposer sends `assestsOffered`).
-function tcGradeHTML(t) {
-  if (!TC.ctx) return '';
+// Pull a stored trade (Stein row) apart. Proposer sends `assestsOffered`.
+function tcStoredTrade(t) {
   const offered = safeParse(t.assestsOffered) || {};
   const requested = safeParse(t.assetsRequested) || {};
-  const toAssets = (side) => (side.players || []).map(tcPlayerAsset)
-    .concat((side.picks || []).map((p) => tcPickAsset(p, side.teamId)));
-  const proposing = t.teamProposing || teamName(offered.teamId);
-  const receiving = t.teamReceiving || teamName(requested.teamId);
-  return tcMeterHTML({
-    compact: true,
-    trade: { a: { gets: toAssets(requested) }, b: { gets: toAssets(offered) } },
-    names: { a: proposing, b: receiving },
-  });
+  const proposerId = Number(t.teamAId || offered.teamId) || null;
+  const receiverId = Number(t.teamBId || requested.teamId) || null;
+  const toAssets = (side, teamId) => (side.players || []).map(tcPlayerAsset)
+    .concat((side.picks || []).map((p) => tcPickAsset(p, teamId)));
+  return {
+    proposer: { id: proposerId, name: t.teamProposing || teamName(proposerId), sends: offered, assets: toAssets(offered, proposerId) },
+    receiver: { id: receiverId, name: t.teamReceiving || teamName(receiverId), sends: requested, assets: toAssets(requested, receiverId) },
+    snapshot: safeParse(t.valuation),
+    date: (/^t_(\d+)_/.exec(t.tradeId || '') || [])[1] ? new Date(Number(/^t_(\d+)_/.exec(t.tradeId)[1])) : null,
+  };
 }
+
+function tcMiniBar(edge) {
+  const x = tcMeterX(edge);
+  return `<span class="tv-minibar"><span class="tv-minibar-needle" style="left:${x}%"></span></span>`;
+}
+
+/**
+ * Expandable grade for a stored trade: one-line summary, tap for the full meter.
+ * viewerTeamId: the viewer's team is shown on the left when they're in the deal.
+ * opts.atTradeTime: lead with the snapshot saved when the trade was proposed.
+ */
+function tcTradeAnalysisHTML(t, viewerTeamId, opts = {}) {
+  if (!TC.ctx) return '';
+  const st = tcStoredTrade(t);
+  const flip = viewerTeamId != null && viewerTeamId === st.receiver.id;
+  const left = flip ? st.receiver : st.proposer;
+  const right = flip ? st.proposer : st.receiver;
+  const meterOpts = {
+    trade: { a: { gets: right.assets }, b: { gets: left.assets } },
+    names: { a: left.name, b: right.name },
+    // Lineup/fit only makes sense before the players change hands.
+    teamIds: left.id && right.id && t.status !== 'Accepted' ? { a: left.id, b: right.id } : null,
+    sends: { a: (left.sends.players || []).map((p) => p.id), b: (right.sends.players || []).map((p) => p.id) },
+    readOnly: true,
+  };
+  const now = TradeEngine.evaluate(meterOpts.trade, TC.ctx);
+  if (now.empty) return '';
+  const verdictLine = (band, edge, winner) => {
+    const who = winner === 'a' ? left.name : winner === 'b' ? right.name : null;
+    return `<span class="tv-chip">${escapeHtml(band.label)}</span>
+      <span class="tv-compact-sub">${who ? `Favors ${escapeHtml(who)} · ${Math.abs(edge) >= 0.95 ? '95%+' : `${Math.round(Math.abs(edge) * 100)}%`}` : 'Even trade'}</span>`;
+  };
+  let summary, bandKey = now.band.key, note = '';
+  const snap = st.snapshot;
+  if (opts.atTradeTime && snap && snap.band) {
+    // Snapshot edge is from the proposer's side; flip if the receiver is on the left.
+    const edge = flip ? -snap.edge : snap.edge;
+    const band = TC.ctx.bands.find((b) => b.key === snap.band) || now.band;
+    const winner = band.key === 'fair' ? null : edge > 0 ? 'a' : 'b';
+    bandKey = band.key;
+    summary = `${verdictLine(band, edge, winner)}${tcMiniBar(edge)}`;
+    const moved = now.band.key !== band.key || (now.winner && now.winner !== winner);
+    note = moved
+      ? `<span class="tv-analysis-today">Today: ${escapeHtml(now.band.label)}${now.winner ? ` → ${escapeHtml(now.winner === 'a' ? left.name : right.name)}` : ''}</span>`
+      : '<span class="tv-analysis-today">Still holds today</span>';
+  } else {
+    summary = `${verdictLine(now.band, now.edge, now.winner)}${tcMiniBar(now.edge)}`;
+    if (opts.atTradeTime) note = '<span class="tv-analysis-today">Graded with today\'s values</span>';
+  }
+  const snapDate = snap?.date ? new Date(snap.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
+  return `
+    <details class="tv-analysis" data-band="${bandKey}">
+      <summary>
+        <span class="tv-analysis-line">${summary}</span>
+        ${note}
+        <span class="tv-analysis-toggle">See the analysis</span>
+      </summary>
+      <div class="tv-analysis-body">
+        ${opts.atTradeTime && snap ? `<p class="tv-note">Grade above uses values from ${escapeHtml(snapDate || 'trade time')}, when the trade was proposed. The breakdown below uses today's values.</p>` : ''}
+        ${tcMeterHTML(meterOpts)}
+      </div>
+    </details>`;
+}
+
+// Back-compat name used by app.js (pending trades + commish dashboard).
+function tcGradeHTML(t) {
+  return tcTradeAnalysisHTML(t, state.myTeamId);
+}
+
+// League-wide feed of accepted trades, newest first. Open by design: anyone
+// can see what every completed deal was worth.
+function tcRenderTradeFeed() {
+  const el = $('#trade-feed-list');
+  if (!el) return;
+  if (!TC.ctx) { el.innerHTML = ''; return; }
+  const accepted = state.allTrades.filter((t) => t.status === 'Accepted')
+    .map((t) => ({ t, st: tcStoredTrade(t) }))
+    .sort((x, y) => (y.st.date?.getTime() || 0) - (x.st.date?.getTime() || 0));
+  if (!accepted.length) { el.innerHTML = empty('No accepted trades yet. When a deal goes through, it shows up here with its grade.'); return; }
+  const list = (side) => {
+    const items = (side.players || []).map((p) => `${escapeHtml(p.name)} <span class="tv-dim">${escapeHtml(p.pos || '')}</span>`)
+      .concat((side.picks || []).map((p) => `${p.year} Rd ${p.round}${p.origOwner && p.origOwner !== teamName(side.teamId) ? ` <span class="tv-dim">via ${escapeHtml(p.origOwner)}</span>` : ''}`));
+    return items.map((x) => `<div>${x}</div>`).join('') || '<div class="tv-dim">Nothing</div>';
+  };
+  el.innerHTML = accepted.map(({ t, st }) => `
+    <div class="tv-feed-item">
+      <div class="tv-feed-head">
+        <b>${escapeHtml(st.proposer.name)} ↔ ${escapeHtml(st.receiver.name)}</b>
+        <span class="tv-dim">${st.date ? st.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</span>
+      </div>
+      <div class="tv-feed-sides">
+        <div><span class="lbl">${escapeHtml(st.proposer.name)} got</span>${list(st.receiver.sends)}</div>
+        <div><span class="lbl">${escapeHtml(st.receiver.name)} got</span>${list(st.proposer.sends)}</div>
+      </div>
+      ${tcTradeAnalysisHTML(t, null, { atTradeTime: true })}
+    </div>`).join('');
+}
+
+// Player rows inside any expanded analysis open the profile.
+document.addEventListener('click', (e) => {
+  const row = e.target.closest('.tv-analysis .tv-player-link');
+  if (row) openPlayerProfile(Number(row.dataset.playerId));
+});
 
 /* ----------------------- Trade finder ----------------------- */
 
@@ -1131,5 +1234,6 @@ function tcInitTradesView() {
     tcDecorateAssetLists();
     tcRenderFinderCard();
     if (typeof renderPendingTrades === 'function') renderPendingTrades();
+    tcRenderTradeFeed();
   });
 }

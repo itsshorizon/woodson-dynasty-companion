@@ -4286,3 +4286,87 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .tv-board-val { text-align: right; display: flex; flex-direction: column; gap: 2px; }
 .tv-board-val b { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .tv-board-val span { font-size: 10px; font-weight: 800; white-space: nowrap; }
+
+/* Expandable trade analysis (My Team, pending, commish, feed) */
+.tv-analysis {
+  --band: var(--text-mute);
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--band);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.tv-analysis[data-band="fair"] { --band: var(--tv-fair); }
+.tv-analysis[data-band="slight"] { --band: var(--tv-slight); }
+.tv-analysis[data-band="lopsided"] { --band: var(--tv-lopsided); }
+.tv-analysis[data-band="fleece"] { --band: var(--tv-fleece); }
+.tv-analysis summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px 12px;
+}
+.tv-analysis summary::-webkit-details-marker { display: none; }
+.tv-analysis-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: 1 1 auto; min-width: 0; }
+.tv-analysis-today { font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.tv-analysis-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tab-accent);
+  white-space: nowrap;
+}
+.tv-analysis-toggle::after { content: " ▾"; }
+.tv-analysis[open] .tv-analysis-toggle::after { content: " ▴"; }
+.tv-analysis[open] .tv-analysis-toggle { font-size: 0; }
+.tv-analysis[open] .tv-analysis-toggle::before { content: "Hide"; font-size: 10px; }
+.tv-analysis-body { padding: 0 10px 10px; }
+.tv-analysis-body .tv-meter { border-left-width: 1px; }
+.tv-minibar {
+  position: relative;
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tv-fleece) 0 18%, var(--tv-lopsided) 18% 31%, var(--tv-slight) 31% 40%, var(--tv-fair) 40% 60%, var(--tv-slight) 60% 69%, var(--tv-lopsided) 69% 82%, var(--tv-fleece) 82% 100%);
+  opacity: 0.85;
+}
+.tv-minibar-needle {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 12px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px var(--bg);
+}
+
+/* League trade feed */
+#trade-feed-list { display: flex; flex-direction: column; gap: 10px; }
+.tv-feed-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  padding: 10px 12px;
+}
+.tv-feed-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.tv-feed-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 13px; font-weight: 700; }
+.tv-feed-sides > div { min-width: 0; }
+.tv-feed-sides .lbl {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

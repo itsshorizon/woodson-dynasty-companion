@@ -1,10 +1,9 @@
 {
-  "version": "1.14.0",
-  "title": "🏆 Team Value Leaderboard",
+  "version": "1.15.0",
+  "title": "📰 League Trade Feed",
   "notes": [
-    "🏆 NEW in the Vault: Team Value. See every roster ranked by total dynasty value.",
-    "📈 Projected Team Value chart: see whose roster is rising and whose is aging out over the next 3 years.",
-    "💰 Your team's total value, league rank, pick value and 3-year outlook now sit at the bottom of My Team and Rosters.",
-    "✕ New Clear Trade button on the Trades tab to start a proposal over."
+    "📰 NEW on the Trades tab: League Trade Feed. Every accepted trade and what the calculator said about it, open to everyone.",
+    "🔎 See the math: tap any trade in the feed for the full breakdown. See if it still holds today.",
+    "⚖️ Your incoming and outgoing offers on My Team now show a grade. Tap to expand the full analysis."
   ]
 }
