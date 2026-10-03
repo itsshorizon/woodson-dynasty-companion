@@ -438,9 +438,9 @@ body {
 /* ---------- Standings ---------- */
 .standings-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 12px 14px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -459,10 +459,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .rank.top { color: var(--green); }
-.team-name { font-weight: 800; font-size: 14px; color: var(--text); }
+.team-name { font-weight: 800; font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
+.standings-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .team-owner { font-size: 11px; color: var(--text-mute); margin-top: 2px; font-weight: 500; }
-.record { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; color: var(--blue); }
-.points { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; color: var(--green); }
+.record { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; color: var(--blue); white-space: nowrap; }
+.points { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 14px; color: var(--green); white-space: nowrap; }
+.standings-stats .points { font-size: 12px; }
 
 /* ---------- Matchups ---------- */
 .matchup {
@@ -480,8 +482,9 @@ body {
   gap: 10px;
   padding: 6px 0;
 }
-.matchup-row .name { font-weight: 700; font-size: 14px; }
-.matchup-row .score { font-variant-numeric: tabular-nums; font-weight: 900; font-size: 20px; }
+.matchup-row > div:first-child { min-width: 0; }
+.matchup-row .name { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.matchup-row .score { font-variant-numeric: tabular-nums; font-weight: 900; font-size: 20px; white-space: nowrap; }
 .matchup-row.winner .name { color: var(--green); }
 .matchup-row.winner .score { color: var(--green); }
 .matchup-divider {

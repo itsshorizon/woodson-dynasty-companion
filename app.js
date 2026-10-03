@@ -585,8 +585,10 @@ function renderStandings() {
           ${pr ? `<span class="power-rank ${cls}">${arrow} Power #${pr.rank}</span>` : ''}
           ${renderBadgesHTML(badges)}
         </div>
-        <div class="record">${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''}</div>
-        <div class="points">${t.pf.toFixed(1)}</div>
+        <div class="standings-stats">
+          <div class="record">${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''}</div>
+          <div class="points">${t.pf.toFixed(1)} <span class="stat-lbl">PF</span></div>
+        </div>
       </div>
     `;
   }).join('');
