@@ -5,7 +5,8 @@
     "picks": {
       "2027-1-any": 2400, "2027-1-early": 4000, "2027-1-mid": 2600, "2027-1-late": 2100,
       "2027-2-any": 1250, "2027-3-any": 700, "2027-4-any": 450,
-      "2028-1-any": 2000, "2028-2-any": 1100, "2028-3-any": 630, "2028-4-any": 430
+      "2028-1-any": 2000, "2028-2-any": 1100, "2028-3-any": 630, "2028-4-any": 430,
+      "2029-1-any": 1700, "2029-2-any": 1000
     },
     "players": {
       "star_rb":   { "n": "Star RB (RB1)",      "p": "RB", "a": 24, "dv": 9500, "wn": 9800, "fc": 9600, "dp": 9400, "cf": 0.95 },
@@ -49,9 +50,10 @@
       "a": ["rookie_wr"], "b": ["vet_wr"], "expect": ["fair"] },
     { "name": "Two firsts for a star: star side wins",
       "a": ["pick:2027-1", "pick:2028-1"], "b": ["star_rb"], "expect": ["lopsided", "fleece"], "winner": "b" },
-    { "name": "A 1st for next year's 1st + 2nd favors the side getting two picks (market prices the 2nd above the one-year wait)",
-      "a": ["pick:2027-1"], "b": ["pick:2028-1", "pick:2028-2"], "expect": ["slight", "lopsided"], "winner": "b",
-      "review": "Commissioner to confirm: is paying a 2nd to move a 1st up one year an overpay in our league?" },
+    { "name": "A 1st now is worth next year's 1st + 2nd (commissioner, 2026-10-03: the near term is more certain)",
+      "a": ["pick:2027-1"], "b": ["pick:2028-1", "pick:2028-2"], "expect": ["fair"] },
+    { "name": "A 2029 1st is worth clearly less than a 2027 1st",
+      "a": ["pick:2027-1"], "b": ["pick:2029-1"], "expect": ["lopsided", "fleece"], "winner": "a" },
     { "name": "Mid player + 1st for WR15 is at least fair for the WR15 owner (commissioner, 2026-10-03)",
       "a": ["mid_a", "pick:2027-1"], "b": ["wr15a"], "expect": ["fair", "slight"], "notWinner": "b" },
     { "name": "Mid player + early 1st for WR15 favors the side getting the pick",

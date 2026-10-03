@@ -919,6 +919,8 @@ function tcOpenExplainer() {
       <li><b>Best-player bonus:</b> when one side stacks more pieces, the side getting the best player earns a bonus that grows with the gap between the best pieces.</li>
       <li><b>Roster spots:</b> taking extra pieces means cutting someone from your bench, so each extra piece costs a little (${tcFmt(v.replacement.ALL * (c.engine.rosterSpotShare ?? 0.25))}).</li>
     </ul>
+    <h4>Draft picks</h4>
+    <p>Next year's picks are valued early, mid or late from each team's projected finish (standings plus roster strength). Picks further out lean on long-term roster strength, and lose an extra ${Math.round((1 - (c.engine.futurePickDiscount ?? 1)) * 100)}% per year out because nobody knows what a team will look like by then. League rule: a pick now beats a pick later.</p>
     <h4>Reading the meter</h4>
     <div class="tv-detail-grid">${c.engine.bands.map((b) => `<div data-band="${b.key}"><span class="lbl">${escapeHtml(b.label)}</span><b>${b.key === 'fleece' ? `${Math.round(c.engine.bands[2].max * 100)}%+` : `under ${Math.round(b.max * 100)}%`}</b></div>`).join('')}</div>
     <p>The shaded range on the meter shows what each source would say on its own. A wide range means the experts and the trade market disagree, so look closer.</p>

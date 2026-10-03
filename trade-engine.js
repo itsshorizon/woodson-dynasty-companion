@@ -30,6 +30,7 @@
     beta: 2,
     gamma: 3,
     rosterSpotShare: 0.25,
+    futurePickDiscount: 0.85,
     minStakes: 2000,
     bands: [
       { max: 0.05, label: 'Fair', key: 'fair' },
@@ -53,6 +54,7 @@
       minStakes: eng.minStakes != null ? eng.minStakes : DEFAULTS.minStakes,
       gamma: eng.gamma != null ? eng.gamma : DEFAULTS.gamma,
       rosterSpotShare: eng.rosterSpotShare != null ? eng.rosterSpotShare : DEFAULTS.rosterSpotShare,
+      futurePickDiscount: eng.futurePickDiscount != null ? eng.futurePickDiscount : DEFAULTS.futurePickDiscount,
       bands: eng.bands || DEFAULTS.bands,
     };
   }
@@ -68,7 +70,21 @@
     return slot <= third ? 'early' : slot <= third * 2 ? 'mid' : 'late';
   }
 
+  // League preference: the further out a pick is, the less anyone knows, so
+  // picks after the next draft lose an extra share of value per year out.
+  function pickYearDiscount(year, ctx) {
+    const picks = (ctx.values && ctx.values.picks) || {};
+    const years = Object.keys(picks).map((k) => Number(k.split('-')[0]));
+    if (!years.length) return 1;
+    const yearsOut = Math.max(0, year - Math.min(...years));
+    return Math.pow(ctx.futurePickDiscount, yearsOut);
+  }
+
   function pickValue(pick, ctx) {
+    return Math.round(rawPickValue(pick, ctx) * pickYearDiscount(pick.year, ctx));
+  }
+
+  function rawPickValue(pick, ctx) {
     const picks = (ctx.values && ctx.values.picks) || {};
     const base = picks[`${pick.year}-${pick.round}-any`];
     if (base == null) return 0;
