@@ -922,6 +922,143 @@ function tcRenderFinderCard() {
   tcRenderFinderFilters();
   partnerSel.onchange = tcRenderFinderTargets;
   $('#finder-run').onclick = tcRunFinder;
+  tcWireFinderMode();
+  tcRenderShopPane();
+}
+
+/* ----------------------- Shop my players ----------------------- */
+
+const TC_MODE_KEY = 'tradeFinderMode';
+const TC_SHOP_KEY = 'tradeShopFilters';
+TC.shop = new Set(); // asset keys I'm selling
+
+function tcWireFinderMode() {
+  const seg = $('#finder-mode');
+  if (!seg || seg.dataset.wired) return;
+  seg.dataset.wired = '1';
+  let mode = 'deal';
+  try { mode = localStorage.getItem(TC_MODE_KEY) || 'deal'; } catch (e) { /* storage blocked */ }
+  const apply = (m) => {
+    $$('#finder-mode .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
+    $('#finder-deal-pane').hidden = m !== 'deal';
+    $('#finder-shop-pane').hidden = m !== 'shop';
+    $('#finder-results').innerHTML = '';
+    try { localStorage.setItem(TC_MODE_KEY, m); } catch (e) { /* storage blocked */ }
+  };
+  seg.onclick = (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (b) apply(b.dataset.mode);
+  };
+  apply(mode);
+}
+
+function tcShopFilters() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(TC_SHOP_KEY) || 'null'); } catch (e) { /* storage blocked */ }
+  return { players: true, picks: true, sizes: [1, 2, 3], ...(saved || {}) };
+}
+
+function tcAssetKey(a) {
+  return TradeEngine.assetValue(a, TC.ctx).key;
+}
+
+function tcRenderShopPane() {
+  const my = myTeam();
+  const host = $('#shop-assets');
+  if (!host || !my) return;
+  const mine = tcTeamAssets(my)
+    .map((a) => ({ a, v: TradeEngine.assetValue(a, TC.ctx) }))
+    .sort((x, y) => (x.a.type === y.a.type ? y.v.value - x.v.value : x.a.type === 'player' ? -1 : 1));
+  // Drop selections that are no longer on the roster.
+  const keys = new Set(mine.map((x) => x.v.key));
+  [...TC.shop].forEach((k) => { if (!keys.has(k)) TC.shop.delete(k); });
+  const expanded = host.dataset.expanded === '1';
+  const visible = expanded ? mine : mine.filter((x, i) => i < 10 || TC.shop.has(x.v.key));
+  host.innerHTML = visible.map(({ a, v }) => `
+    <button type="button" class="tv-shop-asset ${TC.shop.has(v.key) ? 'on' : ''}" data-key="${escapeHtml(v.key)}" aria-pressed="${TC.shop.has(v.key)}">
+      ${tcAssetChipHTML(a)}
+      <span class="tv-shop-check">${TC.shop.has(v.key) ? '✓' : '+'}</span>
+    </button>`).join('') +
+    (mine.length > 10 ? `<button type="button" class="tv-link tv-shop-more" data-shop-more>${expanded ? 'Show fewer' : `Show all ${mine.length} (players + picks)`}</button>` : '');
+  host.onclick = (e) => {
+    if (e.target.closest('[data-shop-more]')) {
+      host.dataset.expanded = expanded ? '0' : '1';
+      tcRenderShopPane();
+      return;
+    }
+    const btn = e.target.closest('.tv-shop-asset');
+    if (!btn) return;
+    const k = btn.dataset.key;
+    if (TC.shop.has(k)) TC.shop.delete(k); else if (TC.shop.size >= 3) { toast('Shop up to 3 at a time', 'error'); return; } else TC.shop.add(k);
+    tcRenderShopPane();
+  };
+  // Summary of what's being shopped.
+  const selling = mine.filter((x) => TC.shop.has(x.v.key));
+  const total = selling.reduce((s, x) => s + x.v.value, 0);
+  $('#shop-summary').innerHTML = selling.length
+    ? `<span class="lbl">Selling</span> <b>${selling.map((x) => escapeHtml(x.v.label)).join(', ')}</b> <span class="tv-dim">· ${tcFmt(total)} value</span>`
+    : '<span class="tv-dim">Tap players or picks below to start.</span>';
+  tcRenderShopFilters();
+  $('#shop-run').onclick = tcRunShop;
+}
+
+function tcRenderShopFilters() {
+  const host = $('#shop-filters');
+  if (!host) return;
+  const f = tcShopFilters();
+  const chip = (key, label, on) => `<button type="button" class="tv-filter ${on ? 'on' : ''}" data-shop-filter="${key}" aria-pressed="${on}">${label}</button>`;
+  host.innerHTML = `
+    <div class="tv-filter-row"><span class="lbl">In return</span>${chip('players', 'Players', f.players)}${chip('picks', 'Picks', f.picks)}</div>
+    <div class="tv-filter-row"><span class="lbl">They send</span>${[1, 2, 3].map((n) => chip(`size:${n}`, `${n} piece${n > 1 ? 's' : ''}`, f.sizes.includes(n))).join('')}</div>`;
+  host.onclick = (e) => {
+    const b = e.target.closest('[data-shop-filter]');
+    if (!b) return;
+    const cur = tcShopFilters();
+    const k = b.dataset.shopFilter;
+    if (k.startsWith('size:')) {
+      const n = Number(k.slice(5));
+      const next = cur.sizes.includes(n) ? cur.sizes.filter((x) => x !== n) : cur.sizes.concat(n).sort();
+      if (!next.length) { toast('Keep at least one size', 'error'); return; }
+      cur.sizes = next;
+    } else {
+      cur[k] = !cur[k];
+      if (!cur.players && !cur.picks) { toast('You have to get something back', 'error'); return; }
+    }
+    try { localStorage.setItem(TC_SHOP_KEY, JSON.stringify(cur)); } catch (err) { /* storage blocked */ }
+    tcRenderShopFilters();
+  };
+}
+
+function tcRunShop() {
+  const my = myTeam();
+  const out = $('#finder-results');
+  if (!my) return;
+  const give = tcTeamAssets(my).filter((a) => TC.shop.has(tcAssetKey(a)));
+  if (!give.length) { toast('Pick at least one player or pick to sell', 'error'); return; }
+  const f = tcShopFilters();
+  const myWindow = tcWindowFor(my.id).label;
+  out.innerHTML = loading('Asking around the league...');
+  setTimeout(() => {
+    let results = [];
+    state.teams.filter((t) => t.id !== my.id).forEach((partner) => {
+      const offers = TradeEngine.shopOffers({
+        give, theirs: tcTeamAssets(partner),
+        myWindow, theirWindow: tcWindowFor(partner.id).label,
+        get: { players: f.players, picks: f.picks }, sizes: f.sizes, limit: 1,
+      }, TC.ctx);
+      results = results.concat(offers.map((o) => ({ ...o, partner })));
+    });
+    results.sort((x, y) => (y.theirFit > 0) - (x.theirFit > 0) || Math.abs(x.edge) - Math.abs(y.edge));
+    state._finderResults = results;
+    if (!results.length) {
+      out.innerHTML = empty('No team has a fair offer with these filters. Try allowing picks or more pieces back.');
+      return;
+    }
+    out.innerHTML = `<p class="tv-note"><b>${results.length}</b> team${results.length > 1 ? 's' : ''} can make a fair offer. Best fits first.</p>` +
+      results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') +
+      '<p class="tv-note">Offers are within 8% of fair. "Why they\'d say yes" is based on their team mode: Contenders care about this season, Rebuilders about long-term value.</p>';
+    out.onclick = tcFinderResultsClick;
+  }, 30);
 }
 
 function tcRenderFinderTargets() {
@@ -1086,32 +1223,37 @@ function tcRunFinder() {
           : 'No fair deals that help both teams with these filters. Try loosening them.');
       return;
     }
-    out.innerHTML = results.map((r, i) => {
-      const theirWindow = tcWindowFor(r.partner.id).label;
-      return `
-      <div class="tv-finder-item" data-band="${r.band.key}">
-        <div class="tv-finder-head">
-          <b>${escapeHtml(r.partner.name)}</b>
-          <span class="tv-chip">${escapeHtml(r.band.label)}</span>
-        </div>
-        <div class="tv-finder-sides">
-          <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
-          <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
-        </div>
-        <div class="tv-finder-why">
-          <div><span class="tv-up">✓</span> <b>Why it helps you</b> <span class="tv-window tv-window-${myWindow.toLowerCase()}">${myWindow}</span><br><span>${escapeHtml(tcFitReason(my.id, r.get, r.give, myWindow))}</span></div>
-          <div><span class="tv-up">✓</span> <b>Why they'd say yes</b> <span class="tv-window tv-window-${theirWindow.toLowerCase()}">${theirWindow}</span><br><span>${escapeHtml(tcFitReason(r.partner.id, r.give, r.get, theirWindow))}</span></div>
-        </div>
-        <button class="btn-ghost btn-sm" type="button" data-finder-load="${i}">Load into proposal</button>
-      </div>`;
-    }).join('') + `<p class="tv-note">Contenders are judged mostly on this season (lineup points), Rebuilders on long-term value and age. Every suggestion is within 8% of fair and helps both teams.</p>`;
-    out.onclick = (e) => {
-      const btn = e.target.closest('[data-finder-load]');
-      if (btn) { tcLoadFinderResult(Number(btn.dataset.finderLoad)); return; }
-      const chip = e.target.closest('.tv-asset-chip[data-player-id]');
-      if (chip) openPlayerProfile(Number(chip.dataset.playerId));
-    };
+    out.innerHTML = results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') + `<p class="tv-note">Contenders are judged mostly on this season (lineup points), Rebuilders on long-term value and age. Every suggestion is within 8% of fair and helps both teams.</p>`;
+    out.onclick = tcFinderResultsClick;
   }, 30);
+}
+
+function tcFinderItemHTML(r, i, my, myWindow) {
+  const theirWindow = tcWindowFor(r.partner.id).label;
+  const line = (ok, okTitle, noTitle, win, text) => `<div><span class="${ok ? 'tv-up' : 'tv-down'}">${ok ? '✓' : '!'}</span> <b>${ok ? okTitle : noTitle}</b> <span class="tv-window tv-window-${win.toLowerCase()}">${win}</span><br><span>${escapeHtml(text)}</span></div>`;
+  return `
+    <div class="tv-finder-item" data-band="${r.band.key}">
+      <div class="tv-finder-head">
+        <b>${escapeHtml(r.partner.name)}</b>
+        <span class="tv-chip">${escapeHtml(r.band.label)}</span>
+      </div>
+      <div class="tv-finder-sides">
+        <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
+        <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
+      </div>
+      <div class="tv-finder-why">
+        ${line(r.myFit > 0, 'Why it helps you', 'Trade-off for you', myWindow, tcFitReason(my.id, r.get, r.give, myWindow))}
+        ${line(r.theirFit > 0, "Why they'd say yes", 'They may need convincing', theirWindow, tcFitReason(r.partner.id, r.give, r.get, theirWindow))}
+      </div>
+      <button class="btn-ghost btn-sm" type="button" data-finder-load="${i}">Load into proposal</button>
+    </div>`;
+}
+
+function tcFinderResultsClick(e) {
+  const btn = e.target.closest('[data-finder-load]');
+  if (btn) { tcLoadFinderResult(Number(btn.dataset.finderLoad)); return; }
+  const chip = e.target.closest('.tv-asset-chip[data-player-id]');
+  if (chip) openPlayerProfile(Number(chip.dataset.playerId));
 }
 
 function tcLoadFinderResult(i) {

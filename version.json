@@ -1,10 +1,9 @@
 {
-  "version": "1.16.1",
-  "title": "🍀 Luck, Fixed",
+  "version": "1.17.0",
+  "title": "🛒 Shop Your Players",
   "notes": [
-    "🛠️ FIXED: the Schedule Luck chart had its up/down flipped, so teams landed in the wrong quadrant. Same fix in the Vault's Career Luck Matrix.",
-    "🍀 New luck badge on every team: wins above (+) or below (−) what your weekly scores earned.",
-    "🔍 Crowded luck charts now spread teams apart. A small dot and line show each team's exact spot.",
-    "📋 Trade Block players now show their value and stats. Tap a card to open the full profile."
+    "🛒 NEW in the Trade Finder: Shop my players. Pick up to 3 players or picks you're selling and see what every team could offer that's fair.",
+    "🎚️ Choose what you'll take back (players, picks, or both) and how many pieces (1, 2 or 3).",
+    "✓ Best fits first, with why each team would say yes. One tap loads an offer into a proposal."
   ]
 }

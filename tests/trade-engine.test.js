@@ -181,3 +181,19 @@ test('trade finder never suggests pick-for-pick swaps and respects filters', () 
   const mutual = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', limit: 50 }, ctx);
   for (const r of mutual) assert.ok(r.myFit > 0 && r.theirFit > 0, 'helps both teams');
 });
+
+test('shop offers: fair returns for a player I am selling', () => {
+  const give = [asset('wr10')];
+  const theirs = ['wr15a', 'rb15', 'mid_a', 'mid_b', 'bench1', 'pick:2027-1', 'pick:2028-1', 'top5'].map(asset);
+  const offers = TE.shopOffers({ give, theirs, myWindow: 'Rebuilder', theirWindow: 'Contender', limit: 20 }, ctx);
+  assert.ok(offers.length > 0, 'finds offers');
+  for (const o of offers) {
+    assert.ok(Math.abs(o.edge) <= 0.08, 'within 8% of fair');
+    assert.ok(o.get.length >= 1 && o.get.length <= 3);
+    assert.ok(!o.get.some((a) => a.id === 'top5'), 'contender keeps its best player for a lesser one');
+  }
+  const picksOnly = TE.shopOffers({ give, theirs, myWindow: 'Rebuilder', theirWindow: 'Contender', get: { players: false, picks: true }, limit: 20 }, ctx);
+  for (const o of picksOnly) assert.ok(o.get.every((a) => a.type === 'pick'));
+  const ones = TE.shopOffers({ give, theirs, myWindow: 'Rebuilder', theirWindow: 'Contender', sizes: [1], limit: 20 }, ctx);
+  for (const o of ones) assert.equal(o.get.length, 1);
+});

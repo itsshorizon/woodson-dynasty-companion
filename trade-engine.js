@@ -471,8 +471,66 @@
     }).slice(0, limit);
   }
 
+  /**
+   * "What can I get for these?" Fixed package I'm selling; search one team's
+   * assets for return packages that make it fair.
+   * opts: {
+   *   give: [assets I'm selling], theirs: [their assets],
+   *   myWindow, theirWindow,
+   *   get?: { players, picks }  what I'll take back (default both)
+   *   sizes?: [1, 2, 3]         pieces they send back (default 1–3)
+   *   maxEdge (default 0.08), limit (default 2)
+   * }
+   * They won't part with their best asset for something lesser unless
+   * they're rebuilding. Offers they'd actually want (their fit > 0) rank first.
+   */
+  function shopOffers(opts, ctx) {
+    const maxEdge = opts.maxEdge != null ? opts.maxEdge : 0.08;
+    const limit = opts.limit || 2;
+    const getTypes = opts.get || { players: true, picks: true };
+    const sizes = new Set(opts.sizes || [1, 2, 3]);
+    const give = opts.give || [];
+    if (!give.length) return [];
+    const ranked = opts.theirs
+      .map((a) => ({ a, v: assetValue(a, ctx) }))
+      .filter((x) => x.v.value > x.v.replacement)
+      .sort((x, y) => y.v.value - x.v.value);
+    const theirBest = ranked.length ? ranked[0].v.value : 0;
+    const pool = ranked.filter((x) => (x.a.type === 'pick' ? getTypes.picks : getTypes.players)).map((x) => x.a);
+    const wantSets = []
+      .concat(sizes.has(1) ? combos(pool.slice(0, 20), 1) : [])
+      .concat(sizes.has(2) ? combos(pool.slice(0, 12), 2) : [])
+      .concat(sizes.has(3) ? triples(pool.slice(0, 8)) : []);
+    const giveBest = Math.max.apply(null, give.map((g) => assetValue(g, ctx).value));
+    const results = [];
+    for (const want of wantSets) {
+      // At least one player in the deal: no pick-for-pick swaps.
+      if (!want.concat(give).some((x) => x.type === 'player')) continue;
+      const quick = compare(want, give, ctx, 'blend');
+      if (Math.abs(quick.edge) > maxEdge) continue;
+      const wantBest = Math.max.apply(null, want.map((g) => assetValue(g, ctx).value));
+      if (wantBest >= theirBest && giveBest < wantBest && opts.theirWindow !== 'Rebuilder') continue;
+      const myFit = fitScore(want, give, opts.myWindow, ctx);
+      const theirFit = fitScore(give, want, opts.theirWindow, ctx);
+      results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit });
+    }
+    // Offers they'd want first, then closest to even, then better for me.
+    results.sort((x, y) => (y.theirFit > 0) - (x.theirFit > 0)
+      || Math.abs(x.edge) - Math.abs(y.edge)
+      || y.myFit - x.myFit);
+    return results.slice(0, limit);
+  }
+
+  function triples(list) {
+    const out = [];
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++)
+        for (let k = j + 1; k < list.length; k++) out.push([list[i], list[j], list[k]]);
+    return out;
+  }
+
   return {
     createContext, assetValue, pickValue, pickTier, evaluate, suggestBalance,
-    bestLineup, teamWindows, fitScore, findTrades, starValue, DEFAULTS,
+    bestLineup, teamWindows, fitScore, findTrades, shopOffers, starValue, DEFAULTS,
   };
 });

@@ -4448,3 +4448,49 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 }
 .tv-finder-why b { color: var(--text); }
 @media (max-width: 420px) { .tv-finder-why { grid-template-columns: 1fr; } }
+
+/* Trade Finder mode toggle + Shop my players */
+.tv-finder-mode { margin-bottom: 12px; }
+.tv-shop-summary {
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+}
+.tv-shop-summary .lbl { font-size: 10px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.05em; }
+.tv-shop-assets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+.tv-shop-asset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 10px 6px 8px;
+  font-family: var(--font);
+  color: var(--text);
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.tv-shop-asset .tv-asset-chip { min-width: 0; cursor: pointer; }
+.tv-shop-asset.on { border-color: var(--tab-accent); box-shadow: 0 0 0 1px var(--tab-accent) inset; background: rgba(var(--tab-accent-rgb), 0.08); }
+.tv-shop-check {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid var(--border-strong);
+  color: var(--text-mute);
+}
+.tv-shop-asset.on .tv-shop-check { background: var(--tab-accent); border-color: var(--tab-accent); color: var(--tab-fg); }
+.tv-shop-more { grid-column: 1 / -1; justify-self: start; font-size: 11px; padding: 4px 2px; }
+@media (max-width: 420px) { .tv-shop-assets { grid-template-columns: 1fr; } }
