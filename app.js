@@ -263,6 +263,7 @@ function parseTeams(raw) {
       id: t.id,
       name,
       abbrev: t.abbrev || '',
+      logo: t.logo || '',
       owner,
       wins: rec.wins ?? 0,
       losses: rec.losses ?? 0,
@@ -584,7 +585,7 @@ function renderStandings() {
       <div class="standings-row ${i < 4 ? 'top-tier' : ''}">
         <div class="rank ${i < 4 ? 'top' : ''}">${standingsRank}</div>
         <div>
-          <div class="team-name">${escapeHtml(t.name)}</div>
+          <div class="team-name">${teamLogoHTML(t, 22)}${escapeHtml(t.name)}</div>
           <div class="team-owner">${escapeHtml(t.owner)}</div>
           ${pr ? `<span class="power-rank ${cls}">${arrow} Power #${pr.rank}</span>` : ''}
           ${renderBadgesHTML(badges)}
@@ -724,7 +725,7 @@ function renderScores() {
         <div class="matchup-head" role="button" tabindex="0" aria-expanded="${open}" aria-label="Show lineups">
           <div class="matchup-row ${m.winner === 'AWAY' ? 'winner' : ''}">
             <div>
-              <div class="name">${escapeHtml(away.name)}</div>
+              <div class="name">${teamLogoHTML(away, 22)}${escapeHtml(away.name)}</div>
               <div class="matchup-ppg">${ppgOf(away)}</div>
             </div>
             <div class="score">${m.away.score.toFixed(1)}</div>
@@ -732,7 +733,7 @@ function renderScores() {
           <div class="matchup-divider"></div>
           <div class="matchup-row ${m.winner === 'HOME' ? 'winner' : ''}">
             <div>
-              <div class="name">${escapeHtml(home.name)}</div>
+              <div class="name">${teamLogoHTML(home, 22)}${escapeHtml(home.name)}</div>
               <div class="matchup-ppg">${ppgOf(home)}</div>
             </div>
             <div class="score">${m.home.score.toFixed(1)}</div>
@@ -772,7 +773,7 @@ function renderRosterPills() {
   const pills = $('#roster-team-pills');
   pills.innerHTML = state.teams.map((t) => `
     <button class="team-pill ${t.id === state.selectedRosterTeamId ? 'active' : ''}" data-team-id="${t.id}">
-      ${escapeHtml(t.name)}
+      ${teamLogoHTML(t, 20)}${escapeHtml(t.name)}
     </button>
   `).join('');
   pills.onclick = (e) => {
@@ -798,6 +799,21 @@ function playerPhotoHTML(player) {
       <span class="pos-tag pos-${player.pos}">${player.pos}</span>
     </div>
   `;
+}
+
+// Small round team logo. Custom ESPN uploads can point at dead hosts, so a
+// failed or missing image falls back to the team abbreviation.
+function teamLogoHTML(team, size = 24) {
+  const abbr = escapeHtml((team?.abbrev || team?.name || '?').slice(0, 4));
+  const fallback = `<span class="team-logo team-logo-txt" style="--logo-size:${size}px">${abbr}</span>`;
+  if (!team?.logo) return fallback;
+  return `<img class="team-logo" style="--logo-size:${size}px" src="${escapeHtml(team.logo)}" alt="" loading="lazy"
+    onerror="this.outerHTML=this.dataset.fb" data-fb="${escapeHtml(fallback)}" />`;
+}
+
+// data-* attributes select.js reads to show a logo + subline in team dropdowns.
+function teamOptionAttrs(team, sub = team.owner) {
+  return `data-icon="${escapeHtml(team.logo || '')}" data-abbr="${escapeHtml((team.abbrev || team.name).slice(0, 4))}" data-sub="${escapeHtml(sub || '')}"`;
 }
 
 // Render one player row. context controls which action buttons appear:
@@ -1102,14 +1118,14 @@ function populateTradeTeamSelects() {
   const my = state.myTeamId ? teamById(state.myTeamId) : null;
 
   if (my) {
-    aSel.innerHTML = `<option value="${my.id}">${escapeHtml(my.name)}</option>`;
+    aSel.innerHTML = `<option value="${my.id}" ${teamOptionAttrs(my)}>${escapeHtml(my.name)}</option>`;
     aSel.disabled = true;
     aSel.title = 'Locked to your team. Change "My Team" from the My Team tab.';
     // Side B: every OTHER team (self is not tradeable with self)
     bSel.innerHTML = '<option value="">Select trade partner...</option>' +
       state.teams
         .filter((t) => t.id !== my.id)
-        .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+        .map((t) => `<option value="${t.id}" ${teamOptionAttrs(t)}>${escapeHtml(t.name)}</option>`)
         .join('');
     bSel.disabled = false;
     // Preload the user's roster on side A
@@ -1119,7 +1135,7 @@ function populateTradeTeamSelects() {
     aSel.disabled = true;
     aSel.title = 'Set your identity on the My Team tab before proposing trades.';
     bSel.innerHTML = '<option value="">Select trade partner...</option>' +
-      state.teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+      state.teams.map((t) => `<option value="${t.id}" ${teamOptionAttrs(t)}>${escapeHtml(t.name)}</option>`).join('');
     bSel.disabled = false;
   }
 
@@ -5414,7 +5430,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.12.1';
+const BUILD_ID = '1.13.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

@@ -645,7 +645,7 @@ function tcRenderFinderCard() {
   const prev = partnerSel.value;
   partnerSel.innerHTML = '<option value="">Any team</option>' +
     state.teams.filter((t) => t.id !== my.id)
-      .map((t) => `<option value="${t.id}">${escapeHtml(t.name)} · ${tcWindowFor(t.id).label}</option>`).join('');
+      .map((t) => `<option value="${t.id}" ${teamOptionAttrs(t, `${tcWindowFor(t.id).label} · ${t.owner}`)}>${escapeHtml(t.name)}</option>`).join('');
   partnerSel.value = prev;
   tcRenderFinderTargets();
   partnerSel.onchange = tcRenderFinderTargets;
