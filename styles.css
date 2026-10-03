@@ -1403,9 +1403,10 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
   animation: fade 0.3s ease;
 }
 #update-modal .update-modal-card {

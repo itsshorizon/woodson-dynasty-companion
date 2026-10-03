@@ -1,9 +1,13 @@
 {
-  "version": "1.11.1",
-  "title": "Beta 1.11.1 - Pick Values",
+  "version": "1.12.0",
+  "title": "🚨 The Trade Calculator Is HERE!",
   "notes": [
-    "Draft picks: a pick now is worth more than a pick later. Picks after next year's draft lose 15% per year out",
-    "Next year's picks are valued early, mid or late from each team's projected finish",
-    "Tap 👍 or 👎 under any trade grade to tell the commissioner if it feels right"
+    "🏈 Our biggest update ever: every trade now gets a grade.",
+    "⚖️ FAIRNESS METER: see instantly if a deal is Fair, a Slight Edge, Lopsided or a FLEECE.",
+    "📊 Real values from FantasyCalc + DynastyProcess, updated daily and tuned to OUR scoring.",
+    "⭐ Stacking bench guys never adds up to a stud. Getting the best player counts.",
+    "🔍 TRADE FINDER: fair deals that help BOTH teams, loaded with one tap.",
+    "👤 PLAYER PROFILES: dynasty value, 3-year outlook, NFL contract, injury history and more.",
+    "👍👎 Rate any grade to help tune it. Now go make some moves! 🔥"
   ]
 }
