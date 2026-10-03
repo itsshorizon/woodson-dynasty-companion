@@ -1,9 +1,11 @@
 {
-  "version": "1.12.1",
-  "title": "📈 Values on Every Player Card",
+  "version": "1.13.0",
+  "title": "🎨 Fresh Coat of Paint",
   "notes": [
-    "💎 Every player card in My Team and Rosters now shows their trade value, with ▲▼ when it's moving.",
-    "🛠️ FIXED: PPG and consistency now use every week of the season, not just last week.",
-    "📊 FIXED: weekly performance bars in player profiles now show every week at the right height."
+    "🏈 Tap any matchup in This Week to see both lineups, player by player.",
+    "🛡️ Team logos now show on the leaderboard, scores, rosters, and trade dropdowns.",
+    "📸 Player headshots in the trade builder.",
+    "🔽 Every dropdown in the app got a new look, with search on long lists.",
+    "🛠️ FIXED: records and points no longer spill off the leaderboard cards."
   ]
 }
