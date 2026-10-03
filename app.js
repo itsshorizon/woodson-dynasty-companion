@@ -1215,6 +1215,8 @@ async function submitTrade() {
     assestsOffered: JSON.stringify({ teamId: a.teamId, players: a.players, picks: a.picks }),
     assetsRequested: JSON.stringify({ teamId: b.teamId, players: b.players, picks: b.picks }),
     status: 'Pending',
+    // Trade calculator snapshot (only when the sheet has a 'valuation' column)
+    ...(typeof tcValuationField === 'function' ? tcValuationField(a, b) : {}),
   };
 
   $('#submit-trade').disabled = true;

@@ -28,6 +28,7 @@ test('golden trades land in their expected bands', async (t) => {
       const pct = `${(r.edge * 100).toFixed(1)}%`;
       assert.ok(g.expect.includes(r.band.key), `${g.name}: got ${r.band.key} (${pct}), expected ${g.expect.join('/')}`);
       if (g.winner) assert.equal(r.winner, g.winner, `${g.name}: winner ${r.winner} (${pct})`);
+      if (g.notWinner) assert.notEqual(r.winner, g.notWinner, `${g.name}: should not favor ${g.notWinner} (${pct})`);
     });
   }
 });
@@ -54,7 +55,7 @@ test('the side with the best player gets the bonus', () => {
   assert.equal(r.best.side, 'b');
   assert.ok(r.raw.a > r.raw.b, 'raw sum favours the 2-player side');
   assert.ok(r.raw.a / r.raw.b > 1.3, 'raw sum says a 33% overpay');
-  assert.ok(Math.abs(r.edge) < 0.12, 'curve + bonus shrinks it to within a slight edge');
+  assert.ok(Math.abs(r.edge) < 0.12, 'elite premium + bonus shrinks it to within a slight edge');
 });
 
 test('old TE: low dynasty price but a big this-season edge', () => {
@@ -143,4 +144,16 @@ test('live values: sane shape and dynasty ordering', { skip: !fs.existsSync(live
   assert.ok(cheaper / (cliff.length || 1) > 0.7, `cliff players priced below win-now (${cheaper}/${cliff.length})`);
   // Picks never gain value further out.
   assert.ok(live.picks['2028-1-any'] <= live.picks['2027-1-any']);
+});
+
+test('future picks borrow next year’s early/late spread', () => {
+  // 2028 has no tiers in the data; 2027 early is 4000 vs 2400 for a generic 1st.
+  const early = TE.pickValue({ year: 2028, round: 1, slot: 1, teams: 12, certainty: 1 }, ctx);
+  const late = TE.pickValue({ year: 2028, round: 1, slot: 12, teams: 12, certainty: 1 }, ctx);
+  const generic = TE.pickValue({ year: 2028, round: 1, teams: 12 }, ctx);
+  assert.equal(early, Math.round(2000 * 4000 / 2400));
+  assert.equal(late, Math.round(2000 * 2100 / 2400));
+  assert.equal(generic, 2000);
+  const partly = TE.pickValue({ year: 2028, round: 1, slot: 1, teams: 12, certainty: 0.35 }, ctx);
+  assert.ok(partly > generic && partly < early);
 });

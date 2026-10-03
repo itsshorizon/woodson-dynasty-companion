@@ -23,8 +23,11 @@
   },
 
   "engine": {
-    "alpha": 1.3,
-    "beta": 0.3,
+    "premium": 1,
+    "power": 5,
+    "beta": 2,
+    "gamma": 3,
+    "rosterSpotShare": 0.25,
     "replacementRank": 5,
     "minStakes": 2000,
     "bands": [

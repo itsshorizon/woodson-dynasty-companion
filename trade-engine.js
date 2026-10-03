@@ -4,11 +4,15 @@
  * and tests run it under node (tests/trade-engine.test.js).
  *
  * Core idea: "best player wins".
- *   1. Star curve        s = scale · (value / scale)^alpha   (stars > sum of parts)
- *   2. Best-player bonus beta · (best s received − other side's best s), only
- *                        when the other side is taking more pieces (stacking)
+ *   1. Elite premium     s = v · (1 + premium · (v / scale)^power)
+ *                        ~linear for normal players, steep for elite ones, so
+ *                        consolidating into a superstar is worth paying for
+ *   2. Best-player bonus beta · gap · (gap / best)^gamma, where gap = best s received
+ *                        − other side's best s; only when the other side is
+ *                        taking more pieces (stacking). Bigger gaps weigh more.
  *   3. Roster-spot cost  the side taking more pieces must cut someone for each
- *                        extra one: −s(replacement) per extra piece
+ *                        extra one: −s(replacement) per extra piece (picks become
+ *                        players, so they count too)
  *   Totals convert back to plain value units, so a 1-for-1 edge equals the
  *   simple value gap; Fairness = (A − B) / max(A, B, minStakes)
  * =========================================================== */
@@ -21,8 +25,11 @@
 
   const DEFAULTS = {
     valueScale: 10000,
-    alpha: 1.3,
-    beta: 0.3,
+    premium: 1,
+    power: 5,
+    beta: 2,
+    gamma: 3,
+    rosterSpotShare: 0.25,
     minStakes: 2000,
     bands: [
       { max: 0.05, label: 'Fair', key: 'fair' },
@@ -40,9 +47,12 @@
     return {
       values,
       scale: (config && config.valueScale) || DEFAULTS.valueScale,
-      alpha: eng.alpha != null ? eng.alpha : DEFAULTS.alpha,
+      premium: eng.premium != null ? eng.premium : DEFAULTS.premium,
+      power: eng.power != null ? eng.power : DEFAULTS.power,
       beta: eng.beta != null ? eng.beta : DEFAULTS.beta,
       minStakes: eng.minStakes != null ? eng.minStakes : DEFAULTS.minStakes,
+      gamma: eng.gamma != null ? eng.gamma : DEFAULTS.gamma,
+      rosterSpotShare: eng.rosterSpotShare != null ? eng.rosterSpotShare : DEFAULTS.rosterSpotShare,
       bands: eng.bands || DEFAULTS.bands,
     };
   }
@@ -63,8 +73,16 @@
     const base = picks[`${pick.year}-${pick.round}-any`];
     if (base == null) return 0;
     const tier = pickTier(pick.slot, pick.teams || 12);
-    const tiered = tier ? picks[`${pick.year}-${pick.round}-${tier}`] : null;
-    if (tiered == null) return base;
+    if (!tier) return base;
+    let tiered = picks[`${pick.year}-${pick.round}-${tier}`];
+    if (tiered == null) {
+      // Sources only tier next year's picks; apply that year's early/late spread.
+      const ref = Object.keys(picks).map((k) => k.split('-')).filter(([y, r, t]) => Number(r) === pick.round && t === tier)
+        .map(([y]) => Number(y)).sort((a, b) => a - b)[0];
+      const refAny = ref != null ? picks[`${ref}-${pick.round}-any`] : null;
+      if (!refAny) return base;
+      tiered = base * (picks[`${ref}-${pick.round}-${tier}`] / refAny);
+    }
     const c = pick.certainty == null ? 1 : Math.max(0, Math.min(1, pick.certainty));
     return Math.round(base + (tiered - base) * c);
   }
@@ -109,25 +127,41 @@
 
   /* ---------------- core scoring ---------------- */
 
-  // What a bench spot is worth: the best player you could add off waivers.
+  // What a bench spot costs: to take an extra piece you cut your worst bench
+  // player, who is usually worth less than the best free agent. Priced as a
+  // share of waiver-level value.
   function rosterSpotValue(ctx) {
     const repl = (ctx.values && ctx.values.replacement) || {};
-    return repl.ALL || 0;
+    return (repl.ALL || 0) * ctx.rosterSpotShare;
   }
 
-  function starValue(e, ctx) {
-    if (e <= 0) return 0;
-    return ctx.scale * Math.pow(e / ctx.scale, ctx.alpha);
+  // Anything you could pick up off waivers is worth ~nothing in a trade. Fade
+  // values out between half of waiver level and waiver level (no cliff).
+  function waiverAdjusted(v, ctx) {
+    const w = ((ctx.values && ctx.values.replacement) || {}).ALL || 0;
+    if (!w || v >= w) return v;
+    return v * Math.max(0, (v - w / 2) / (w / 2));
   }
+
+  function starValue(v, ctx) {
+    if (v <= 0) return 0;
+    return v * (1 + ctx.premium * Math.pow(v / ctx.scale, ctx.power));
+  }
+  // Inverse of starValue (monotonic), by bisection: back to plain value units.
   function fromStar(s, ctx) {
     if (s <= 0) return 0;
-    return ctx.scale * Math.pow(s / ctx.scale, 1 / ctx.alpha);
+    let lo = 0, hi = s;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (starValue(mid, ctx) < s) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
   }
 
   function scoreSide(assets, ctx, source) {
     const rows = assets.map((a) => {
       const info = assetValue(a, ctx, source);
-      return Object.assign(info, { contribution: starValue(info.value, ctx) });
+      return Object.assign(info, { contribution: starValue(waiverAdjusted(info.value, ctx), ctx) });
     });
     rows.sort((x, y) => y.contribution - x.contribution);
     const subtotal = rows.reduce((s, r) => s + r.contribution, 0);
@@ -150,7 +184,11 @@
     const otherCount = bestSide === 'a' ? B.rows.length : bestSide === 'b' ? A.rows.length : 0;
     const bestCount = bestSide === 'a' ? A.rows.length : bestSide === 'b' ? B.rows.length : 0;
     const stacking = bestSide && otherCount > bestCount;
-    const bonus = stacking ? ctx.beta * Math.abs(bestA - bestB) : 0;
+    // Scale by how far apart the best pieces are: a star for mid-tier players
+    // earns a big premium, a near-peer for a good player plus a pick a small one.
+    const gap = Math.abs(bestA - bestB);
+    const top = Math.max(bestA, bestB) || 1;
+    const bonus = stacking ? ctx.beta * gap * Math.pow(gap / top, ctx.gamma) : 0;
     const bonusTo = stacking ? bestSide : null;
     // Taking extra pieces means cutting someone for each. An extra piece worse
     // than what's on waivers just gets cut itself, so it nets to zero, never below.
@@ -158,8 +196,10 @@
     const rosterCostTo = extra > 0 ? 'a' : extra < 0 ? 'b' : null;
     const spot = starValue(rosterSpotValue(ctx), ctx);
     const takerRows = rosterCostTo === 'a' ? A.rows : rosterCostTo === 'b' ? B.rows : [];
+    // An extra piece below waiver level adds nothing: you could add that player for free.
+    const waiver = ((ctx.values && ctx.values.replacement) || {}).ALL || 0;
     const rosterCost = takerRows.slice(takerRows.length - Math.abs(extra))
-      .reduce((sum, r) => sum + Math.min(spot, r.contribution), 0);
+      .reduce((sum, r) => sum + (r.value < waiver ? r.contribution : Math.min(spot, r.contribution)), 0);
     const totalA = A.subtotal + (bonusTo === 'a' ? bonus : 0) - (rosterCostTo === 'a' ? rosterCost : 0);
     const totalB = B.subtotal + (bonusTo === 'b' ? bonus : 0) - (rosterCostTo === 'b' ? rosterCost : 0);
     // Back to plain value units. Small deals are measured against a minimum
@@ -282,6 +322,7 @@
       return { id: t.id, standingRank: t.standingRank, now, future, age };
     });
     const nowOrder = scored.slice().sort((a, b) => b.now - a.now).map((t) => t.id);
+    const futureOrder = scored.slice().sort((a, b) => b.future - a.future).map((t) => t.id);
     const n = scored.length;
     const out = {};
     for (const t of scored) {
@@ -289,7 +330,7 @@
       // Blend roster strength with actual results (standings matter more later in the season).
       const combined = (nowRank + (t.standingRank || nowRank)) / 2;
       const label = combined <= n / 3 ? 'Contender' : combined > (2 * n) / 3 ? 'Rebuilder' : 'Middle';
-      out[t.id] = { label, nowRank, standingRank: t.standingRank, avgAge: Math.round(t.age * 10) / 10, rosterValue: t.future };
+      out[t.id] = { label, nowRank, standingRank: t.standingRank, futureRank: futureOrder.indexOf(t.id) + 1, avgAge: Math.round(t.age * 10) / 10, rosterValue: t.future };
     }
     return out;
   }

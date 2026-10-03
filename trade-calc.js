@@ -75,16 +75,37 @@ const tcFmt = (n) => (n == null ? '—' : Math.round(n).toLocaleString());
 
 /* ----------------------- Assets ----------------------- */
 
-// Pick slot is only meaningful for the next draft; standings firm up as the
-// season goes, so certainty grows with the week (full by week 14).
+// Projected draft slot for a pick, from the original owner's outlook.
+// Next draft: blend of current standings and roster strength (standings count
+// for more as the season goes). Later drafts: long-term roster value, with a
+// lighter touch because a lot changes in a year or two.
+const TC_PICK_CERTAINTY = { 0: null, 1: 0.35, 2: 0.2 };
+
+function tcPickSlot(p) {
+  const orig = teamByName(p.origOwner);
+  if (!orig) return { slot: null, certainty: 0 };
+  const windows = TC.windows || tcTeamWindows();
+  const w = windows[orig.id];
+  const n = state.teams.length;
+  const yearsOut = p.year - CONFIG.DRAFT_YEARS[0];
+  if (yearsOut === 0) {
+    const weekShare = Math.min(1, (state.currentWeek || 1) / 14);
+    const standing = state.teams.findIndex((t) => t.id === orig.id) + 1;
+    const finish = w ? standing * weekShare + w.nowRank * (1 - weekShare) : standing;
+    return { slot: Math.round(n + 1 - finish), certainty: 0.5 + 0.5 * weekShare };
+  }
+  if (!w || TC_PICK_CERTAINTY[yearsOut] == null) return { slot: null, certainty: 0 };
+  return { slot: n + 1 - w.futureRank, certainty: TC_PICK_CERTAINTY[yearsOut] };
+}
+
 function tcPickAsset(p, ownerTeamId) {
-  const nextDraft = CONFIG.DRAFT_YEARS[0];
   const owner = teamById(ownerTeamId);
-  const slot = p.year === nextDraft && p.origOwner ? projectedPickSlot(p.origOwner) : null;
-  const certainty = Math.min(1, (state.currentWeek || 1) / 14);
+  const { slot, certainty } = p.origOwner ? tcPickSlot(p) : { slot: null, certainty: 0 };
+  const tier = TradeEngine.pickTier(slot, state.teams.length);
   const fromOther = p.origOwner && owner && p.origOwner !== owner.name;
   let label = `${p.year} Rd ${p.round}`;
-  if (slot) label += ` (proj ${fmtPickLabel(p.round, slot)})`;
+  if (slot && p.year === CONFIG.DRAFT_YEARS[0]) label += ` (proj ${fmtPickLabel(p.round, slot)})`;
+  else if (tier) label += ` (likely ${tier})`;
   if (fromOther) label += ` · via ${p.origOwner}`;
   return { type: 'pick', year: p.year, round: p.round, origOwner: p.origOwner || '', slot, certainty, teams: state.teams.length, label };
 }
@@ -250,6 +271,7 @@ function tcMeterHTML(opts) {
         ${tcFitHTML(r, opts)}
         ${tcBalanceHTML(r, opts)}
         ${tcBreakdownHTML(r, opts)}
+        ${opts.feedback ? tcFeedbackHTML() : ''}
       `}
       ${tcFooterHTML()}
     </div>`;
@@ -343,8 +365,8 @@ function tcBreakdownHTML(r, opts) {
         <thead><tr><th>How the score is built</th><th class="num">${escapeHtml(opts.names.a)}</th><th class="num">${escapeHtml(opts.names.b)}</th></tr></thead>
         <tbody>
           <tr class="tv-step"><td>Simple total</td><td class="num">${tcFmt(s.a.raw)}</td><td class="num">${tcFmt(s.b.raw)}</td></tr>
-          ${step('Star curve', s.a.star, s.b.star, 'Stars count for more than the sum of lesser players')}
-          ${step('Best-player bonus', s.a.bonus, s.b.bonus, 'Only when the other side is stacking more pieces')}
+          ${step('Elite premium', s.a.star, s.b.star, 'Elite players count for more than lesser players adding up to the same')}
+          ${step('Best-player bonus', s.a.bonus, s.b.bonus, 'When the other side stacks more pieces; bigger gap, bigger bonus')}
           ${step('Roster spots', s.a.roster, s.b.roster, 'Extra pieces mean cutting someone')}
           <tr class="tv-step tv-final"><td>Trade score</td><td class="num">${tcFmt(s.a.final)}</td><td class="num">${tcFmt(s.b.final)}</td></tr>
         </tbody>
@@ -362,6 +384,100 @@ function tcFooterHTML() {
       <button type="button" class="tv-link" data-tc-explain>How values work</button>
       <span class="tv-advice">Advice, not a ruling.</span>
     </div>`;
+}
+
+/* ----------------------- Feedback ----------------------- */
+
+// Beta feedback goes to the "feedback" tab of the league Google Sheet.
+function tcFeedbackHTML() {
+  return `
+    <div class="tv-feedback" data-tc-feedback>
+      <span>Does this grade feel right?</span>
+      <button type="button" class="tv-vote" data-vote="agree" aria-label="Yes, feels right">👍</button>
+      <button type="button" class="tv-vote" data-vote="disagree" aria-label="No, feels wrong">👎</button>
+    </div>`;
+}
+
+function tcFeedbackForm(host, vote) {
+  host.innerHTML = `
+    <div class="tv-feedback-form">
+      <label for="tc-feedback-text">${vote === 'agree' ? 'Anything to add? (optional)' : 'What feels off? Which side should win, and by how much?'}</label>
+      <textarea id="tc-feedback-text" rows="3" maxlength="600"></textarea>
+      <div class="tv-feedback-actions">
+        <button type="button" class="btn-ghost btn-sm" data-feedback-cancel>Cancel</button>
+        <button type="button" class="btn-ghost btn-sm tv-feedback-send" data-feedback-send="${vote}">Send</button>
+      </div>
+    </div>`;
+  host.querySelector('textarea').focus();
+}
+
+function tcTradeSummary(opts) {
+  const label = (a) => (a.type === 'player' ? (tcPlayer(a.id)?.n || a.name) : a.label);
+  return `${opts.names.a} gets: ${opts.trade.a.gets.map(label).join(', ')} | ${opts.names.b} gets: ${opts.trade.b.gets.map(label).join(', ')}`;
+}
+
+async function tcSendFeedback(opts, vote, comment) {
+  const r = TradeEngine.evaluate(opts.trade, TC.ctx);
+  const row = {
+    submittedAt: new Date().toISOString(),
+    fromTeam: myTeamName() || '',
+    vote,
+    comment: comment || '',
+    verdict: r.band.label + (r.winner ? ` → ${r.winner === 'a' ? opts.names.a : opts.names.b}` : ''),
+    edgePct: String(Math.round(r.edge * 100)),
+    trade: tcTradeSummary(opts),
+    valuesDate: TC.values?.generatedAt || '',
+    appVersion: typeof BUILD_ID !== 'undefined' ? BUILD_ID : '',
+  };
+  const res = await fetch(`${CONFIG.SHEETS_BASE}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([row]),
+  });
+  if (!res.ok) throw new Error(`Feedback failed: ${res.status}`);
+}
+
+function tcWireFeedback(container, getOpts) {
+  container.addEventListener('click', async (e) => {
+    const host = e.target.closest('[data-tc-feedback]');
+    if (!host) return;
+    const voteBtn = e.target.closest('[data-vote]');
+    if (voteBtn) { tcFeedbackForm(host, voteBtn.dataset.vote); return; }
+    if (e.target.closest('[data-feedback-cancel]')) { host.outerHTML = tcFeedbackHTML(); return; }
+    const send = e.target.closest('[data-feedback-send]');
+    if (send) {
+      send.disabled = true;
+      try {
+        await tcSendFeedback(getOpts(), send.dataset.feedbackSend, host.querySelector('textarea')?.value.trim());
+        host.innerHTML = '<span class="tv-feedback-thanks">Thanks! The commissioner will review it.</span>';
+      } catch (err) {
+        console.error(err);
+        send.disabled = false;
+        toast('Could not send feedback', 'error');
+      }
+    }
+  });
+}
+
+/* ----------------------- Valuation snapshot ----------------------- */
+
+// Saved with each submitted trade (if the sheet has a "valuation" column) so
+// "fair at the time" can be checked later, even after values move.
+function tcValuationField(a, b) {
+  if (!TC.ctx) return {};
+  const hasColumn = state.allTrades.some((t) => Object.prototype.hasOwnProperty.call(t, 'valuation'));
+  if (!hasColumn) return {};
+  const toAssets = (side) => side.players.map(tcPlayerAsset).concat(side.picks.map((p) => tcPickAsset(p, side.teamId)));
+  const r = TradeEngine.evaluate({ a: { gets: toAssets(b) }, b: { gets: toAssets(a) } }, TC.ctx);
+  const vals = {};
+  r.sides.a.concat(r.sides.b).forEach((x) => { vals[x.key] = Math.round(x.value); });
+  return {
+    valuation: JSON.stringify({
+      date: TC.values.generatedAt, config: TC.values.configVersion,
+      band: r.band.key, edge: Math.round(r.edge * 1000) / 1000,
+      proposerGets: Math.round(r.totals.a), receiverGets: Math.round(r.totals.b), values: vals,
+    }),
+  };
 }
 
 /* ----------------------- Trade builder integration ----------------------- */
@@ -408,6 +524,7 @@ function tcRenderBuilderMeter() {
     // Balance: whoever comes out ahead adds from their own roster.
     // Left side (me) adds by sending more → my roster; right side adds → partner roster.
     candidates: { a: tcBuilderCandidates('a', a.teamId), b: tcBuilderCandidates('b', b.teamId) },
+    feedback: true,
   };
   host.innerHTML = tcMeterHTML(opts);
   host._tcOpts = opts;
@@ -476,6 +593,7 @@ function tcWireBuilder() {
     const row = e.target.closest('.tv-player-link');
     if (row) { openPlayerProfile(Number(row.dataset.playerId)); }
   });
+  tcWireFeedback($('#trade-meter'), () => $('#trade-meter')._tcOpts);
   $('#trade-meter').addEventListener('change', (e) => {
     if (e.target.matches('.tv-window-select')) {
       try { localStorage.setItem(TC_WINDOW_KEY, e.target.value); } catch (err) { /* storage blocked */ }
@@ -797,9 +915,9 @@ function tcOpenExplainer() {
     <div class="tv-detail-grid">${Object.entries(m).map(([pos, x]) => `<div><span class="lbl">${pos}</span><b>${pctTxt(x)}</b></div>`).join('')}</div>
     <h4>Getting the best player matters</h4>
     <ul>
-      <li><b>Star curve:</b> value grows faster than linearly, so one great player is worth more than two good ones that add up to the same number.</li>
-      <li><b>Best-player bonus:</b> when one side stacks more pieces, the side getting the best player earns a bonus.</li>
-      <li><b>Roster spots:</b> taking extra players means cutting someone. Each extra piece costs about what you could pick up on waivers today (${tcFmt(v.replacement.ALL)}).</li>
+      <li><b>Elite premium:</b> normal players add up normally, but elite players are worth more than two lesser players with the same total.</li>
+      <li><b>Best-player bonus:</b> when one side stacks more pieces, the side getting the best player earns a bonus that grows with the gap between the best pieces.</li>
+      <li><b>Roster spots:</b> taking extra pieces means cutting someone from your bench, so each extra piece costs a little (${tcFmt(v.replacement.ALL * (c.engine.rosterSpotShare ?? 0.25))}).</li>
     </ul>
     <h4>Reading the meter</h4>
     <div class="tv-detail-grid">${c.engine.bands.map((b) => `<div data-band="${b.key}"><span class="lbl">${escapeHtml(b.label)}</span><b>${b.key === 'fleece' ? `${Math.round(c.engine.bands[2].max * 100)}%+` : `under ${Math.round(b.max * 100)}%`}</b></div>`).join('')}</div>
