@@ -26,6 +26,7 @@ const state = {
   matchups: [],
   boxscores: {},           // { [week]: { byTeam: { [teamId]: players[] }, live } }
   expandedMatchups: new Set(),
+  logoIndex: { cached: {}, custom: {}, version: '' }, // see loadLogoIndex()
   allTrades: [],
   weeklyHistory: {},
   pendingTrades: [],
@@ -803,17 +804,36 @@ function playerPhotoHTML(player) {
 
 // Small round team logo. Custom ESPN uploads can point at dead hosts, so a
 // failed or missing image falls back to the team abbreviation.
+// Logo sources in priority order: a hand-added file, the nightly copy made by
+// pipeline/cache-logos.js, then ESPN's own link (upgraded to https, since an
+// http image is blocked on an https page).
+function teamLogoSources(team) {
+  if (!team) return [];
+  const { custom, cached, version } = state.logoIndex;
+  const list = [];
+  if (custom[team.id]) list.push(`./data/logos/custom/${encodeURIComponent(custom[team.id])}`);
+  const file = cached[team.id]?.file;
+  if (file) list.push(`./data/logos/${encodeURIComponent(file)}?v=${encodeURIComponent(version)}`);
+  if (team.logo) list.push(team.logo.replace(/^http:\/\//, 'https://'));
+  return [...new Set(list)];
+}
+
+// onerror for logo <img>s: try the next source in data-next, then the fallback.
+const LOGO_ONERROR = "var n=(this.dataset.next||'').split('|').filter(Boolean);if(n.length){this.src=n.shift();this.dataset.next=n.join('|');}else{this.outerHTML=this.dataset.fb;}";
+
 function teamLogoHTML(team, size = 24) {
   const abbr = escapeHtml((team?.abbrev || team?.name || '?').slice(0, 4));
   const fallback = `<span class="team-logo team-logo-txt" style="--logo-size:${size}px">${abbr}</span>`;
-  if (!team?.logo) return fallback;
-  return `<img class="team-logo" style="--logo-size:${size}px" src="${escapeHtml(team.logo)}" alt="" loading="lazy"
-    onerror="this.outerHTML=this.dataset.fb" data-fb="${escapeHtml(fallback)}" />`;
+  const [src, ...rest] = teamLogoSources(team);
+  if (!src) return fallback;
+  return `<img class="team-logo" style="--logo-size:${size}px" src="${escapeHtml(src)}" alt="" loading="lazy"
+    data-next="${escapeHtml(rest.join('|'))}" onerror="${LOGO_ONERROR}" data-fb="${escapeHtml(fallback)}" />`;
 }
 
 // data-* attributes select.js reads to show a logo + subline in team dropdowns.
+// data-icon is a '|' list of sources, tried in order.
 function teamOptionAttrs(team, sub = team.owner) {
-  return `data-icon="${escapeHtml(team.logo || '')}" data-abbr="${escapeHtml((team.abbrev || team.name).slice(0, 4))}" data-sub="${escapeHtml(sub || '')}"`;
+  return `data-icon="${escapeHtml(teamLogoSources(team).join('|'))}" data-abbr="${escapeHtml((team.abbrev || team.name).slice(0, 4))}" data-sub="${escapeHtml(sub || '')}"`;
 }
 
 // Render one player row. context controls which action buttons appear:
@@ -3241,8 +3261,13 @@ function renderMyTeam() {
     <!-- Hero -->
     <div class="myteam-hero">
       <button class="change-team" id="change-team-btn">Change</button>
-      <h2>${escapeHtml(team.name)}</h2>
-      <div class="owner">${escapeHtml(team.owner)}</div>
+      <div class="myteam-id">
+        ${teamLogoHTML(team, 56)}
+        <div class="myteam-id-text">
+          <h2>${escapeHtml(team.name)}</h2>
+          <div class="owner">${escapeHtml(team.owner)}</div>
+        </div>
+      </div>
       <div class="stats">
         <div class="stat">
           <span class="stat-val">${team.wins}-${team.losses}${team.ties ? '-' + team.ties : ''}</span>
@@ -3740,6 +3765,7 @@ async function boot() {
   const [ok] = await Promise.all([
     loadLeagueData(),
     loadWeeklyHistory(),
+    loadLogoIndex(),
     domReady.then(() => (typeof tcLoad === 'function' ? tcLoad() : null)),
   ]);
   if (ok) {
@@ -3924,6 +3950,19 @@ function weeklyActualLog(player) {
   return [...byWeek.entries()]
     .map(([week, points]) => ({ week, points }))
     .sort((a, b) => a.week - b.week);
+}
+
+// Missing files are fine: logos then come straight from ESPN.
+async function loadLogoIndex() {
+  const [cached, custom] = await Promise.all([
+    fetchJSON('./data/logos/index.json').catch(() => null),
+    fetchJSON('./data/logos/custom/index.json').catch(() => null),
+  ]);
+  state.logoIndex = {
+    cached: cached?.teams || {},
+    custom: custom && typeof custom === 'object' ? custom : {},
+    version: cached?.generatedAt || '',
+  };
 }
 
 async function loadWeeklyHistory() {
@@ -5430,7 +5469,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.13.0';
+const BUILD_ID = '1.13.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

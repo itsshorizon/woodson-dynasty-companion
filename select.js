@@ -7,7 +7,7 @@
  * or listens for 'change' keeps working untouched.
  *
  * Opt out with <select data-native>. Options may carry:
- *   data-icon="<img url>"  small round image (team logo)
+ *   data-icon="<img url>"  small round image (team logo); '|' separates fallbacks
  *   data-abbr="TG"         initials shown when the image is missing/broken
  *   data-sub="Owner name"  muted second line
  * =========================================================== */
@@ -25,7 +25,10 @@
     if (!icon && !abbr) return '';
     const fallback = `<span class="fs-ico fs-ico-txt">${esc((abbr || opt.textContent.trim()[0] || '?').slice(0, 3))}</span>`;
     if (!icon) return fallback;
-    return `<img class="fs-ico" src="${esc(icon)}" alt="" loading="lazy" onerror="this.outerHTML=this.dataset.fb" data-fb="${esc(fallback)}" />`;
+    // data-icon may list several sources separated by '|'; try each before the initials.
+    const [src, ...rest] = icon.split('|').filter(Boolean);
+    const onerror = "var n=(this.dataset.next||'').split('|').filter(Boolean);if(n.length){this.src=n.shift();this.dataset.next=n.join('|');}else{this.outerHTML=this.dataset.fb;}";
+    return `<img class="fs-ico" src="${esc(src)}" alt="" loading="lazy" data-next="${esc(rest.join('|'))}" onerror="${onerror}" data-fb="${esc(fallback)}" />`;
   }
 
   function optionInner(opt) {

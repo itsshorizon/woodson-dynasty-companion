@@ -2839,6 +2839,20 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   color: var(--text);
   letter-spacing: -0.01em;
 }
+.myteam-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 72px; /* keep long names clear of the Change button */
+}
+.myteam-id-text { min-width: 0; }
+.myteam-id-text h2 { overflow-wrap: anywhere; line-height: 1.15; font-size: clamp(19px, 5.6vw, 24px); }
+.myteam-hero .team-logo {
+  margin-right: 0;
+  border: 2px solid var(--green);
+  box-shadow: 0 0 14px var(--green-glow);
+}
+.myteam-hero .team-logo-txt { font-size: 18px; color: var(--text); }
 .myteam-hero .owner {
   font-size: 13px;
   color: var(--text-dim);
