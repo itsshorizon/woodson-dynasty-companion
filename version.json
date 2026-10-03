@@ -1,8 +1,10 @@
 {
-  "version": "1.13.1",
-  "title": "🛡️ Custom Logos Fixed",
+  "version": "1.14.0",
+  "title": "🏆 Team Value Leaderboard",
   "notes": [
-    "🖼️ Custom team logos now load. The app keeps its own copy, refreshed nightly.",
-    "⭐ Your team logo now sits next to your name on My Team."
+    "🏆 NEW in the Vault: Team Value. See every roster ranked by total dynasty value.",
+    "📈 Projected Team Value chart: see whose roster is rising and whose is aging out over the next 3 years.",
+    "💰 Your team's total value, league rank, pick value and 3-year outlook now sit at the bottom of My Team and Rosters.",
+    "✕ New Clear Trade button on the Trades tab to start a proposal over."
   ]
 }

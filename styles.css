@@ -4226,3 +4226,63 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .team-name, .matchup-row .name { display: flex; align-items: center; }
 .team-pill { display: inline-flex; align-items: center; }
 .team-pill .team-logo { margin-right: 6px; margin-left: -8px; }
+
+/* Clear trade button sits above Submit */
+#reset-trade { margin-top: 14px; }
+
+/* Team value summary (My Team / Rosters) */
+.tv-team-total {
+  margin: 16px 0 8px;
+  padding: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--tab-accent);
+  border-radius: var(--radius);
+}
+.tv-team-total-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.tv-team-total .lbl {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tv-team-total-head b { font-size: 28px; font-weight: 900; color: var(--tab-accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tv-team-rank { font-size: 26px; font-weight: 900; color: var(--text); text-align: right; line-height: 1; }
+.tv-team-rank span { display: block; font-size: 10px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+.tv-team-total-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 8px; }
+.tv-team-total-grid > div { background: var(--bg-elev-2); border-radius: 8px; padding: 8px; min-width: 0; }
+.tv-team-total-grid b { font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .tv-team-total-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Team value leaderboard (Vault) */
+#team-value-board { display: flex; flex-direction: column; gap: 6px; }
+.tv-board-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.tv-board-row.mine { border-color: var(--tab-accent); box-shadow: 0 0 0 1px var(--tab-accent) inset; }
+.tv-board-rank { font-size: 18px; font-weight: 900; color: var(--text-mute); text-align: center; }
+.tv-board-row:nth-child(1) .tv-board-rank { color: #f1c40f; }
+.tv-board-row:nth-child(2) .tv-board-rank { color: #c0c7cc; }
+.tv-board-row:nth-child(3) .tv-board-rank { color: #d08a4a; }
+.tv-board-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tv-board-name { font-size: 14px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-board-bar { display: block; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.tv-board-bar span { display: block; height: 100%; background: var(--tab-accent); border-radius: 3px; }
+.tv-board-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; font-weight: 700; color: var(--text-mute); align-items: center; }
+.tv-board-val { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+.tv-board-val b { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tv-board-val span { font-size: 10px; font-weight: 800; white-space: nowrap; }

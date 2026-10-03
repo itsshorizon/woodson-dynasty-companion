@@ -112,6 +112,7 @@
           </div>
         </div>
         <div id="trade-meter" aria-live="polite"></div>
+        <button class="btn-ghost" id="reset-trade" type="button">✕ Clear Trade</button>
         <button class="btn-primary" id="submit-trade">Submit Trade</button>
       </div>
 
@@ -152,6 +153,7 @@
       <div class="vault-subnav-fade">
         <div class="segmented vault-subnav" id="vault-subnav">
           <button data-sub="board" class="seg-btn active">Draft Board</button>
+          <button data-sub="teamvalue" class="seg-btn">Team Value</button>
           <button data-sub="rivalry" class="seg-btn">Rivalry</button>
           <button data-sub="resumes" class="seg-btn">Resumes</button>
           <button data-sub="timemachine" class="seg-btn">Time Machine</button>
@@ -173,6 +175,20 @@
         <div class="board-legend">
           <span><span class="dot dot-original"></span>Original</span>
           <span><span class="dot dot-traded"></span>Traded</span>
+        </div>
+      </div>
+
+      <!-- Sub: Team Value (trade-calc.js) -->
+      <div class="vault-section" id="vault-teamvalue" hidden>
+        <div class="card" id="team-value-card">
+          <h2>Team Value Leaderboard</h2>
+          <p class="chart-sub">Every team's total dynasty trade value. Tap a team to see its roster.</p>
+          <div id="team-value-board"></div>
+        </div>
+        <div class="card chart-card" id="team-value-arc-card">
+          <h2>Projected Team Value</h2>
+          <p class="chart-sub">Where each roster's value is headed as players age (current players only, using typical age curves). Click a name in the legend to toggle.</p>
+          <div class="chart-wrap chart-tall"><canvas id="team-value-chart"></canvas></div>
         </div>
       </div>
 

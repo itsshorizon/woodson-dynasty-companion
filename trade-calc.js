@@ -493,6 +493,174 @@ function tcValueChipHTML(playerId) {
   return `<span class="tv-row-val" title="Dynasty trade value${p.tr != null ? ` (30-day change ${p.tr > 0 ? '+' : ''}${tcFmt(p.tr)})` : ''}">${arrow}<b>${tcFmt(p.dv)}</b> <span class="stat-lbl">VALUE</span></span>`;
 }
 
+/* ----------------------- Team value ----------------------- */
+
+let _tcValueChart = null;
+
+// Total dynasty value of a team: every rostered player (IR included) plus the
+// draft picks it currently owns. Projection uses each player's age-curve
+// outlook (current players only; future picks become unknown rookies).
+function tcTeamValue(team) {
+  if (!TC.ctx || !team) return null;
+  let players = 0, ageWeighted = 0, winNow = 0;
+  const outlook = [0, 0, 0];
+  let top = null;
+  team.roster.forEach((pl) => {
+    const v = tcPlayer(pl.id);
+    if (!v) return;
+    players += v.dv;
+    winNow += v.wn || 0;
+    ageWeighted += (v.a || 26) * v.dv;
+    (v.o || [v.dv, v.dv, v.dv]).forEach((x, i) => { outlook[i] += x; });
+    if (!top || v.dv > top.dv) top = { name: v.n, dv: v.dv, pos: v.p };
+  });
+  const picks = state.draftPicks.length
+    ? ownedPicksFor(team.id).reduce((sum, p) => sum + TradeEngine.pickValue(tcPickAsset(p, team.id), TC.ctx), 0)
+    : null;
+  return {
+    teamId: team.id, players, picks, total: players + (picks || 0), winNow,
+    avgAge: players ? ageWeighted / players : null,
+    projection: [players].concat(outlook), top,
+  };
+}
+
+function tcLeagueTeamValues() {
+  const rows = state.teams.map(tcTeamValue).filter(Boolean);
+  rows.sort((a, b) => b.players - a.players);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+  return rows;
+}
+
+// Summary card at the bottom of My Team / Rosters.
+function tcTeamValueFooterHTML(teamId) {
+  if (!TC.ctx) return '';
+  const rows = tcLeagueTeamValues();
+  const r = rows.find((x) => x.teamId === teamId);
+  if (!r) return '';
+  const in3 = r.projection[3];
+  const change = r.players ? Math.round(((in3 - r.players) / r.players) * 100) : 0;
+  const win = tcWindowFor(teamId).label;
+  return `
+    <div class="tv-team-total" data-team-id="${teamId}">
+      <div class="tv-team-total-head">
+        <div>
+          <span class="lbl">Team Value</span>
+          <b>${tcFmt(r.players)}</b>
+        </div>
+        <div class="tv-team-rank">#${r.rank}<span>of ${rows.length}</span></div>
+      </div>
+      <div class="tv-team-total-grid">
+        <div><span class="lbl">Draft picks</span><b>${r.picks == null ? '—' : `+${tcFmt(r.picks)}`}</b></div>
+        <div><span class="lbl">Avg age</span><b>${r.avgAge ? r.avgAge.toFixed(1) : '—'}</b></div>
+        <div><span class="lbl">In 3 years</span><b class="${change >= 0 ? 'tv-up' : 'tv-down'}">${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}%</b></div>
+        <div><span class="lbl">Mode</span><b><span class="tv-window tv-window-${win.toLowerCase()}">${win}</span></b></div>
+      </div>
+      <button type="button" class="tv-link" data-tc-open-board>See the league leaderboard →</button>
+    </div>`;
+}
+
+function tcOpenTeamValueBoard() {
+  setView('vault');
+  state.vaultSubview = 'teamvalue';
+  $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sub === 'teamvalue'));
+  ['board', 'teamvalue', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((sub) => {
+    const el = $(`#vault-${sub}`);
+    if (el) el.hidden = sub !== 'teamvalue';
+  });
+  renderVaultSubview();
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-tc-open-board]')) { e.preventDefault(); tcOpenTeamValueBoard(); }
+});
+
+function tcRenderTeamValueVault() {
+  const board = $('#team-value-board');
+  if (!board) return;
+  const go = () => {
+    const rows = tcLeagueTeamValues();
+    if (!rows.length) { board.innerHTML = empty('Team values unavailable.'); return; }
+    const max = rows[0].players || 1;
+    board.innerHTML = rows.map((r) => {
+      const team = teamById(r.teamId);
+      const win = tcWindowFor(r.teamId).label;
+      const change = r.players ? Math.round(((r.projection[3] - r.players) / r.players) * 100) : 0;
+      const mine = r.teamId === state.myTeamId;
+      return `
+        <button type="button" class="tv-board-row ${mine ? 'mine' : ''}" data-team-id="${r.teamId}">
+          <span class="tv-board-rank">${r.rank}</span>
+          <span class="tv-board-main">
+            <span class="tv-board-name">${escapeHtml(team.name)}</span>
+            <span class="tv-board-bar"><span style="width:${Math.max(4, (r.players / max) * 100)}%"></span></span>
+            <span class="tv-board-meta">
+              <span class="tv-window tv-window-${win.toLowerCase()}">${win}</span>
+              <span>Age ${r.avgAge ? r.avgAge.toFixed(1) : '—'}</span>
+              ${r.picks != null ? `<span>Picks +${tcFmt(r.picks)}</span>` : ''}
+              ${r.top ? `<span>Top: ${escapeHtml(r.top.name)}</span>` : ''}
+            </span>
+          </span>
+          <span class="tv-board-val">
+            <b>${tcFmt(r.players)}</b>
+            <span class="${change >= 0 ? 'tv-up' : 'tv-down'}">${change >= 0 ? '▲' : '▼'}${Math.abs(change)}% in 3 yrs</span>
+          </span>
+        </button>`;
+    }).join('');
+    board.onclick = (e) => {
+      const row = e.target.closest('.tv-board-row');
+      if (!row) return;
+      state.selectedRosterTeamId = Number(row.dataset.teamId);
+      setView('rosters');
+      renderRosterPills();
+      renderRoster();
+    };
+    setTimeout(() => tcRenderTeamValueChart(rows), 50);
+  };
+  board.innerHTML = loading('Adding up rosters...');
+  const needs = [tcLoad()];
+  if (!state.draftPicks.length) needs.push(loadDraftPicks());
+  Promise.all(needs).then(([ok]) => (ok ? go() : (board.innerHTML = empty('Team values unavailable.'))));
+}
+
+function tcRenderTeamValueChart(rows) {
+  const canvas = $('#team-value-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const year = CONFIG.SEASON;
+  const labels = [`${year} (now)`, `${year + 1}`, `${year + 2}`, `${year + 3}`];
+  const datasets = rows.map((r, i) => {
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    const mine = r.teamId === state.myTeamId;
+    return {
+      label: teamName(r.teamId),
+      data: r.projection.map((v) => Math.round(v)),
+      borderColor: color,
+      backgroundColor: color + '33',
+      borderWidth: mine ? 4 : 2,
+      tension: 0.25,
+      pointRadius: mine ? 5 : 3,
+      pointHoverRadius: 6,
+    };
+  });
+  const dim = getComputedStyle(document.body).getPropertyValue('--text-dim').trim();
+  if (_tcValueChart) _tcValueChart.destroy();
+  _tcValueChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: dim, font: { size: 11, weight: '700' }, boxWidth: 12, padding: 8 } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${tcFmt(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#9bb8a9', callback: (v) => `${Math.round(v / 1000)}k` }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Team value', color: '#9bb8a9' } },
+      },
+    },
+  });
+}
+
 /* ----------------------- Trade builder integration ----------------------- */
 
 let _tcBuilderWired = false;

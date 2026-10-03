@@ -915,6 +915,7 @@ function renderRoster() {
       <div class="roster-team-owner">${escapeHtml(team.owner)}</div>
     </div>
     ${renderGroupedRoster(team, ctx)}
+    ${typeof tcTeamValueFooterHTML === 'function' ? tcTeamValueFooterHTML(team.id) : ''}
   `;
   wirePlayerActions(el);
 }
@@ -1163,6 +1164,7 @@ function populateTradeTeamSelects() {
   $('#add-pick-a').onclick = () => addPickRow('a');
   $('#add-pick-b').onclick = () => addPickRow('b');
   $('#submit-trade').onclick = submitTrade;
+  $('#reset-trade').onclick = resetTradeBuilder;
 }
 
 function applyTradePrefill() {
@@ -1376,6 +1378,18 @@ function collectSideAssets(side) {
   return { teamId, players, picks };
 }
 
+// Clear the proposal builder. Side A stays locked to my team (roster reloaded);
+// partner, checked players and pick rows are cleared.
+function resetTradeBuilder() {
+  if (!state.myTeamId) $('#team-a-select').value = '';
+  $('#team-b-select').value = '';
+  $('#team-a-players').innerHTML = '';
+  $('#team-b-players').innerHTML = '';
+  $('#team-a-picks').innerHTML = '';
+  $('#team-b-picks').innerHTML = '';
+  if (state.myTeamId) renderTradeAssets('a');
+}
+
 async function submitTrade() {
   const a = collectSideAssets('a');
   const b = collectSideAssets('b');
@@ -1415,15 +1429,7 @@ async function submitTrade() {
         window.open('sms:?&body=' + encodeURIComponent(text));
       }
     } catch (err) { /* user dismissed share sheet — no-op */ }
-    // Preserve the locked side-A team selection on reset; clear only side-B + assets
-    if (!state.myTeamId) $('#team-a-select').value = '';
-    $('#team-b-select').value = '';
-    $('#team-a-players').innerHTML = '';
-    $('#team-b-players').innerHTML = '';
-    $('#team-a-picks').innerHTML = '';
-    $('#team-b-picks').innerHTML = '';
-    // Re-render side A's roster since we didn't clear the selection
-    if (state.myTeamId) renderTradeAssets('a');
+    resetTradeBuilder();
     await loadPendingTrades();
     renderPendingTrades();
   } catch (err) {
@@ -2010,7 +2016,7 @@ function initVaultView() {
       if (!btn) return;
       state.vaultSubview = btn.dataset.sub;
       $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      ['board', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((s) => {
+      ['board', 'teamvalue', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((s) => {
         $(`#vault-${s}`).hidden = (s !== state.vaultSubview);
       });
       renderVaultSubview();
@@ -2050,6 +2056,8 @@ function renderVaultSubview() {
     renderExtremesRecordBook();
     if (state.vaultSubview === 'board') {
       loadDraftPicks().then(renderDraftBoard);
+    } else if (state.vaultSubview === 'teamvalue') {
+      if (typeof tcRenderTeamValueVault === 'function') tcRenderTeamValueVault();
     } else if (state.vaultSubview === 'rivalry') {
       renderRivalryDesk();
     } else if (state.vaultSubview === 'resumes') {
@@ -3349,6 +3357,7 @@ function renderMyTeam() {
       <div id="myteam-roster">
         ${renderGroupedRoster(team, 'mine')}
       </div>
+      ${typeof tcTeamValueFooterHTML === 'function' ? tcTeamValueFooterHTML(team.id) : ''}
     </div>
 
     <!-- Trade history -->
@@ -3361,7 +3370,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta 1.10 - Archive & Analytics</div>
+    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta ${escapeHtml(BUILD_ID)}</div>
   `;
 
   $('#change-team-btn').onclick = showTeamPicker;
@@ -5469,7 +5478,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.13.1';
+const BUILD_ID = '1.14.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
