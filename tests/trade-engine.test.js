@@ -197,3 +197,16 @@ test('shop offers: fair returns for a player I am selling', () => {
   const ones = TE.shopOffers({ give, theirs, myWindow: 'Rebuilder', theirWindow: 'Contender', sizes: [1], limit: 20 }, ctx);
   for (const o of ones) assert.equal(o.get.length, 1);
 });
+
+test('team mode: rebuilders value picks more, contenders less', () => {
+  const pick = [asset('pick:2027-1')];
+  const vet = [asset('vet_wr')];
+  // Getting a 1st for a vet: good for a rebuilder, not for a contender.
+  const reb = TE.fitScore(pick, vet, 'Rebuilder', ctx);
+  const con = TE.fitScore(pick, vet, 'Contender', ctx);
+  assert.ok(reb > con, 'rebuilder likes the pick more');
+  // Giving up a 1st costs a rebuilder more than a contender.
+  const rebGive = TE.fitScore([asset('mid_a')], pick, 'Rebuilder', ctx);
+  const conGive = TE.fitScore([asset('mid_a')], pick, 'Contender', ctx);
+  assert.ok(conGive > rebGive, 'contender is happier turning a pick into a player');
+});

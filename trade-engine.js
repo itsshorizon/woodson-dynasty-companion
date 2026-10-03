@@ -40,7 +40,15 @@
     ],
   };
   // How much a team cares about this season vs the long run.
-  const WINDOW_NOW_WEIGHT = { Contender: 0.5, Middle: 0.3, Rebuilder: 0.1 };
+  // What each team mode cares about (advice only; never changes the meter):
+  //   now:    weight on this-season value vs long-term value
+  //   picks:  how much a draft pick is worth to them relative to market
+  //   future: rebuilders judge players partly on value two years out
+  const WINDOW_PREFS = {
+    Contender: { now: 0.5, picks: 0.7, future: 0 },
+    Middle: { now: 0.3, picks: 1.0, future: 0 },
+    Rebuilder: { now: 0.1, picks: 1.3, future: 0.5 },
+  };
 
   /** Build an engine context from values.json + engine-config.json. */
   function createContext(values, config) {
@@ -152,6 +160,7 @@
       key: `player:${asset.id}`, type: 'player', label: p.n || asset.name, pos,
       value, dynasty: p.dv, winNow: p.wn != null ? p.wn : 0, replacement,
       confidence: p.cf != null ? p.cf : 0.6, age: p.a, window: p.w, flags: p.f || [], unranked: false,
+      outlook: p.o || null,
     };
   }
 
@@ -367,12 +376,21 @@
 
   /** How much a team's own situation gains from a deal (advice only; never changes the meter). */
   function fitScore(gets, gives, windowLabel, ctx) {
-    const w = WINDOW_NOW_WEIGHT[windowLabel] != null ? WINDOW_NOW_WEIGHT[windowLabel] : 0.3;
+    const pref = WINDOW_PREFS[windowLabel] || WINDOW_PREFS.Middle;
     const worth = (list) => list.reduce((s, a) => {
       const v = assetValue(a, ctx);
-      return s + w * v.winNow + (1 - w) * v.value;
+      if (v.type === 'pick') return s + v.value * pref.picks;
+      const later = v.outlook && v.outlook[1] != null ? v.outlook[1] : v.value;
+      const longTerm = v.value * (1 - pref.future) + later * pref.future;
+      return s + pref.now * v.winNow + (1 - pref.now) * longTerm;
     }, 0);
     return Math.round(worth(gets) - worth(gives));
+  }
+
+  // A fit gain has to be worth noticing (2% of what's moving) to count as "helps".
+  function meaningfulFit(fit, gets, gives, ctx) {
+    const moving = gets.concat(gives).reduce((s, a) => s + assetValue(a, ctx).value, 0);
+    return fit > Math.max(50, 0.02 * moving);
   }
 
   /* ---------------- trade finder ---------------- */
@@ -454,8 +472,9 @@
         seen.add(key);
         const myFit = fitScore(want, give, opts.myWindow, ctx);
         const theirFit = fitScore(give, want, opts.theirWindow, ctx);
-        if (requireMutual && (myFit <= 0 || theirFit <= 0)) continue;
+        if (requireMutual && (!meaningfulFit(myFit, want, give, ctx) || !meaningfulFit(theirFit, give, want, ctx))) continue;
         results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit,
+          iWant: meaningfulFit(myFit, want, give, ctx), theyWant: meaningfulFit(theirFit, give, want, ctx),
           mutual: Math.min(myFit, theirFit) + 0.25 * (myFit + theirFit) });
       }
     }
@@ -512,10 +531,11 @@
       if (wantBest >= theirBest && giveBest < wantBest && opts.theirWindow !== 'Rebuilder') continue;
       const myFit = fitScore(want, give, opts.myWindow, ctx);
       const theirFit = fitScore(give, want, opts.theirWindow, ctx);
-      results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit });
+      results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit,
+        theyWant: meaningfulFit(theirFit, give, want, ctx), iWant: meaningfulFit(myFit, want, give, ctx) });
     }
-    // Offers they'd want first, then closest to even, then better for me.
-    results.sort((x, y) => (y.theirFit > 0) - (x.theirFit > 0)
+    // Offers they'd want first, then ones that also help me, then closest to even.
+    results.sort((x, y) => (y.theyWant - x.theyWant) || (y.iWant - x.iWant)
       || Math.abs(x.edge) - Math.abs(y.edge)
       || y.myFit - x.myFit);
     return results.slice(0, limit);
@@ -531,6 +551,6 @@
 
   return {
     createContext, assetValue, pickValue, pickTier, evaluate, suggestBalance,
-    bestLineup, teamWindows, fitScore, findTrades, shopOffers, starValue, DEFAULTS,
+    bestLineup, teamWindows, fitScore, meaningfulFit, findTrades, shopOffers, starValue, DEFAULTS, WINDOW_PREFS,
   };
 });

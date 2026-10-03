@@ -1048,7 +1048,7 @@ function tcRunShop() {
       }, TC.ctx);
       results = results.concat(offers.map((o) => ({ ...o, partner })));
     });
-    results.sort((x, y) => (y.theirFit > 0) - (x.theirFit > 0) || Math.abs(x.edge) - Math.abs(y.edge));
+    results.sort((x, y) => (y.theyWant - x.theyWant) || (y.iWant - x.iWant) || Math.abs(x.edge) - Math.abs(y.edge));
     state._finderResults = results;
     if (!results.length) {
       out.innerHTML = empty('No team has a fair offer with these filters. Try allowing picks or more pieces back.');
@@ -1131,31 +1131,68 @@ function tcRenderFinderFilters() {
   };
 }
 
-// Plain-language "why" for each team, based on what its mode cares about.
-function tcFitReason(teamId, gets, gives, windowLabel) {
+// Plain-language reasons for one team, ordered by what its mode cares about.
+// Returns [{ text, good }] (2–3 items).
+function tcFitReasons(teamId, gets, gives, windowLabel) {
   const team = teamById(teamId);
-  const sum = (list, key) => list.reduce((s, a) => {
-    const v = TradeEngine.assetValue(a, TC.ctx);
-    return s + (key === 'now' ? v.winNow : v.value);
-  }, 0);
-  const lineup = tcLineupImpact(team, gives.filter((a) => a.type === 'player').map((a) => a.id), gets.filter((a) => a.type === 'player').map((a) => a.id)) || 0;
-  const future = Math.round(sum(gets, 'value') - sum(gives, 'value'));
+  const val = (a) => TradeEngine.assetValue(a, TC.ctx);
+  const players = (list) => list.filter((a) => a.type === 'player');
+  const picks = (list) => list.filter((a) => a.type === 'pick');
+  const lineup = tcLineupImpact(team, players(gives).map((a) => a.id), players(gets).map((a) => a.id)) || 0;
+  const future = Math.round(gets.reduce((s, a) => s + val(a).value, 0) - gives.reduce((s, a) => s + val(a).value, 0));
+  // Rebuilders care where value will be in two years (age curves; picks hold).
+  const inTwo = (a) => { const v = val(a); return v.type === 'pick' ? v.value : (v.outlook && v.outlook[1] != null ? v.outlook[1] : v.value); };
+  const future2 = Math.round(gets.reduce((s, a) => s + inTwo(a), 0) - gives.reduce((s, a) => s + inTwo(a), 0));
   const avgAge = (list) => {
-    const ps = list.filter((a) => a.type === 'player').map((a) => tcPlayer(a.id)).filter((p) => p && p.a);
+    const ps = players(list).map((a) => tcPlayer(a.id)).filter((p) => p && p.a);
     const w = ps.reduce((s, p) => s + p.dv, 0);
     return w ? ps.reduce((s, p) => s + p.a * p.dv, 0) / w : null;
   };
   const ageGet = avgAge(gets), ageGive = avgAge(gives);
   const younger = ageGet != null && ageGive != null ? ageGive - ageGet : null;
-  const pts = Math.abs(lineup) < 0.05 ? null : `${lineup > 0 ? '+' : '−'}${Math.abs(lineup).toFixed(1)} pts/wk to the starting lineup`;
-  const fut = Math.abs(future) < 100 ? null : `${future > 0 ? '+' : '−'}${tcFmt(Math.abs(future))} long-term value`;
-  const age = younger != null && Math.abs(younger) >= 1 ? `${younger > 0 ? 'gets' : 'goes'} ${Math.abs(younger).toFixed(1)} yrs ${younger > 0 ? 'younger' : 'older'}` : null;
-  const parts = windowLabel === 'Contender'
-    ? [pts && `Now: ${pts}`, fut && `Later: ${fut}`]
-    : windowLabel === 'Rebuilder'
-      ? [fut && `Later: ${fut}`, age && `Roster ${age}`, pts && `Now: ${pts}`]
-      : [pts && `Now: ${pts}`, fut && `Later: ${fut}`, age && `Roster ${age}`];
-  return parts.filter(Boolean).slice(0, 2).join(' · ') || 'About even for their situation';
+  const pickName = (a) => a.label.replace(/ \(.*?\)/, '').replace(/ · via .*/, '').replace(' Rd ', ' Rd');
+  const pickList = (list) => list.map(pickName).join(', ');
+
+  const r = {};
+  if (Math.abs(lineup) >= 0.1) {
+    r.lineup = { good: lineup > 0, text: `${lineup > 0 ? '+' : '−'}${Math.abs(lineup).toFixed(1)} pts/wk to the starting lineup` };
+  }
+  if (windowLabel === 'Rebuilder') {
+    if (Math.abs(future2) >= 100) r.future = { good: future2 > 0, text: `${future2 > 0 ? '+' : '−'}${tcFmt(Math.abs(future2))} value two years from now` };
+  } else if (Math.abs(future) >= 100) {
+    r.future = { good: future > 0, text: `${future > 0 ? '+' : '−'}${tcFmt(Math.abs(future))} long-term value` };
+  }
+  if (younger != null && Math.abs(younger) >= 1) {
+    r.age = { good: windowLabel === 'Contender' ? true : younger > 0, text: `Gets ${Math.abs(younger).toFixed(1)} yrs ${younger > 0 ? 'younger' : 'older'} at these spots` };
+  }
+  const pg = picks(gets), pv = picks(gives);
+  if (pg.length || pv.length) {
+    if (windowLabel === 'Rebuilder') {
+      r.picks = pg.length && !pv.length
+        ? { good: true, text: `Adds ${pickList(pg)}, more swings at the draft` }
+        : pv.length && !pg.length
+          ? { good: false, text: `Gives up ${pickList(pv)} (rebuilders usually keep picks)` }
+          : { good: pg.length >= pv.length, text: `Swaps ${pickList(pv)} for ${pickList(pg)}` };
+    } else if (windowLabel === 'Contender') {
+      r.picks = pv.length && !pg.length
+        ? { good: true, text: `Turns ${pickList(pv)} into help now` }
+        : pg.length && !pv.length
+          ? { good: false, text: `Takes back ${pickList(pg)}, which won't help this season` }
+          : { good: true, text: `Swaps ${pickList(pv)} for ${pickList(pg)}` };
+    } else {
+      r.picks = { good: pg.length >= pv.length, text: pg.length ? `Adds ${pickList(pg)}` : `Gives up ${pickList(pv)}` };
+    }
+  }
+  const order = windowLabel === 'Contender' ? ['lineup', 'picks', 'future', 'age']
+    : windowLabel === 'Rebuilder' ? ['picks', 'future', 'age', 'lineup']
+      : ['lineup', 'future', 'picks', 'age'];
+  const out = order.map((k) => r[k]).filter(Boolean).slice(0, 3);
+  return out.length ? out : [{ good: true, text: 'About even for their situation' }];
+}
+
+// Short single-line version (kept for any caller that wants text only).
+function tcFitReason(teamId, gets, gives, windowLabel) {
+  return tcFitReasons(teamId, gets, gives, windowLabel).map((x) => x.text).join(' · ');
 }
 
 // Small headshot (or pick badge) + name + value for finder rows.
@@ -1230,20 +1267,36 @@ function tcRunFinder() {
 
 function tcFinderItemHTML(r, i, my, myWindow) {
   const theirWindow = tcWindowFor(r.partner.id).label;
-  const line = (ok, okTitle, noTitle, win, text) => `<div><span class="${ok ? 'tv-up' : 'tv-down'}">${ok ? '✓' : '!'}</span> <b>${ok ? okTitle : noTitle}</b> <span class="tv-window tv-window-${win.toLowerCase()}">${win}</span><br><span>${escapeHtml(text)}</span></div>`;
+  const iWant = r.iWant != null ? r.iWant : r.myFit > 0;
+  const theyWant = r.theyWant != null ? r.theyWant : r.theirFit > 0;
+  const winner = r.band.key === 'fair' ? null : r.edge > 0 ? 'You' : r.partner.name;
+  const reasons = (list) => `<ul class="tv-why-list">${list.map((x) => `<li class="${x.good ? 'good' : 'bad'}">${escapeHtml(x.text)}</li>`).join('')}</ul>`;
+  const side = (ok, okTitle, mixedTitle, noTitle, win, list) => {
+    const mixed = !ok && list.some((x) => x.good);
+    const icon = ok ? '<span class="tv-up">✓</span>' : mixed ? '<span class="tv-mixed">±</span>' : '<span class="tv-down">!</span>';
+    return `
+    <div class="tv-why-side">
+      <div class="tv-why-head">${icon} <b>${ok ? okTitle : mixed ? mixedTitle : noTitle}</b> <span class="tv-window tv-window-${win.toLowerCase()}">${win}</span></div>
+      ${reasons(list)}
+    </div>`;
+  };
   return `
     <div class="tv-finder-item" data-band="${r.band.key}">
       <div class="tv-finder-head">
         <b>${escapeHtml(r.partner.name)}</b>
+      </div>
+      <div class="tv-finder-score">
         <span class="tv-chip">${escapeHtml(r.band.label)}</span>
+        <span class="tv-compact-sub">${winner ? `Favors ${escapeHtml(winner)} · ${Math.round(Math.abs(r.edge) * 100)}%` : 'Even trade'}</span>
+        ${tcMiniBar(r.edge)}
       </div>
       <div class="tv-finder-sides">
         <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
         <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
       </div>
       <div class="tv-finder-why">
-        ${line(r.myFit > 0, 'Why it helps you', 'Trade-off for you', myWindow, tcFitReason(my.id, r.get, r.give, myWindow))}
-        ${line(r.theirFit > 0, "Why they'd say yes", 'They may need convincing', theirWindow, tcFitReason(r.partner.id, r.give, r.get, theirWindow))}
+        ${side(iWant, 'Why it helps you', 'Mixed for you', 'Trade-off for you', myWindow, tcFitReasons(my.id, r.get, r.give, myWindow))}
+        ${side(theyWant, "Why they'd say yes", 'Mixed for them', 'They may need convincing', theirWindow, tcFitReasons(r.partner.id, r.give, r.get, theirWindow))}
       </div>
       <button class="btn-ghost btn-sm" type="button" data-finder-load="${i}">Load into proposal</button>
     </div>`;

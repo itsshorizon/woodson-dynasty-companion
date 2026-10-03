@@ -3598,6 +3598,7 @@ function renderMyTeam() {
     </div>
 
     <!-- Hidden commish docs trigger (looks like a version watermark) -->
+    <button type="button" class="patch-notes-btn" data-open-patch-notes>📜 Patch Notes · every update so far</button>
     <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta ${escapeHtml(BUILD_ID)}</div>
   `;
 
@@ -4089,6 +4090,7 @@ async function checkForAppUpdates() {
             <summary>What's New in v${escapeHtml(data.version)} ▾</summary>
             <div class="update-notes-content">
               ${notesHtml}
+              <button type="button" class="patch-notes-link" data-open-patch-notes>📜 See all past updates</button>
             </div>
           </details>
           <button id="btn-force-refresh" type="button">⚡ Refresh &amp; Update Now</button>
@@ -4119,6 +4121,65 @@ async function checkForAppUpdates() {
     console.warn('Update check failed:', err);
   }
 }
+
+/* ----------------------- Patch Notes history ----------------------- */
+
+// Every release with its date, newest first. data/changelog.json is rebuilt
+// from git history by the daily data job; version.json fills in a release
+// that shipped since the last rebuild.
+async function openPatchNotes() {
+  let modal = $('#patch-notes-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'patch-notes-modal';
+    modal.innerHTML = `
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <button class="modal-close" aria-label="Close">×</button>
+          <h2>📜 Patch Notes</h2>
+          <p>Every update to the Woodson Clan app, newest first.</p>
+        </div>
+        <div class="modal-body patch-notes-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.modal-close').onclick = () => { modal.hidden = true; };
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+  }
+  // Above the update modal if it's open.
+  modal.style.zIndex = '10001';
+  const body = modal.querySelector('.patch-notes-body');
+  body.innerHTML = loading('Loading patch notes...');
+  modal.hidden = false;
+  try {
+    const [log, latest] = await Promise.all([
+      fetchJSON(`./data/changelog.json?t=${Date.now()}`).catch(() => ({ entries: [] })),
+      fetchJSON(`./version.json?t=${Date.now()}`).catch(() => null),
+    ]);
+    const entries = (log.entries || []).slice();
+    if (latest?.version && !entries.some((e) => e.version === latest.version)) {
+      entries.unshift({ version: latest.version, title: latest.title, date: null, notes: Array.isArray(latest.notes) ? latest.notes : [latest.notes].filter(Boolean) });
+    }
+    if (!entries.length) { body.innerHTML = empty('No patch notes yet.'); return; }
+    const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Just released');
+    body.innerHTML = entries.map((e, i) => `
+      <details class="patch-entry" ${i === 0 ? 'open' : ''}>
+        <summary>
+          <span class="patch-ver">v${escapeHtml(e.version)}${e.version === BUILD_ID ? ' <span class="patch-current">You have this</span>' : ''}</span>
+          <span class="patch-title">${escapeHtml(String(e.title || '').replace(/^Beta [\d.]+ - /, ''))}</span>
+          <span class="patch-date">${fmtDate(e.date)}</span>
+        </summary>
+        <ul>${(e.notes || []).map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
+      </details>`).join('');
+  } catch (err) {
+    console.warn('Patch notes failed:', err);
+    body.innerHTML = empty('Could not load patch notes.');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-open-patch-notes]')) { e.preventDefault(); openPatchNotes(); }
+});
 
 /* ===========================================================
  *  V2.1 ADDITIONS — Storyline badges, Consistency, Matchmaker,
@@ -5712,7 +5773,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.17.0';
+const BUILD_ID = '1.18.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

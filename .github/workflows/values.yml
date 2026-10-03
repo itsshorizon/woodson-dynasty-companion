@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v5
         with:
@@ -41,6 +43,9 @@ jobs:
       - name: Cache team logos
         run: node pipeline/cache-logos.js
         continue-on-error: true
+
+      - name: Build changelog
+        run: node pipeline/build-changelog.js
 
       - name: Engine tests against fresh data
         run: node --test tests/*.test.js

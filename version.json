@@ -1,9 +1,10 @@
 {
-  "version": "1.17.0",
-  "title": "🛒 Shop Your Players",
+  "version": "1.18.0",
+  "title": "📜 Patch Notes + Smarter Fits",
   "notes": [
-    "🛒 NEW in the Trade Finder: Shop my players. Pick up to 3 players or picks you're selling and see what every team could offer that's fair.",
-    "🎚️ Choose what you'll take back (players, picks, or both) and how many pieces (1, 2 or 3).",
-    "✓ Best fits first, with why each team would say yes. One tap loads an offer into a proposal."
+    "📜 NEW: Patch Notes. Read every update and when it shipped (find it at the bottom of My Team).",
+    "🧠 Trade Finder fits now match team mode: Rebuilders hold onto picks and youth, Contenders turn picks into help now.",
+    "📝 Every suggestion lists the specific reasons it works for each side, plus the fairness bar at a glance.",
+    "🔘 Bigger Find buttons so they're easy to spot."
   ]
 }
