@@ -3092,6 +3092,11 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   margin-bottom: 8px;
 }
 .block-info { min-width: 0; }
+.block-entry.clickable { cursor: pointer; }
+.block-entry .pos-tag { display: none; } /* position already shows as a chip */
+.block-stats { margin-top: 3px; }
+.block-injury { color: var(--red); font-weight: 800; }
+.block-entry .tv-row-val-line { margin-top: 2px; }
 .block-player {
   font-size: 14px;
   font-weight: 800;

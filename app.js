@@ -24,6 +24,7 @@ const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'FLEX', 'OP', 'BE', 'IR']
 const state = {
   teams: [],
   matchups: [],
+  schedule: [],            // full ESPN schedule for the season (luck math)
   boxscores: {},           // { [week]: { byTeam: { [teamId]: players[] }, live } }
   expandedMatchups: new Set(),
   logoIndex: { cached: {}, custom: {}, version: '' }, // see loadLogoIndex()
@@ -318,6 +319,7 @@ async function loadLeagueData() {
     const raw = await fetchLeague(['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mStandings', 'mSettings', 'mStatProj']);
     state.teams = parseTeams(raw).sort((a, b) => a.playoffSeed - b.playoffSeed);
     state.matchups = parseMatchups(raw);
+    state.schedule = raw.schedule || [];
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
     meta.textContent = `${CONFIG.SEASON} • Wk ${state.currentWeek} • ${state.teams.length} Teams`;
     return true;
@@ -842,7 +844,9 @@ function teamOptionAttrs(team, sub = team.owner) {
 //   'mine'  → "Block" / "Unblock" toggle
 //   'other' → "Trade For" + (conditional) "Interested"
 //   'none'  → no buttons
-function renderPlayerRow(player, ownerTeam, context = 'none') {
+// At-a-glance stats shared by roster rows and the trade block:
+// positional rank, season points (or projection), and PPG.
+function playerStatsLineHTML(player) {
   const proj = projectedPoints(player);
   const act = actualPoints(player);
   const ppg = ppgFor(player);
@@ -854,8 +858,12 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
     : '';
   const ppgChunk = ppg != null ? ` · <b style="color:var(--text);">${ppg.toFixed(1)}</b> <span class="stat-lbl">PPG</span>` : '';
   const rankChunk = rank ? `<span class="pos-rank">${escapeHtml(rank)}</span>` : '';
+  return (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
+}
+
+function renderPlayerRow(player, ownerTeam, context = 'none') {
   const valueChunk = typeof tcValueChipHTML === 'function' ? tcValueChipHTML(player.id) : '';
-  const points = (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
+  const points = playerStatsLineHTML(player);
 
   const blockEntry = findBlockEntry(player.id);
   // Beta 1.9: strict prefix checks. An int_ row (private interest signal) must
@@ -1251,25 +1259,29 @@ function renderTradeBlockSection() {
     const meId = state.myTeamId;
     const youInterested = interested.map(String).includes(String(meId));
 
-    // Reconstruct a player-like object so playerPhotoHTML can render the ESPN headshot.
-    const pseudoPlayer = {
-      id: parseInt(entry.playerId, 10),
-      name: entry.playerName,
-      pos: entry.playerPos,
-    };
+    // Prefer the live roster player (stats, injury); fall back to the sheet row if dropped.
+    const pid = parseInt(entry.playerId, 10);
+    const live = findPlayerAnywhere(pid);
+    const player = live || { id: pid, name: entry.playerName, pos: entry.playerPos };
+    const injury = live?.injuryStatus && live.injuryStatus !== 'ACTIVE'
+      ? `<span class="block-injury">${escapeHtml(live.injuryStatus)}</span> • ` : '';
+    const stats = live ? playerStatsLineHTML(live) : '<span class="stat-lbl">No longer rostered</span>';
+    const value = live && typeof tcValueChipHTML === 'function' ? tcValueChipHTML(pid) : '';
 
     return `
-      <div class="block-entry">
-        ${playerPhotoHTML(pseudoPlayer)}
+      <div class="block-entry ${live ? 'clickable' : ''}" ${live ? `data-player-id="${pid}"` : ''}>
+        ${playerPhotoHTML(player)}
         <div class="block-info">
-          <div class="block-player">${escapeHtml(entry.playerName)} <span class="block-pos pos-${entry.playerPos}">${escapeHtml(entry.playerPos)}</span></div>
+          <div class="block-player">${escapeHtml(player.name)} <span class="block-pos pos-${escapeHtml(player.pos)}">${escapeHtml(player.pos)}</span></div>
+          ${stats ? `<div class="player-meta block-stats">${injury}${stats}</div>` : ''}
+          ${value ? `<div class="player-meta tv-row-val-line">${value}</div>` : ''}
           <div class="block-owner">Owned by ${escapeHtml(ownerName)}${isOwner ? ` • ${interested.length} interested` : ''}</div>
           ${isOwner && interested.length ? `<div class="block-interest-list">From: ${interested.map((id) => escapeHtml(teamName(parseInt(id, 10)))).join(', ')}</div>` : ''}
         </div>
         <div class="block-actions">
           ${isOwner
             ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}">★ Unblock</button>`
-            : ownerTeam ? `
+            : ownerTeam && live ? `
               <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
               <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}">${youInterested ? '✓ Interested' : '+ Interested'}</button>
             ` : ''}
@@ -1696,6 +1708,79 @@ const quadrantLinePlugin = {
 };
 
 // Draw thick-ring data dots with the team initials inside.
+/* ----------------------- Luck: wins vs expected wins -----------------------
+ * Expected wins for a week = share of the league you outscored that week
+ * (beat 9 of 11 teams = 0.82). Luck = actual wins - expected wins.
+ * Callers cap throughWeek at the regular season (regularSeasonWeeks), since
+ * consolation brackets keep every team playing into the playoffs. Weeks where
+ * not every team has a final score (in progress, byes) are skipped.
+ * --------------------------------------------------------------------------- */
+
+// Regular-season length = games on any team's ESPN record (raw or parsed team).
+function regularSeasonWeeks(teams) {
+  return Math.max(0, ...(teams || []).map((t) => {
+    const r = t.record?.overall || t;
+    return (r.wins || 0) + (r.losses || 0) + (r.ties || 0);
+  }));
+}
+
+function computeSeasonLuck(schedule, throughWeek = Infinity) {
+  const byWeek = new Map(); // week -> Map(teamId -> { pts, opp })
+  (schedule || []).forEach((m) => {
+    const wk = m.matchupPeriodId;
+    if (!wk || wk > throughWeek || !m.home || !m.away || m.winner === 'UNDECIDED') return;
+    const hp = m.home.totalPoints || 0, ap = m.away.totalPoints || 0;
+    if (!hp || !ap) return;
+    if (!byWeek.has(wk)) byWeek.set(wk, new Map());
+    const week = byWeek.get(wk);
+    if (!week.has(m.home.teamId)) week.set(m.home.teamId, { pts: hp, opp: ap });
+    if (!week.has(m.away.teamId)) week.set(m.away.teamId, { pts: ap, opp: hp });
+  });
+  const fullWeek = Math.max(0, ...[...byWeek.values()].map((w) => w.size));
+  const out = {};
+  byWeek.forEach((week) => {
+    if (week.size < fullWeek || week.size < 2) return;
+    const rows = [...week];
+    rows.forEach(([id, r]) => {
+      let beat = 0;
+      rows.forEach(([oid, o]) => { if (oid !== id) beat += r.pts > o.pts ? 1 : r.pts === o.pts ? 0.5 : 0; });
+      const slot = (out[id] = out[id] || { wins: 0, expWins: 0, games: 0 });
+      slot.expWins += beat / (rows.length - 1);
+      slot.wins += r.pts > r.opp ? 1 : r.pts === r.opp ? 0.5 : 0;
+      slot.games += 1;
+    });
+  });
+  Object.values(out).forEach((v) => { v.luck = v.wins - v.expWins; });
+  return out;
+}
+
+// Career luck per manager: each season's luck, mapped team -> member and summed.
+function computeCareerLuck() {
+  const out = {};
+  Object.values(state.history).forEach((season) => {
+    const luck = computeSeasonLuck(season.schedule, regularSeasonWeeks(season.teams));
+    Object.entries(luck).forEach(([teamId, v]) => {
+      const memberId = season.teamToMemberId?.[teamId];
+      if (!memberId) return;
+      const slot = (out[memberId] = out[memberId] || { wins: 0, expWins: 0, games: 0 });
+      slot.wins += v.wins; slot.expWins += v.expWins; slot.games += v.games;
+    });
+  });
+  Object.values(out).forEach((v) => { v.luck = v.wins - v.expWins; });
+  return out;
+}
+
+// Shared tooltip line for the luck scatters.
+function luckTooltip(p, pfLabel = 'PF', paLabel = 'PA') {
+  const base = `${p.label}: ${pfLabel} ${p.x.toFixed(1)} / ${paLabel} ${p.y.toFixed(1)}`;
+  if (!p.luck) return base;
+  const { wins, expWins, luck } = p.luck;
+  const verdict = Math.abs(luck) < 0.05 ? 'right on expected'
+    : `${luck > 0 ? 'lucky' : 'unlucky'} by ${Math.abs(luck).toFixed(1)}`;
+  return [base, `${fmtWins(wins)} W, expected ${expWins.toFixed(1)} · ${verdict}`];
+}
+const fmtWins = (w) => (Number.isInteger(w) ? String(w) : w.toFixed(1));
+
 const teamRingPlugin = {
   id: 'teamRings',
   afterDatasetsDraw(chart) {
@@ -1722,6 +1807,20 @@ const teamRingPlugin = {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(initials, x, y + 0.5);
+      // Luck badge: wins above/below expected, skipped when close to zero.
+      const luck = raw.luck?.luck;
+      if (luck != null && Math.abs(luck) >= 0.5) {
+        const txt = `${luck > 0 ? '+' : '−'}${Math.abs(luck).toFixed(1)}`;
+        ctx.font = 'bold 9px Inter, sans-serif';
+        const w = ctx.measureText(txt).width + 8;
+        const by = y + r + 7;
+        ctx.fillStyle = luck > 0 ? 'rgba(241, 196, 15, 0.95)' : 'rgba(76, 201, 240, 0.95)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - w / 2, by - 6, w, 12, 6); else ctx.rect(x - w / 2, by - 6, w, 12);
+        ctx.fill();
+        ctx.fillStyle = '#0a1410';
+        ctx.fillText(txt, x, by + 0.5);
+      }
     });
     ctx.restore();
   },
@@ -1735,11 +1834,13 @@ function renderScheduleLuckChart() {
   // bounds when returning to the tab via the slide transition).
   if (_luckChart) { _luckChart.destroy(); _luckChart = null; }
 
-  const points = state.teams.map((t, i) => ({
+  const luck = computeSeasonLuck(state.schedule, regularSeasonWeeks(state.teams));
+  const points = state.teams.map((t) => ({
     x: t.pf,
     y: t.pa,
     label: t.name,
     abbrev: t.abbrev || t.name.slice(0, 6),
+    luck: luck[t.id] || null,
   }));
   const medX = _median(points.map((p) => p.x));
   const medY = _median(points.map((p) => p.y));
@@ -1764,16 +1865,13 @@ function renderScheduleLuckChart() {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => {
-              const p = ctx.raw;
-              return `${p.label}: PF ${p.x.toFixed(1)} / PA ${p.y.toFixed(1)}`;
-            },
+            label: (ctx) => luckTooltip(ctx.raw),
           },
         },
       },
       scales: {
         x: { title: { display: true, text: 'Points For →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { reverse: true, title: { display: true, text: 'Points Against ↓', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { title: { display: true, text: 'Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
@@ -4670,7 +4768,7 @@ function historicalCareerArcHTML(playerId) {
 document.addEventListener('click', (e) => {
   // Ignore if the click was on an actionable button or its descendants
   if (e.target.closest('.player-action, button, input, label, select, a')) return;
-  const row = e.target.closest('.player-row');
+  const row = e.target.closest('.player-row, .block-entry.clickable');
   if (!row) return;
   // Try several signals: data-player-id, the photo's player-id, or first checkbox value
   let pid = parseInt(row.dataset.playerId, 10);
@@ -4921,10 +5019,7 @@ let _alltimeLuckChart = null;
 function renderAllTimeLuckChart() {
   const canvas = $('#alltime-luck-chart');
   if (!canvas || typeof Chart === 'undefined') return;
-  const rows = computeManagerLedger();
-  const data = rows
-    .filter((r) => r.avgPF > 0)
-    .map((r) => ({ x: r.avgPF, y: r.avgPA, label: r.name, abbrev: r.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 3) }));
+  const data = _luckAllTimeData();
   if (!data.length) return;
   const medX = _median(data.map((d) => d.x));
   const medY = _median(data.map((d) => d.y));
@@ -4946,11 +5041,11 @@ function renderAllTimeLuckChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.raw.label}: avg PF ${ctx.raw.x.toFixed(1)} / avg PA ${ctx.raw.y.toFixed(1)}` } },
+        tooltip: { callbacks: { label: (ctx) => luckTooltip(ctx.raw, 'avg PF', 'avg PA') } },
       },
       scales: {
         x: { title: { display: true, text: 'Lifetime Avg PF →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { reverse: true, title: { display: true, text: 'Lifetime Avg PA ↓', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { title: { display: true, text: 'Avg Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
@@ -5384,9 +5479,10 @@ function _luckSeasonDataThrough(year, throughWeek) {
     if (accum[h.teamId]) { accum[h.teamId].pf += hp; accum[h.teamId].pa += ap; accum[h.teamId].n++; }
     if (accum[a.teamId]) { accum[a.teamId].pf += ap; accum[a.teamId].pa += hp; accum[a.teamId].n++; }
   });
-  return Object.values(accum)
-    .filter((r) => r.n > 0)
-    .map((r) => ({ x: r.pf / r.n, y: r.pa / r.n, label: r.name, abbrev: r.abbrev }));
+  const luck = computeSeasonLuck(season.schedule, Math.min(throughWeek, regularSeasonWeeks(season.teams)));
+  return Object.entries(accum)
+    .filter(([, r]) => r.n > 0)
+    .map(([id, r]) => ({ x: r.pf / r.n, y: r.pa / r.n, label: r.name, abbrev: r.abbrev, luck: luck[id] || null }));
 }
 
 // Rewrite the existing alltime-luck-chart data + medians and trigger a smooth update.
@@ -5402,11 +5498,13 @@ function _updateLuckChartFor(year, week) {
 
 function _luckAllTimeData() {
   const rows = computeManagerLedger();
+  const luck = computeCareerLuck();
   return rows
     .filter((r) => r.avgPF > 0)
     .map((r) => ({
       x: r.avgPF, y: r.avgPA, label: r.name,
       abbrev: r.name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 3),
+      luck: luck[r.id] || null,
     }));
 }
 
@@ -5484,7 +5582,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.16.0';
+const BUILD_ID = '1.16.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
