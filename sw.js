@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wcc-v1.12.0';
+const CACHE_NAME = 'wcc-v1.12.1';
 const CORE_ASSETS = [
   './',
   './index.html',

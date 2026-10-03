@@ -25,6 +25,7 @@ const state = {
   teams: [],
   matchups: [],
   allTrades: [],
+  weeklyHistory: {},
   pendingTrades: [],
   draftPicks: [],
   tradeBlock: [],
@@ -673,6 +674,7 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
     : '';
   const ppgChunk = ppg != null ? ` · <b style="color:var(--text);">${ppg.toFixed(1)}</b> <span class="stat-lbl">PPG</span>` : '';
   const rankChunk = rank ? `<span class="pos-rank">${escapeHtml(rank)}</span>` : '';
+  const valueChunk = typeof tcValueChipHTML === 'function' ? tcValueChipHTML(player.id) : '';
   const points = (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
 
   const blockEntry = findBlockEntry(player.id);
@@ -699,6 +701,7 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
       <div class="player-info">
         <div class="player-name">${escapeHtml(player.name)}${isPubliclyBlocked ? ' <span class="block-tag">ON BLOCK</span>' : ''}</div>
         <div class="player-meta">${escapeHtml(player.slot)}${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? ' • ' + escapeHtml(player.injuryStatus) : ''}${points ? ' • ' + points : ''}</div>
+        ${valueChunk ? `<div class="player-meta tv-row-val-line">${valueChunk}</div>` : ''}
         ${actions ? `<div class="player-actions">${actions}</div>` : ''}
       </div>
     </div>
@@ -3569,7 +3572,17 @@ async function boot() {
   document.body.dataset.theme = 'standings'; // initial tab theme
   $('#standings-content').innerHTML = skeletonRows(8);
 
-  const ok = await loadLeagueData();
+  // Beta 1.12: weekly history + trade values load alongside ESPN so the first
+  // render already has full-season PPG and value chips. trade-calc.js loads after
+  // this file, so wait for the DOM before calling into it.
+  const domReady = document.readyState === 'loading'
+    ? new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }))
+    : Promise.resolve();
+  const [ok] = await Promise.all([
+    loadLeagueData(),
+    loadWeeklyHistory(),
+    domReady.then(() => (typeof tcLoad === 'function' ? tcLoad() : null)),
+  ]);
   if (ok) {
     renderStandings();
     renderScores();
@@ -3730,9 +3743,15 @@ function renderBadgesHTML(badges) {
 // Consistency = % of COMPLETED weekly games where actual (not projected) score ≥ 10.0
 // Filters strictly to statSourceId=0 (actual), statSplitTypeId=1 (week), current season,
 // and skips weeks where the player was inactive (appliedTotal == 0 with no other signal).
+// Beta 1.12: ESPN's roster feed only carries the latest week, so full-season
+// history comes from data/weekly.json (built daily by the data job). Live ESPN
+// entries win for any week they cover (the in-progress week).
 function weeklyActualLog(player) {
-  if (!player || !Array.isArray(player.stats)) return [];
-  return player.stats
+  if (!player) return [];
+  const byWeek = new Map();
+  const history = state.weeklyHistory?.[String(player.id)] || [];
+  history.forEach(([week, points]) => byWeek.set(week, points));
+  (Array.isArray(player.stats) ? player.stats : [])
     .filter((s) =>
       s &&
       s.statSourceId === 0 &&
@@ -3741,8 +3760,19 @@ function weeklyActualLog(player) {
       s.appliedTotal != null &&
       s.scoringPeriodId > 0
     )
-    .map((s) => ({ week: s.scoringPeriodId, points: s.appliedTotal }))
+    .forEach((s) => byWeek.set(s.scoringPeriodId, s.appliedTotal));
+  return [...byWeek.entries()]
+    .map(([week, points]) => ({ week, points }))
     .sort((a, b) => a.week - b.week);
+}
+
+async function loadWeeklyHistory() {
+  try {
+    const data = await fetchJSON('./data/weekly.json');
+    if (data?.season === CONFIG.SEASON) state.weeklyHistory = data.players || {};
+  } catch (err) {
+    console.warn('Weekly history unavailable:', err);
+  }
 }
 function consistencyScoreFor(player) {
   const log = weeklyActualLog(player);
@@ -3769,12 +3799,10 @@ function tradeSideSummary(side) {
     const proj = projectedPoints(live);
     const act = actualPoints(live);
     if (proj != null) projected += proj;
-    // PPG: actual season total / weeks played (estimated from stats if present)
-    const weekly = Array.isArray(live.stats)
-      ? live.stats.filter((s) => s.statSplitTypeId === 1 && s.seasonId === CONFIG.SEASON && s.appliedTotal != null)
-      : [];
-    if (weekly.length) {
-      ppg += weekly.reduce((s, x) => s + x.appliedTotal, 0) / weekly.length;
+    // PPG: average of weeks actually played
+    const livePpg = ppgFor(live);
+    if (livePpg != null && weeklyActualLog(live).some((w) => w.points > 0)) {
+      ppg += livePpg;
       ppgN++;
     } else if (act != null && act > 0) {
       // Rough fallback: divide by current week
@@ -5242,7 +5270,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.12.0';
+const BUILD_ID = '1.12.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

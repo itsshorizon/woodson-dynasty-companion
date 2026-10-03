@@ -1,13 +1,9 @@
 {
-  "version": "1.12.0",
-  "title": "🚨 The Trade Calculator Is HERE!",
+  "version": "1.12.1",
+  "title": "📈 Values on Every Player Card",
   "notes": [
-    "🏈 Our biggest update ever: every trade now gets a grade.",
-    "⚖️ FAIRNESS METER: see instantly if a deal is Fair, a Slight Edge, Lopsided or a FLEECE.",
-    "📊 Real values from FantasyCalc + DynastyProcess, updated daily and tuned to OUR scoring.",
-    "⭐ Stacking bench guys never adds up to a stud. Getting the best player counts.",
-    "🔍 TRADE FINDER: fair deals that help BOTH teams, loaded with one tap.",
-    "👤 PLAYER PROFILES: dynasty value, 3-year outlook, NFL contract, injury history and more.",
-    "👍👎 Rate any grade to help tune it. Now go make some moves! 🔥"
+    "💎 Every player card in My Team and Rosters now shows their trade value, with ▲▼ when it's moving.",
+    "🛠️ FIXED: PPG and consistency now use every week of the season, not just last week.",
+    "📊 FIXED: weekly performance bars in player profiles now show every week at the right height."
   ]
 }

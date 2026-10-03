@@ -480,6 +480,19 @@ function tcValuationField(a, b) {
   };
 }
 
+/* ----------------------- Roster value chips ----------------------- */
+
+// Dynasty trade value at a glance on My Team / Rosters player cards.
+function tcValueChipHTML(playerId) {
+  if (!TC.ctx) return '';
+  const p = tcPlayer(playerId);
+  if (!p) return '';
+  // Trend arrow only when the 30-day move is meaningful (5%+).
+  const moved = p.tr != null && p.dv > 0 && Math.abs(p.tr) / p.dv >= 0.05;
+  const arrow = moved ? (p.tr > 0 ? '<span class="tv-up">▲</span>' : '<span class="tv-down">▼</span>') : '';
+  return `<span class="tv-row-val" title="Dynasty trade value${p.tr != null ? ` (30-day change ${p.tr > 0 ? '+' : ''}${tcFmt(p.tr)})` : ''}">${arrow}<b>${tcFmt(p.dv)}</b> <span class="stat-lbl">VALUE</span></span>`;
+}
+
 /* ----------------------- Trade builder integration ----------------------- */
 
 let _tcBuilderWired = false;

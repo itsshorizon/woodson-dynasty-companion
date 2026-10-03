@@ -1261,6 +1261,9 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   gap: 4px;
   padding: 0 18px 6px;
   height: 130px;
+  /* The profile modal body is a flex column; without this the chart got
+     squeezed to a few pixels and every bar looked the same height. */
+  flex-shrink: 0;
 }
 .weekly-bar {
   flex: 1;
@@ -3959,3 +3962,9 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .tv-feedback-actions .btn-ghost { margin-top: 0; }
 .tv-feedback-send { border-style: solid; color: var(--text); }
 .tv-feedback-thanks { color: var(--tv-fair); }
+
+/* Trade value on roster player cards */
+.tv-row-val { white-space: nowrap; }
+.tv-row-val b { color: var(--tab-accent); font-variant-numeric: tabular-nums; }
+.tv-row-val .tv-up, .tv-row-val .tv-down { font-size: 9px; margin-right: 2px; }
+.tv-row-val-line { margin-top: 2px; }

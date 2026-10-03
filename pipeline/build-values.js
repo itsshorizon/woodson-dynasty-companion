@@ -127,6 +127,42 @@ async function loadSources() {
     snaps2026, contracts };
 }
 
+/* ---------------- weekly fantasy points (ESPN, our scoring) ---------------- */
+
+// ESPN's league roster feed only carries the latest week, so the app never saw
+// a player's full season. Pull every week for every relevant player once here.
+async function fetchEspnWeekly(rosteredIds, currentWeek) {
+  const base = `${ESPN}?view=kona_player_info&scoringPeriodId=${currentWeek}`;
+  const statFilters = {
+    filterStatsForSourceIds: { value: [0] },
+    filterStatsForSplitTypeIds: { value: [1] },
+    filterStatsForTopScoringPeriodIds: { value: 18, additionalValue: [`00${SEASON}`] },
+  };
+  const request = async (filter) => {
+    const res = await fetch(base, {
+      headers: { 'x-fantasy-filter': JSON.stringify({ players: { ...filter, ...statFilters } }), 'User-Agent': 'woodson-dynasty-companion' },
+    });
+    if (!res.ok) throw new Error(`ESPN weekly HTTP ${res.status}`);
+    return (await res.json()).players || [];
+  };
+  const [top, rostered] = await Promise.all([
+    request({ filterSlotIds: { value: [0, 2, 4, 6, 23] }, sortPercOwned: { sortPriority: 1, sortAsc: false }, limit: 600 }),
+    request({ filterIds: { value: rosteredIds.map(Number) } }),
+  ]);
+  const out = {};
+  for (const entry of top.concat(rostered)) {
+    const p = entry.player;
+    if (!p || out[p.id]) continue;
+    const weeks = (p.stats || [])
+      .filter((st) => st.seasonId === SEASON && st.statSourceId === 0 && st.statSplitTypeId === 1
+        && st.scoringPeriodId >= 1 && st.scoringPeriodId <= currentWeek && st.appliedTotal != null)
+      .map((st) => [st.scoringPeriodId, round(st.appliedTotal, 2)])
+      .sort((a, b) => a[0] - b[0]);
+    if (weeks.length) out[p.id] = weeks;
+  }
+  return out;
+}
+
 /* ---------------- id mapping (everything → ESPN id) ---------------- */
 
 function buildIdMaps(src) {
@@ -558,6 +594,10 @@ async function main() {
     .map((p) => p.adjusted * k).sort((a, b) => b - a);
   replacement.ALL = Math.round(freeAll[CONFIG.engine.replacementRank - 1] || 0);
 
+  // Week-by-week fantasy points for the app's PPG / consistency / weekly bars.
+  const currentWeek = src.league.scoringPeriodId || 1;
+  const weekly = await optional(fetchEspnWeekly([...rostered.keys()], currentWeek), 'ESPN weekly points');
+
   // Details sources.
   const leagueScore = format.scoring;
   const stats = {
@@ -669,6 +709,12 @@ async function main() {
   console.log('\nTop 12:');
   for (const s of sample) console.log(`  ${s.n.padEnd(24)} ${s.p} ${String(s.a).padEnd(5)} dyn ${String(s.dv).padStart(5)}  now ${String(s.wn).padStart(5)}  ${s.w}`);
 
+  if (weekly) {
+    const withWeeks = Object.keys(weekly).length;
+    const rosteredWithWeeks = [...rostered.keys()].filter((id) => weekly[id]).length;
+    console.log(`\nWeekly points: ${withWeeks} players through week ${currentWeek} (${rosteredWithWeeks}/${rostered.size} rostered)`);
+  }
+
   if (unmatchedShare > MAX_UNMATCHED) {
     throw new Error(`Too many rostered players without values (${unmatched.length}). Check the id mapping before publishing.`);
   }
@@ -677,6 +723,7 @@ async function main() {
     fs.mkdirSync(path.join(DATA_DIR, 'history'), { recursive: true });
     fs.writeFileSync(path.join(DATA_DIR, 'values.json'), JSON.stringify(values));
     fs.writeFileSync(path.join(DATA_DIR, 'player-details.json'), JSON.stringify({ generatedAt, season: SEASON, players: detailsOut }));
+    if (weekly) fs.writeFileSync(path.join(DATA_DIR, 'weekly.json'), JSON.stringify({ generatedAt, season: SEASON, throughWeek: currentWeek, players: weekly }));
     const day = generatedAt.slice(0, 10);
     fs.writeFileSync(path.join(DATA_DIR, 'history', `${day}.json`), JSON.stringify({ d: day, p: historyOut, k: pickValues }));
     updateHistoryIndex(Object.keys(valuesOut));
