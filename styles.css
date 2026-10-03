@@ -2611,9 +2611,11 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   height: 260px;
 }
 .chart-wrap.chart-tall { height: 320px; }
+.chart-wrap.chart-luck { height: 380px; } /* room for spread-out team rings */
 @media (min-width: 700px) {
   .chart-wrap { height: 320px; }
   .chart-wrap.chart-tall { height: 380px; }
+  .chart-wrap.chart-luck { height: 460px; }
 }
 
 /* ---------- Modal (team picker) ---------- */

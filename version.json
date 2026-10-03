@@ -4,6 +4,7 @@
   "notes": [
     "🛠️ FIXED: the Schedule Luck chart had its up/down flipped, so teams landed in the wrong quadrant. Same fix in the Vault's Career Luck Matrix.",
     "🍀 New luck badge on every team: wins above (+) or below (−) what your weekly scores earned.",
+    "🔍 Crowded luck charts now spread teams apart. A small dot and line show each team's exact spot.",
     "📋 Trade Block players now show their value and stats. Tap a card to open the full profile."
   ]
 }

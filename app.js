@@ -1781,27 +1781,135 @@ function luckTooltip(p, pfLabel = 'PF', paLabel = 'PA') {
 }
 const fmtWins = (w) => (Number.isInteger(w) ? String(w) : w.toFixed(1));
 
+/* Team rings for the luck scatters.
+ * Crowded teams get spread apart for legibility: each ring is nudged off its
+ * neighbors (badge included), and when it moves, a small dot plus a thin
+ * leader line mark the team's true position. Hover and tap target the ring
+ * where it's drawn, not the hidden data point underneath.
+ */
+const RING_R = 16;
+
+function layoutRings(chart) {
+  const meta = chart.getDatasetMeta(0);
+  const data = chart.data.datasets[0].data;
+  const { left, right, top, bottom } = chart.chartArea;
+  const r = RING_R, pad = 3;
+  const nodes = meta.data.map((pt, i) => {
+    const hasBadge = Math.abs(data[i]?.luck?.luck ?? 0) >= 0.5;
+    // Footprint: ring plus the luck badge hanging below it.
+    return { i, tx: pt.x, ty: pt.y, x: pt.x, y: pt.y, below: hasBadge ? r + 15 : r + pad };
+  });
+  // A ring may move, but its center never leaves its true quadrant, or the
+  // chart would tell a different story than the data.
+  const xMid = chart.$medX != null ? chart.scales.x.getPixelForValue(chart.$medX) : null;
+  const yMid = chart.$medY != null ? chart.scales.y.getPixelForValue(chart.$medY) : null;
+  const keep = 6;
+  const clamp = (n) => {
+    n.x = Math.min(right - r - 2, Math.max(left + r + 2, n.x));
+    n.y = Math.min(bottom - n.below, Math.max(top + r + 2, n.y));
+    if (xMid != null) n.x = n.tx >= xMid ? Math.max(n.x, xMid + keep) : Math.min(n.x, xMid - keep);
+    if (yMid != null) n.y = n.ty >= yMid ? Math.max(n.y, yMid + keep) : Math.min(n.y, yMid - keep);
+  };
+  // Quadrant corner labels (drawn by quadrantLinePlugin) are fixed obstacles.
+  chart.ctx.save();
+  chart.ctx.font = 'bold 11px Inter, sans-serif';
+  const w = (t) => chart.ctx.measureText(t).width;
+  const labels = [
+    { x1: left + 4, x2: left + 12 + w('REBUILDERS'), y1: top, y2: top + 23 },
+    { x1: right - 74, x2: right - 66 + w('UNLUCKY'), y1: top, y2: top + 23 },
+    { x1: left + 4, x2: left + 12 + w('LUCKY WINS'), y1: bottom - 23, y2: bottom },
+    { x1: right - 90, x2: right - 82 + w('CONTENDERS'), y1: bottom - 23, y2: bottom },
+  ];
+  chart.ctx.restore();
+  const avoidLabels = (n) => {
+    labels.forEach((L) => {
+      const ox = Math.min(n.x + r + pad, L.x2) - Math.max(n.x - r - pad, L.x1);
+      const oy = Math.min(n.y + n.below, L.y2) - Math.max(n.y - r - pad, L.y1);
+      if (ox <= 0 || oy <= 0) return;
+      const atTop = L.y1 === top;
+      // Move whichever way is shorter: off the label vertically or sideways.
+      const dy = atTop ? L.y2 - (n.y - r - pad) : -((n.y + n.below) - L.y1);
+      const dx = n.x < (L.x1 + L.x2) / 2 ? -((n.x + r + pad) - L.x1) : L.x2 - (n.x - r - pad);
+      if (Math.abs(dy) <= Math.abs(dx)) n.y += dy; else n.x += dx;
+    });
+  };
+  for (let it = 0; it < 150; it++) {
+    // Gentle pull home first, so the last step of each pass is separation.
+    nodes.forEach((n) => { n.x += (n.tx - n.x) * 0.02; n.y += (n.ty - n.y) * 0.02; });
+    let moved = false;
+    for (let a = 0; a < nodes.length; a++) {
+      for (let b = a + 1; b < nodes.length; b++) {
+        const A = nodes[a], B = nodes[b];
+        const ox = 2 * (r + pad) - Math.abs(A.x - B.x);
+        const oy = Math.min(A.y + A.below, B.y + B.below) - Math.max(A.y - r - pad, B.y - r - pad);
+        if (ox <= 0 || oy <= 0) continue;
+        moved = true;
+        // Push apart along whichever axis needs less movement.
+        if (ox < oy) {
+          const d = (A.x <= B.x ? -1 : 1) * ox / 2;
+          A.x += d; B.x -= d;
+        } else {
+          const d = (A.y <= B.y ? -1 : 1) * oy / 2;
+          A.y += d; B.y -= d;
+        }
+      }
+    }
+    nodes.forEach((n) => { avoidLabels(n); clamp(n); });
+    if (!moved) break;
+  }
+  return nodes;
+}
+
+if (typeof Chart !== 'undefined' && Chart.Tooltip?.positioners) {
+  // Anchor tooltips above the drawn ring rather than the true data point.
+  Chart.Tooltip.positioners.ringAnchor = function (items) {
+    const n = this.chart.$ringNodes?.find((node) => node.i === items[0]?.index);
+    return n ? { x: n.x, y: n.y - RING_R } : false;
+  };
+}
+
 const teamRingPlugin = {
   id: 'teamRings',
   afterDatasetsDraw(chart) {
     const meta = chart.getDatasetMeta(0);
     if (!meta || !meta.data) return;
     const ctx = chart.ctx;
+    const r = RING_R;
+    const nodes = layoutRings(chart);
+    chart.$ringNodes = nodes;
+    const data = chart.data.datasets[0].data;
     ctx.save();
-    meta.data.forEach((pt, i) => {
-      const raw = chart.data.datasets[0].data[i];
+
+    // 1) True-position markers + leader lines for rings that moved.
+    nodes.forEach((n) => {
+      const dx = n.x - n.tx, dy = n.y - n.ty;
+      const dist = Math.hypot(dx, dy);
+      if (dist < r * 0.6) return;
+      ctx.strokeStyle = 'rgba(76, 201, 240, 0.55)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(n.tx, n.ty);
+      ctx.lineTo(n.x - (dx / dist) * r, n.y - (dy / dist) * r);
+      ctx.stroke();
+      ctx.fillStyle = '#4cc9f0';
+      ctx.beginPath();
+      ctx.arc(n.tx, n.ty, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 2) Rings, initials, luck badges.
+    nodes.forEach((n) => {
+      const raw = data[n.i];
       const initials = (raw.abbrev || raw.label || '?').slice(0, 3).toUpperCase();
-      const x = pt.x, y = pt.y;
-      const r = 16;
-      // Ring
+      const { x, y } = n;
+      const hovered = chart.$ringHover === n.i;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(10, 20, 16, 0.85)';
+      ctx.fillStyle = 'rgba(10, 20, 16, 0.92)';
       ctx.fill();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = '#4cc9f0';
+      ctx.lineWidth = hovered ? 4.5 : 3.5;
+      ctx.strokeStyle = hovered ? '#ffffff' : '#4cc9f0';
       ctx.stroke();
-      // Initials
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px Inter, sans-serif';
       ctx.textAlign = 'center';
@@ -1823,6 +1931,24 @@ const teamRingPlugin = {
       }
     });
     ctx.restore();
+  },
+  // Hit-test the drawn rings (the dataset's own points have no hit area).
+  afterEvent(chart, args) {
+    const e = args.event;
+    const nodes = chart.$ringNodes;
+    if (!nodes || !chart.tooltip) return;
+    let hit = -1;
+    if (e.type !== 'mouseout') {
+      let best = RING_R + 6;
+      nodes.forEach((n) => {
+        const d = Math.hypot(e.x - n.x, e.y - n.y);
+        if (d <= best) { best = d; hit = n.i; }
+      });
+    }
+    if (hit === (chart.$ringHover ?? -1) && e.type === 'mousemove') return;
+    chart.$ringHover = hit;
+    chart.tooltip.setActiveElements(hit >= 0 ? [{ datasetIndex: 0, index: hit }] : [], { x: e.x, y: e.y });
+    args.changed = true;
   },
 };
 
@@ -1851,9 +1977,10 @@ function renderScheduleLuckChart() {
       datasets: [{
         label: 'Teams',
         data: points,
-        // Custom ring + initials are drawn by teamRingPlugin; hide default points.
-        pointRadius: 16,
-        pointHoverRadius: 18,
+        // Rings are drawn (and hit-tested) by teamRingPlugin; no native points.
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(0,0,0,0)',
       }],
@@ -1864,14 +1991,15 @@ function renderScheduleLuckChart() {
       plugins: {
         legend: { display: false },
         tooltip: {
+          position: 'ringAnchor',
           callbacks: {
             label: (ctx) => luckTooltip(ctx.raw),
           },
         },
       },
       scales: {
-        x: { title: { display: true, text: 'Points For →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { title: { display: true, text: 'Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { grace: '6%', title: { display: true, text: 'Points For →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { grace: '6%', title: { display: true, text: 'Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
@@ -5031,7 +5159,9 @@ function renderAllTimeLuckChart() {
       datasets: [{
         label: 'Managers',
         data,
-        pointRadius: 16,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(0,0,0,0)',
       }],
@@ -5041,11 +5171,11 @@ function renderAllTimeLuckChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => luckTooltip(ctx.raw, 'avg PF', 'avg PA') } },
+        tooltip: { position: 'ringAnchor', callbacks: { label: (ctx) => luckTooltip(ctx.raw, 'avg PF', 'avg PA') } },
       },
       scales: {
-        x: { title: { display: true, text: 'Lifetime Avg PF →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { title: { display: true, text: 'Avg Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { grace: '6%', title: { display: true, text: 'Lifetime Avg PF →', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { grace: '6%', title: { display: true, text: 'Avg Points Against ↑', color: '#9bb8a9' }, ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
       },
     },
     plugins: [quadrantLinePlugin, teamRingPlugin],
