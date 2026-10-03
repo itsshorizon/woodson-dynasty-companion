@@ -698,6 +698,25 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .asset-item:hover { background: var(--bg-elev); }
 .asset-item input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--green); }
 .asset-item .meta { color: var(--text-mute); font-size: 11px; margin-left: auto; font-weight: 700; }
+.asset-item .player-photo-wrap,
+.asset-item .player-photo,
+.asset-item .player-photo-fallback { width: 30px; height: 30px; flex-shrink: 0; }
+.asset-item .player-photo,
+.asset-item .player-photo-fallback { border-width: 1px; font-size: 9px; }
+.asset-item .pos-tag { display: none; }
+/* .trade-side label styles section headers; keep player rows out of it. */
+.trade-side label.asset-item {
+  display: flex;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+.asset-item .asset-name { min-width: 0; line-height: 1.25; }
+.asset-item:has(input:checked) { background: var(--bg-elev-2); }
+.asset-item:has(input:checked) .player-photo { border-color: var(--green); }
 
 .pick-row {
   display: grid;

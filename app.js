@@ -652,7 +652,7 @@ function playerPhotoHTML(player) {
   // onerror swap to a fallback div
   return `
     <div class="player-photo-wrap">
-      <img class="player-photo" src="${src}" alt="${escapeHtml(player.name)}"
+      <img class="player-photo" src="${src}" alt="${escapeHtml(player.name)}" loading="lazy"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
       <div class="player-photo-fallback" style="display:none; position:absolute; top:0; left:0;">${escapeHtml(player.pos)}</div>
       <span class="pos-tag pos-${player.pos}">${player.pos}</span>
@@ -1110,7 +1110,8 @@ function renderTradeAssets(side) {
     .map((p) => `
       <label class="asset-item">
         <input type="checkbox" value="${p.id}" data-name="${escapeHtml(p.name)}" data-pos="${p.pos}" />
-        <span>${escapeHtml(p.name)}</span>
+        ${playerPhotoHTML(p)}
+        <span class="asset-name">${escapeHtml(p.name)}</span>
         <span class="meta">${p.pos}</span>
       </label>
     `).join('');
