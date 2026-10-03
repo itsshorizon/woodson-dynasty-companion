@@ -1,0 +1,13 @@
+# Scraper contains private ESPN auth cookies — never commit
+scrape-history.js
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.log
+node_modules/
+.env
+.env.local
+
+# Empty placeholder repo
+woodson-dynasty-app/
