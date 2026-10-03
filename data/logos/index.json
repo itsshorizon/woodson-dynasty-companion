@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-10-03T18:44:36.948Z",
+  "teams": {
+    "1": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/509797b0-6f0f-11f0-aec8-aff79ae45af9",
+      "status": "failed: HTTP 401"
+    },
+    "2": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/8ddd9d80-8c57-11f0-90f7-112fa0f42e74",
+      "status": "failed: HTTP 401"
+    },
+    "3": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/b8eb6b00-b9e9-11f0-b1c3-bf61c28fbeb9",
+      "status": "failed: HTTP 401"
+    },
+    "4": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/0f5661e0-8a0e-11f0-afb5-e14f006a2a34",
+      "status": "failed: HTTP 401"
+    },
+    "5": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/44b55e90-7320-11f0-83c0-f394f484d545",
+      "status": "failed: HTTP 401"
+    },
+    "6": {
+      "file": "6.svg",
+      "source": "https://g.espncdn.com/lm-static/logo-packs/ffl/BoneHeads-ToddDetwiler/BoneHeads-01a.svg",
+      "status": "ok"
+    },
+    "7": {
+      "file": "7.svg",
+      "source": "https://g.espncdn.com/lm-static/logo-packs/ffl/1stStringAllStars-SportsManias-WR/chase-01.svg",
+      "status": "ok"
+    },
+    "9": {
+      "file": "9.svg",
+      "source": "https://g.espncdn.com/lm-static/logo-packs/ffl/1stStringAllStars-SportsManias-QB/williams-01.svg",
+      "status": "ok"
+    },
+    "10": {
+      "file": "10.svg",
+      "source": "https://g.espncdn.com/lm-static/logo-packs/ffl/HelmetAlphabet-ESPN/Helmet-H.svg",
+      "status": "ok"
+    },
+    "12": {
+      "file": "12.svg",
+      "source": "https://g.espncdn.com/lm-static/logo-packs/ffl/ShieldsOfGlory-LDopa/ShieldsOfGlory-08.svg",
+      "status": "ok"
+    },
+    "13": {
+      "file": null,
+      "source": "https://mystique-api.fantasy.espn.com/apis/v1/domains/lm/images/d69cb580-86f1-11f0-b1c3-bf61c28fbeb9",
+      "status": "failed: HTTP 401"
+    },
+    "14": {
+      "file": "14.svg",
+      "source": "https://g.espncdn.com/lm-static/ffl/images/default_logos/6.svg",
+      "status": "ok"
+    }
+  }
+}
