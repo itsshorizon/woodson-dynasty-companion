@@ -170,7 +170,9 @@ async function fetchJSON(url, opts) {
 }
 
 function teamById(id) { return state.teams.find((t) => t.id === id); }
-function teamByName(name) { return state.teams.find((t) => t.name === name); }
+// ESPN team names can carry stray spaces ("Kalico Kritters "); the sheets don't.
+const sameTeamName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+function teamByName(name) { return state.teams.find((t) => sameTeamName(t.name, name)); }
 function teamName(id) { return teamById(id)?.name || `Team ${id}`; }
 
 /* ----------------------- Draft Ownership Matching (Beta 1.2) -----------------------
@@ -215,7 +217,7 @@ function myTeamName() { return myTeam()?.name || null; }
 
 // Reverse-standings pick slot: rank 12 (worst) -> pick 1, rank 1 (best) -> pick 12
 function projectedPickSlot(ownerName) {
-  const idx = state.teams.findIndex((t) => t.name === ownerName);
+  const idx = state.teams.findIndex((t) => sameTeamName(t.name, ownerName));
   if (idx < 0) return null;
   return state.teams.length - idx;
 }
@@ -5482,7 +5484,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.15.0';
+const BUILD_ID = '1.16.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

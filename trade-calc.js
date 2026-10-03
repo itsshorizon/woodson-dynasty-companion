@@ -102,7 +102,7 @@ function tcPickAsset(p, ownerTeamId) {
   const owner = teamById(ownerTeamId);
   const { slot, certainty } = p.origOwner ? tcPickSlot(p) : { slot: null, certainty: 0 };
   const tier = TradeEngine.pickTier(slot, state.teams.length);
-  const fromOther = p.origOwner && owner && p.origOwner !== owner.name;
+  const fromOther = p.origOwner && owner && !sameTeamName(p.origOwner, owner.name);
   let label = `${p.year} Rd ${p.round}`;
   if (slot && p.year === CONFIG.DRAFT_YEARS[0]) label += ` (proj ${fmtPickLabel(p.round, slot)})`;
   else if (tier) label += ` (likely ${tier})`;
@@ -881,7 +881,7 @@ function tcRenderTradeFeed() {
   if (!accepted.length) { el.innerHTML = empty('No accepted trades yet. When a deal goes through, it shows up here with its grade.'); return; }
   const list = (side) => {
     const items = (side.players || []).map((p) => `${escapeHtml(p.name)} <span class="tv-dim">${escapeHtml(p.pos || '')}</span>`)
-      .concat((side.picks || []).map((p) => `${p.year} Rd ${p.round}${p.origOwner && p.origOwner !== teamName(side.teamId) ? ` <span class="tv-dim">via ${escapeHtml(p.origOwner)}</span>` : ''}`));
+      .concat((side.picks || []).map((p) => `${p.year} Rd ${p.round}${p.origOwner && !sameTeamName(p.origOwner, teamName(side.teamId)) ? ` <span class="tv-dim">via ${escapeHtml(p.origOwner)}</span>` : ''}`));
     return items.map((x) => `<div>${x}</div>`).join('') || '<div class="tv-dim">Nothing</div>';
   };
   el.innerHTML = accepted.map(({ t, st }) => `
@@ -919,6 +919,7 @@ function tcRenderFinderCard() {
       .map((t) => `<option value="${t.id}" ${teamOptionAttrs(t, `${tcWindowFor(t.id).label} · ${t.owner}`)}>${escapeHtml(t.name)}</option>`).join('');
   partnerSel.value = prev;
   tcRenderFinderTargets();
+  tcRenderFinderFilters();
   partnerSel.onchange = tcRenderFinderTargets;
   $('#finder-run').onclick = tcRunFinder;
 }
@@ -944,6 +945,97 @@ function tcTeamAssets(team) {
     .concat(ownedPicksFor(team.id).map((p) => tcPickAsset(p, team.id)));
 }
 
+// Finder filters, remembered per viewer.
+const TC_FINDER_KEY = 'tradeFinderFilters';
+const TC_FINDER_DEFAULTS = {
+  givePlayers: true, givePicks: true, getPlayers: true, getPicks: true,
+  shapes: ['1-1', '1-2', '2-1', '2-2'],
+};
+
+function tcFinderFilters() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(TC_FINDER_KEY) || 'null'); } catch (e) { /* storage blocked */ }
+  return { ...TC_FINDER_DEFAULTS, ...(saved || {}) };
+}
+
+function tcSaveFinderFilters(f) {
+  try { localStorage.setItem(TC_FINDER_KEY, JSON.stringify(f)); } catch (e) { /* storage blocked */ }
+}
+
+function tcRenderFinderFilters() {
+  const host = $('#finder-filters');
+  if (!host) return;
+  const f = tcFinderFilters();
+  const chip = (key, label, on) => `<button type="button" class="tv-filter ${on ? 'on' : ''}" data-filter="${key}" aria-pressed="${on}">${label}</button>`;
+  const shape = (v, label) => chip(`shape:${v}`, label, f.shapes.includes(v));
+  host.innerHTML = `
+    <div class="tv-filter-row"><span class="lbl">You give</span>${chip('givePlayers', 'Players', f.givePlayers)}${chip('givePicks', 'Picks', f.givePicks)}</div>
+    <div class="tv-filter-row"><span class="lbl">You get</span>${chip('getPlayers', 'Players', f.getPlayers)}${chip('getPicks', 'Picks', f.getPicks)}</div>
+    <div class="tv-filter-row"><span class="lbl">Deal size</span>${shape('1-1', '1 for 1')}${shape('2-1', 'Give 2, get 1')}${shape('1-2', 'Give 1, get 2')}${shape('2-2', '2 for 2')}</div>`;
+  host.onclick = (e) => {
+    const btn = e.target.closest('[data-filter]');
+    if (!btn) return;
+    const cur = tcFinderFilters();
+    const key = btn.dataset.filter;
+    if (key.startsWith('shape:')) {
+      const v = key.slice(6);
+      const next = cur.shapes.includes(v) ? cur.shapes.filter((x) => x !== v) : cur.shapes.concat(v);
+      if (!next.length) { toast('Keep at least one deal size', 'error'); return; }
+      cur.shapes = next;
+    } else {
+      cur[key] = !cur[key];
+      // Each side needs something to trade.
+      if (!cur.givePlayers && !cur.givePicks) { toast('You have to give something', 'error'); return; }
+      if (!cur.getPlayers && !cur.getPicks) { toast('You have to get something', 'error'); return; }
+      if (!cur.givePlayers && !cur.getPlayers) { toast('Pick-for-pick swaps are off the table. Keep players on one side', 'error'); return; }
+    }
+    tcSaveFinderFilters(cur);
+    tcRenderFinderFilters();
+  };
+}
+
+// Plain-language "why" for each team, based on what its mode cares about.
+function tcFitReason(teamId, gets, gives, windowLabel) {
+  const team = teamById(teamId);
+  const sum = (list, key) => list.reduce((s, a) => {
+    const v = TradeEngine.assetValue(a, TC.ctx);
+    return s + (key === 'now' ? v.winNow : v.value);
+  }, 0);
+  const lineup = tcLineupImpact(team, gives.filter((a) => a.type === 'player').map((a) => a.id), gets.filter((a) => a.type === 'player').map((a) => a.id)) || 0;
+  const future = Math.round(sum(gets, 'value') - sum(gives, 'value'));
+  const avgAge = (list) => {
+    const ps = list.filter((a) => a.type === 'player').map((a) => tcPlayer(a.id)).filter((p) => p && p.a);
+    const w = ps.reduce((s, p) => s + p.dv, 0);
+    return w ? ps.reduce((s, p) => s + p.a * p.dv, 0) / w : null;
+  };
+  const ageGet = avgAge(gets), ageGive = avgAge(gives);
+  const younger = ageGet != null && ageGive != null ? ageGive - ageGet : null;
+  const pts = Math.abs(lineup) < 0.05 ? null : `${lineup > 0 ? '+' : '−'}${Math.abs(lineup).toFixed(1)} pts/wk to the starting lineup`;
+  const fut = Math.abs(future) < 100 ? null : `${future > 0 ? '+' : '−'}${tcFmt(Math.abs(future))} long-term value`;
+  const age = younger != null && Math.abs(younger) >= 1 ? `${younger > 0 ? 'gets' : 'goes'} ${Math.abs(younger).toFixed(1)} yrs ${younger > 0 ? 'younger' : 'older'}` : null;
+  const parts = windowLabel === 'Contender'
+    ? [pts && `Now: ${pts}`, fut && `Later: ${fut}`]
+    : windowLabel === 'Rebuilder'
+      ? [fut && `Later: ${fut}`, age && `Roster ${age}`, pts && `Now: ${pts}`]
+      : [pts && `Now: ${pts}`, fut && `Later: ${fut}`, age && `Roster ${age}`];
+  return parts.filter(Boolean).slice(0, 2).join(' · ') || 'About even for their situation';
+}
+
+// Small headshot (or pick badge) + name + value for finder rows.
+function tcAssetChipHTML(a) {
+  if (a.type === 'pick') {
+    const v = TradeEngine.pickValue(a, TC.ctx);
+    return `<div class="tv-asset-chip"><span class="tv-pick-badge">R${a.round}</span><span class="tv-asset-chip-name">${escapeHtml(a.label)}<small>${tcFmt(v)}</small></span></div>`;
+  }
+  const p = tcPlayer(a.id);
+  const name = p?.n || a.name;
+  const pos = p?.p || a.pos || '';
+  return `<div class="tv-asset-chip" data-player-id="${a.id}">
+    <span class="tv-mini-photo"><img src="${CONFIG.ESPN_HEADSHOT}${a.id}.png" alt="" loading="lazy" onerror="this.remove()" /><span>${escapeHtml(pos)}</span></span>
+    <span class="tv-asset-chip-name">${escapeHtml(name)}<small>${escapeHtml(pos)} · ${tcFmt(p?.dv)}${p?.a ? ` · ${p.a} yrs` : ''}</small></span>
+  </div>`;
+}
+
 function tcRunFinder() {
   const my = myTeam();
   const out = $('#finder-results');
@@ -953,6 +1045,7 @@ function tcRunFinder() {
   const partners = partnerId ? [teamById(partnerId)] : state.teams.filter((t) => t.id !== my.id);
   const myWindow = tcWindowFor(my.id).label;
   const mine = tcTeamAssets(my);
+  const f = tcFinderFilters();
   out.innerHTML = loading('Looking for fair trades...');
   // Let the loading state paint before the search runs.
   setTimeout(() => {
@@ -963,37 +1056,60 @@ function tcRunFinder() {
       const found = TradeEngine.findTrades({
         mine, theirs, target,
         myWindow, theirWindow: tcWindowFor(partner.id).label,
+        give: { players: f.givePlayers, picks: f.givePicks },
+        get: { players: f.getPlayers || !!target, picks: f.getPicks },
+        shapes: f.shapes,
         limit: partnerId ? 8 : 3,
       }, TC.ctx);
-      results = results.concat(found.map((f) => ({ ...f, partner })));
+      results = results.concat(found.map((r) => ({ ...r, partner })));
     }
     results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
-    results = results.slice(0, 8);
+    // Variety: don't let one package of mine (or one partner) fill the list.
+    const keyOf = (list) => list.map((a) => TradeEngine.assetValue(a, TC.ctx).key).sort().join('|');
+    const giveCount = {}, partnerCount = {};
+    results = results.filter((r) => {
+      const g = keyOf(r.give);
+      if ((giveCount[g] || 0) >= (targetId ? 8 : 1)) return false;
+      if (!partnerId && (partnerCount[r.partner.id] || 0) >= 2) return false;
+      giveCount[g] = (giveCount[g] || 0) + 1;
+      partnerCount[r.partner.id] = (partnerCount[r.partner.id] || 0) + 1;
+      return true;
+    }).slice(0, 8);
     state._finderResults = results;
     if (!results.length) {
-      out.innerHTML = empty(targetId ? 'No fair package found for that player. Try adding a pick in the builder.' : 'No fair trades found right now.');
+      const partner = partnerId ? teamById(partnerId) : null;
+      const sameMode = partner && tcWindowFor(partner.id).label === myWindow && myWindow !== 'Middle';
+      out.innerHTML = empty(sameMode
+        ? `You and ${partner.name} are both ${myWindow.toLowerCase()}s, so few fair deals help both of you right now. Try another team, a bigger deal size, or allowing picks.`
+        : targetId
+          ? 'No fair deal that helps both teams for that player. Try a bigger deal size or allow picks.'
+          : 'No fair deals that help both teams with these filters. Try loosening them.');
       return;
     }
-    const label = (a) => (a.type === 'player' ? (tcPlayer(a.id)?.n || a.name) : a.label);
-    out.innerHTML = results.map((r, i) => `
+    out.innerHTML = results.map((r, i) => {
+      const theirWindow = tcWindowFor(r.partner.id).label;
+      return `
       <div class="tv-finder-item" data-band="${r.band.key}">
         <div class="tv-finder-head">
           <b>${escapeHtml(r.partner.name)}</b>
           <span class="tv-chip">${escapeHtml(r.band.label)}</span>
         </div>
         <div class="tv-finder-sides">
-          <div><span class="lbl">You get</span>${r.get.map((a) => `<div>${escapeHtml(label(a))}</div>`).join('')}</div>
-          <div><span class="lbl">You give</span>${r.give.map((a) => `<div>${escapeHtml(label(a))}</div>`).join('')}</div>
+          <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
+          <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
         </div>
-        <div class="tv-finder-fit">
-          <span class="${r.myFit > 0 ? 'tv-up' : 'tv-down'}">Fit for you: ${r.myFit > 0 ? 'helps' : 'costs'} (${myWindow})</span>
-          <span class="${r.theirFit > 0 ? 'tv-up' : 'tv-down'}">For them: ${r.theirFit > 0 ? 'helps' : 'costs'}</span>
+        <div class="tv-finder-why">
+          <div><span class="tv-up">✓</span> <b>Why it helps you</b> <span class="tv-window tv-window-${myWindow.toLowerCase()}">${myWindow}</span><br><span>${escapeHtml(tcFitReason(my.id, r.get, r.give, myWindow))}</span></div>
+          <div><span class="tv-up">✓</span> <b>Why they'd say yes</b> <span class="tv-window tv-window-${theirWindow.toLowerCase()}">${theirWindow}</span><br><span>${escapeHtml(tcFitReason(r.partner.id, r.give, r.get, theirWindow))}</span></div>
         </div>
         <button class="btn-ghost btn-sm" type="button" data-finder-load="${i}">Load into proposal</button>
-      </div>`).join('');
+      </div>`;
+    }).join('') + `<p class="tv-note">Contenders are judged mostly on this season (lineup points), Rebuilders on long-term value and age. Every suggestion is within 8% of fair and helps both teams.</p>`;
     out.onclick = (e) => {
       const btn = e.target.closest('[data-finder-load]');
-      if (btn) tcLoadFinderResult(Number(btn.dataset.finderLoad));
+      if (btn) { tcLoadFinderResult(Number(btn.dataset.finderLoad)); return; }
+      const chip = e.target.closest('.tv-asset-chip[data-player-id]');
+      if (chip) openPlayerProfile(Number(chip.dataset.playerId));
     };
   }, 30);
 }

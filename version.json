@@ -1,9 +1,10 @@
 {
-  "version": "1.15.0",
-  "title": "📰 League Trade Feed",
+  "version": "1.16.0",
+  "title": "🔍 Smarter Trade Finder",
   "notes": [
-    "📰 NEW on the Trades tab: League Trade Feed. Every accepted trade and what the calculator said about it, open to everyone.",
-    "🔎 See the math: tap any trade in the feed for the full breakdown. See if it still holds today.",
-    "⚖️ Your incoming and outgoing offers on My Team now show a grade. Tap to expand the full analysis."
+    "🔍 Trade Finder only suggests deals that help BOTH teams. No more pointless pick-for-pick swaps.",
+    "🎚️ New filters: choose players or picks on each side, and deal size (1 for 1, 2 for 1, 1 for 2, 2 for 2).",
+    "💬 Every idea explains why it helps you and why they'd say yes, plus player headshots.",
+    "🎯 FIXED: draft picks for a couple of teams weren't getting their early/mid/late value. Pick values now step smoothly by slot."
   ]
 }

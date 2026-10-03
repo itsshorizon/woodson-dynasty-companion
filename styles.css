@@ -4370,3 +4370,74 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Trade finder filters */
+.tv-filters { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 2px; }
+.tv-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tv-filter-row .lbl {
+  width: 64px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tv-filter {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.tv-filter.on { background: var(--tab-accent); border-color: var(--tab-accent); color: var(--tab-fg); }
+
+/* Finder results: headshots + why */
+.tv-asset-chip { display: flex; align-items: center; gap: 8px; margin-top: 6px; min-width: 0; cursor: default; }
+.tv-asset-chip[data-player-id] { cursor: pointer; }
+.tv-mini-photo {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tv-mini-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--bg-elev-2); z-index: 1; }
+.tv-mini-photo span { font-size: 10px; font-weight: 800; color: var(--text-mute); }
+.tv-pick-badge {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--tab-fg);
+  background: var(--tab-accent);
+}
+.tv-asset-chip-name { display: flex; flex-direction: column; min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.2; }
+.tv-asset-chip-name small { font-size: 10px; font-weight: 700; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-finder-why {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.tv-finder-why b { color: var(--text); }
+@media (max-width: 420px) { .tv-finder-why { grid-template-columns: 1fr; } }

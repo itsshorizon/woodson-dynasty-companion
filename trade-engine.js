@@ -88,19 +88,33 @@
     const picks = (ctx.values && ctx.values.picks) || {};
     const base = picks[`${pick.year}-${pick.round}-any`];
     if (base == null) return 0;
-    const tier = pickTier(pick.slot, pick.teams || 12);
-    if (!tier) return base;
-    let tiered = picks[`${pick.year}-${pick.round}-${tier}`];
-    if (tiered == null) {
+    if (!pick.slot) return base;
+    const tierValue = (tier) => {
+      const direct = picks[`${pick.year}-${pick.round}-${tier}`];
+      if (direct != null) return direct;
       // Sources only tier next year's picks; apply that year's early/late spread.
-      const ref = Object.keys(picks).map((k) => k.split('-')).filter(([y, r, t]) => Number(r) === pick.round && t === tier)
+      const ref = Object.keys(picks).map((k) => k.split('-')).filter(([, r, t]) => Number(r) === pick.round && t === tier)
         .map(([y]) => Number(y)).sort((a, b) => a - b)[0];
       const refAny = ref != null ? picks[`${ref}-${pick.round}-any`] : null;
-      if (!refAny) return base;
-      tiered = base * (picks[`${ref}-${pick.round}-${tier}`] / refAny);
+      return refAny ? base * (picks[`${ref}-${pick.round}-${tier}`] / refAny) : null;
+    };
+    const early = tierValue('early'), mid = tierValue('mid'), late = tierValue('late');
+    if (early == null || mid == null || late == null) return base;
+    // Each tier's value sits at the middle of its third of the round; slide
+    // between them slot by slot so 1.04 and 1.05 aren't a cliff apart.
+    const n = pick.teams || 12;
+    const third = n / 3;
+    const anchors = [[(third + 1) / 2, early], [third + (third + 1) / 2, mid], [2 * third + (third + 1) / 2, late]];
+    const slot = Math.max(1, Math.min(n, pick.slot));
+    let slotted;
+    if (slot <= anchors[0][0]) slotted = early;
+    else if (slot >= anchors[2][0]) slotted = late;
+    else {
+      const [a, b] = slot <= anchors[1][0] ? [anchors[0], anchors[1]] : [anchors[1], anchors[2]];
+      slotted = a[1] + ((slot - a[0]) / (b[0] - a[0])) * (b[1] - a[1]);
     }
     const c = pick.certainty == null ? 1 : Math.max(0, Math.min(1, pick.certainty));
-    return Math.round(base + (tiered - base) * c);
+    return Math.round(base + (slotted - base) * c);
   }
 
   /**
@@ -379,33 +393,59 @@
    * opts: {
    *   mine: [assets I could give], theirs: [assets they could give],
    *   target?: asset I want (must be in theirs), myWindow, theirWindow,
+   *   give?: { players, picks }  asset types I'm willing to give (default both)
+   *   get?:  { players, picks }  asset types I want back (default both)
+   *   shapes?: ['1-1','1-2','2-1','2-2']  "give-get" piece counts (default all)
+   *   requireMutual (default true): both teams' fit must improve
    *   maxEdge (default 0.08), limit (default 8)
    * }
-   * Rules: within ±maxEdge; never give my best asset for a lesser best asset
-   * unless I'm a Rebuilder getting younger/picks.
+   * Rules: within ±maxEdge; at least one player in the deal (no pick-for-pick
+   * swaps); never give my best asset for a lesser best asset unless I'm a
+   * Rebuilder.
    */
   function findTrades(opts, ctx) {
     const maxEdge = opts.maxEdge != null ? opts.maxEdge : 0.08;
     const limit = opts.limit || 8;
+    const giveTypes = opts.give || { players: true, picks: true };
+    const getTypes = opts.get || { players: true, picks: true };
+    const shapes = new Set(opts.shapes || ['1-1', '1-2', '2-1', '2-2']);
+    const requireMutual = opts.requireMutual !== false;
+    const typeOk = (types) => (x) => (x.a.type === 'pick' ? types.picks : types.players);
     const rank = (list) => list
       .map((a) => ({ a, v: assetValue(a, ctx) }))
       .filter((x) => x.v.value > x.v.replacement)
       .sort((x, y) => y.v.value - x.v.value);
-    const mine = rank(opts.mine).slice(0, 14);
-    const theirs = rank(opts.theirs).slice(0, 14);
-    const myBest = mine.length ? mine[0].v.value : 0;
+    const mineAll = rank(opts.mine);
+    const myBest = mineAll.length ? mineAll[0].v.value : 0;
+    const mine = mineAll.filter(typeOk(giveTypes)).slice(0, 14);
+    const theirs = rank(opts.theirs).filter(typeOk(getTypes)).slice(0, 14);
+    const targetKey = opts.target ? assetValue(opts.target, ctx).key : null;
 
-    const wantSets = opts.target
-      ? [[opts.target]].concat(theirs.filter((x) => assetValue(x.a, ctx).key !== assetValue(opts.target, ctx).key).slice(0, 8).map((x) => [opts.target, x.a]))
-      : combos(theirs.map((x) => x.a), 1).concat(combos(theirs.slice(0, 8).map((x) => x.a), 2));
-    const giveSets = combos(mine.map((x) => x.a), 1).concat(combos(mine.slice(0, 10).map((x) => x.a), 2));
+    const wantSets = [];
+    if (opts.target) {
+      if (shapes.has('1-1') || shapes.has('2-1')) wantSets.push([opts.target]);
+      if (shapes.has('1-2') || shapes.has('2-2')) {
+        theirs.filter((x) => assetValue(x.a, ctx).key !== targetKey).slice(0, 8)
+          .forEach((x) => wantSets.push([opts.target, x.a]));
+      }
+    } else {
+      if (shapes.has('1-1') || shapes.has('2-1')) combos(theirs.map((x) => x.a), 1).forEach((w) => wantSets.push(w));
+      if (shapes.has('1-2') || shapes.has('2-2')) combos(theirs.slice(0, 8).map((x) => x.a), 2).forEach((w) => wantSets.push(w));
+    }
+    const giveSingles = combos(mine.map((x) => x.a), 1);
+    const givePairs = combos(mine.slice(0, 10).map((x) => x.a), 2);
 
     const seen = new Set();
     const results = [];
     for (const want of wantSets) {
-      for (const give of giveSets) {
-        const res = evaluate({ a: { gets: want }, b: { gets: give } }, ctx);
-        if (Math.abs(res.edge) > maxEdge) continue;
+      const gives = []
+        .concat(shapes.has(`1-${want.length}`) ? giveSingles : [])
+        .concat(shapes.has(`2-${want.length}`) ? givePairs : []);
+      for (const give of gives) {
+        // At least one player somewhere: pick-for-pick swaps aren't real trade ideas.
+        if (!want.concat(give).some((x) => x.type === 'player')) continue;
+        const quick = compare(want, give, ctx, 'blend');
+        if (Math.abs(quick.edge) > maxEdge) continue;
         const giveBest = Math.max.apply(null, give.map((g) => assetValue(g, ctx).value));
         const getBest = Math.max.apply(null, want.map((g) => assetValue(g, ctx).value));
         if (giveBest >= myBest && getBest < giveBest && opts.myWindow !== 'Rebuilder') continue;
@@ -414,21 +454,21 @@
         seen.add(key);
         const myFit = fitScore(want, give, opts.myWindow, ctx);
         const theirFit = fitScore(give, want, opts.theirWindow, ctx);
-        results.push({ get: want, give, edge: res.edge, band: res.band, myFit, theirFit, mutual: Math.min(myFit, theirFit) + 0.25 * (myFit + theirFit) });
+        if (requireMutual && (myFit <= 0 || theirFit <= 0)) continue;
+        results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit,
+          mutual: Math.min(myFit, theirFit) + 0.25 * (myFit + theirFit) });
       }
     }
     results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
-    // Browsing (no target): show variety, one package per player you'd get.
-    if (!opts.target) {
-      const seenWant = new Set();
-      return results.filter((r) => {
-        const key = r.get.map((x) => assetValue(x, ctx).key).sort().join('|');
-        if (seenWant.has(key)) return false;
-        seenWant.add(key);
-        return true;
-      }).slice(0, limit);
-    }
-    return results.slice(0, limit);
+    // Show variety: one package per set of players you'd get (or per give set when targeting).
+    const seenSide = new Set();
+    return results.filter((r) => {
+      const side = opts.target ? r.give : r.get;
+      const k = side.map((x) => assetValue(x, ctx).key).sort().join('|');
+      if (seenSide.has(k)) return false;
+      seenSide.add(k);
+      return true;
+    }).slice(0, limit);
   }
 
   return {

@@ -158,3 +158,26 @@ test('future picks borrow next year’s early/late spread', () => {
   const partly = TE.pickValue({ year: 2028, round: 1, slot: 1, teams: 12, certainty: 0.35 }, ctx);
   assert.ok(partly > generic && partly < early);
 });
+
+test('trade finder never suggests pick-for-pick swaps and respects filters', () => {
+  const mine = ['wr15a', 'mid_a', 'bench1', 'pick:2027-1', 'pick:2027-2', 'pick:2028-1'].map(asset);
+  const theirs = ['wr10', 'rb15', 'mid_b', 'pick:2027-1:early', 'pick:2028-1', 'pick:2028-2'].map(asset);
+  const all = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false, limit: 50 }, ctx);
+  assert.ok(all.length > 0);
+  for (const r of all) assert.ok(r.get.concat(r.give).some((a) => a.type === 'player'), 'has a player');
+
+  const noPicks = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false,
+    give: { players: true, picks: false }, get: { players: true, picks: false }, limit: 50 }, ctx);
+  for (const r of noPicks) assert.ok(r.get.concat(r.give).every((a) => a.type === 'player'));
+
+  const oneForOne = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false,
+    shapes: ['1-1'], limit: 50 }, ctx);
+  for (const r of oneForOne) { assert.equal(r.give.length, 1); assert.equal(r.get.length, 1); }
+
+  const twoForOne = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false,
+    shapes: ['2-1'], limit: 50 }, ctx);
+  for (const r of twoForOne) { assert.equal(r.give.length, 2); assert.equal(r.get.length, 1); }
+
+  const mutual = TE.findTrades({ mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', limit: 50 }, ctx);
+  for (const r of mutual) assert.ok(r.myFit > 0 && r.theirFit > 0, 'helps both teams');
+});
