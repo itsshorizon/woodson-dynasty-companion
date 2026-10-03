@@ -719,7 +719,20 @@ async function main() {
     throw new Error(`Too many rostered players without values (${unmatched.length}). Check the id mapping before publishing.`);
   }
 
+  // Every name each team has ever used (ESPN team ids are stable across
+  // seasons), so old names in the sheets still resolve to the right team.
+  const aliases = {};
+  const addAlias = (name, id) => { const k = String(name || '').trim().toLowerCase(); if (k) aliases[k] = id; };
+  try {
+    const hist = JSON.parse(fs.readFileSync(path.join(ROOT, 'history.json'), 'utf8'));
+    for (const season of Object.values(hist)) {
+      for (const t of season.teams || []) addAlias(((t.location || '') + ' ' + (t.nickname || '')).trim() || t.name, t.id);
+    }
+  } catch (err) { console.warn(`  ! history.json unavailable for team aliases: ${err.message}`); }
+  for (const t of src.league.teams || []) addAlias(t.name || ((t.location || '') + ' ' + (t.nickname || '')).trim(), t.id);
+
   if (!DRY_RUN) {
+    fs.writeFileSync(path.join(DATA_DIR, 'team-aliases.json'), JSON.stringify(aliases));
     fs.mkdirSync(path.join(DATA_DIR, 'history'), { recursive: true });
     fs.writeFileSync(path.join(DATA_DIR, 'values.json'), JSON.stringify(values));
     fs.writeFileSync(path.join(DATA_DIR, 'player-details.json'), JSON.stringify({ generatedAt, season: SEASON, players: detailsOut }));

@@ -102,11 +102,12 @@ function tcPickAsset(p, ownerTeamId) {
   const owner = teamById(ownerTeamId);
   const { slot, certainty } = p.origOwner ? tcPickSlot(p) : { slot: null, certainty: 0 };
   const tier = TradeEngine.pickTier(slot, state.teams.length);
-  const fromOther = p.origOwner && owner && !sameTeamName(p.origOwner, owner.name);
+  const origTeam = p.origOwner ? teamByName(p.origOwner) : null;
+  const fromOther = p.origOwner && owner && (origTeam ? origTeam.id !== owner.id : !sameTeamName(p.origOwner, owner.name));
   let label = `${p.year} Rd ${p.round}`;
   if (slot && p.year === CONFIG.DRAFT_YEARS[0]) label += ` (proj ${fmtPickLabel(p.round, slot)})`;
   else if (tier) label += ` (likely ${tier})`;
-  if (fromOther) label += ` · via ${p.origOwner}`;
+  if (fromOther) label += ` · via ${origTeam ? origTeam.name.trim() : p.origOwner}`;
   return { type: 'pick', year: p.year, round: p.round, origOwner: p.origOwner || '', slot, certainty, teams: state.teams.length, label };
 }
 
@@ -497,38 +498,106 @@ function tcValueChipHTML(playerId) {
 
 let _tcValueChart = null;
 
-// Total dynasty value of a team: every rostered player (IR included) plus the
-// draft picks it currently owns. Projection uses each player's age-curve
-// outlook (current players only; future picks become unknown rookies).
+// Team value model.
+//   players: dynasty value of every rostered player (IR included)
+//   picks:   value of the draft picks the team currently owns
+//   winNow:  this-season value of the best possible starting lineup
+//   projection[0..3]: total assets (players + picks) now and 1–3 years out, from
+//     player age curves, picks firming up as their draft nears, a small boost
+//     for active managers, and an extra slide for old rosters with few picks.
 function tcTeamValue(team) {
   if (!TC.ctx || !team) return null;
-  let players = 0, ageWeighted = 0, winNow = 0;
+  let players = 0, ageWeighted = 0;
   const outlook = [0, 0, 0];
   let top = null;
+  const lineupPool = [];
   team.roster.forEach((pl) => {
     const v = tcPlayer(pl.id);
     if (!v) return;
     players += v.dv;
-    winNow += v.wn || 0;
     ageWeighted += (v.a || 26) * v.dv;
     (v.o || [v.dv, v.dv, v.dv]).forEach((x, i) => { outlook[i] += x; });
+    lineupPool.push({ pos: v.p, pts: v.wn || 0 });
     if (!top || v.dv > top.dv) top = { name: v.n, dv: v.dv, pos: v.p };
   });
-  const picks = state.draftPicks.length
-    ? ownedPicksFor(team.id).reduce((sum, p) => sum + TradeEngine.pickValue(tcPickAsset(p, team.id), TC.ctx), 0)
-    : null;
+  const slots = TC.values?.format?.lineup?.slots || { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 3 };
+  const winNow = TradeEngine.bestLineup(lineupPool, slots);
+
+  // Picks: today's value is discounted for distance; each year closer they
+  // regain that discount, and once used they're rookies on the roster.
+  const owned = state.draftPicks.length ? ownedPicksFor(team.id) : null;
+  const d = TC.ctx.futurePickDiscount || 1;
+  const nextDraft = CONFIG.DRAFT_YEARS[0];
+  const pickAt = (k) => (owned || []).reduce((sum, p) => {
+    const v = TradeEngine.pickValue(tcPickAsset(p, team.id), TC.ctx);
+    const yearsOut = Math.max(0, p.year - nextDraft);
+    return sum + v / Math.pow(d, Math.min(k, yearsOut));
+  }, 0);
+  const picks = owned ? pickAt(0) : null;
+
+  const activity = tcTeamActivity(team.id);
+  const avgAge = players ? ageWeighted / players : null;
+  // Every team starts with one pick per round per draft year.
+  const basePicks = CONFIG.DRAFT_YEARS.length * CONFIG.DRAFT_ROUNDS;
   return {
-    teamId: team.id, players, picks, total: players + (picks || 0), winNow,
-    avgAge: players ? ageWeighted / players : null,
-    projection: [players].concat(outlook), top,
+    teamId: team.id, players, picks, total: players + (picks || 0), winNow, avgAge, top,
+    activity, outlookPlayers: outlook, pickAt,
+    pickCount: owned ? owned.length : null, extraPicks: owned ? owned.length - basePicks : 0,
   };
+}
+
+// How engaged a manager is: proposals sent and trades completed this season.
+function tcTeamActivity(teamId) {
+  const trades = state.allTrades || [];
+  const proposed = trades.filter((t) => Number(t.teamAId) === teamId).length;
+  const accepted = trades.filter((t) => t.status === 'Accepted' && (Number(t.teamAId) === teamId || Number(t.teamBId) === teamId)).length;
+  // Up to +4%/yr: a completed trade counts 1%, a proposal 0.25%.
+  const rate = Math.min(0.04, accepted * 0.01 + proposed * 0.0025);
+  return { proposed, accepted, rate };
 }
 
 function tcLeagueTeamValues() {
   const rows = state.teams.map(tcTeamValue).filter(Boolean);
-  rows.sort((a, b) => b.players - a.players);
-  rows.forEach((r, i) => { r.rank = i + 1; });
-  return rows;
+  if (!rows.length) return rows;
+  // League context for the projection's pipeline factor.
+  const avgAgeLeague = rows.reduce((s, r) => s + (r.avgAge || 0), 0) / rows.length;
+  const pickShares = rows.map((r) => (r.picks || 0) / (r.total || 1)).sort((a, b) => a - b);
+  const medianPickShare = pickShares[Math.floor(pickShares.length / 2)];
+  rows.forEach((r) => {
+    const pickShare = (r.picks || 0) / (r.total || 1);
+    // Old core and a thin pipeline: nothing coming to replace them.
+    const thin = r.avgAge != null && r.avgAge > avgAgeLeague + 0.75 && pickShare < medianPickShare ? 0.03 : 0;
+    r.factors = {
+      active: r.activity.rate,
+      thin,
+      pickHoard: r.extraPicks >= 2,
+      soldPicks: r.extraPicks <= -2,
+      aging: r.avgAge != null && r.avgAge > avgAgeLeague + 0.75,
+      young: r.avgAge != null && r.avgAge < avgAgeLeague - 0.75,
+    };
+    r.projection = [0, 1, 2, 3].map((k) => {
+      const playersK = k === 0 ? r.players : r.outlookPlayers[k - 1];
+      const base = playersK + r.pickAt(k);
+      return Math.round(base * (1 + (r.activity.rate - thin) * k));
+    });
+    r.change3 = r.projection[0] ? (r.projection[3] - r.projection[0]) / r.projection[0] : 0;
+  });
+  const rankBy = (key, get) => rows.slice().sort((a, b) => get(b) - get(a)).forEach((r, i) => { r[key] = i + 1; });
+  rankBy('rank', (r) => r.players);
+  rankBy('nowRank', (r) => r.winNow);
+  rankBy('futureRank', (r) => r.projection[3]);
+  return rows.sort((a, b) => a.rank - b.rank);
+}
+
+function tcFactorTags(r) {
+  const tags = [];
+  if (r.factors.active >= 0.01) tags.push(`🔁 Active trader +${Math.round(r.factors.active * 100)}%/yr`);
+  if (r.factors.pickHoard) tags.push(`🎟️ Pick stockpile (+${r.extraPicks})`);
+  if (r.factors.soldPicks) tags.push(`📤 Sold picks (${r.extraPicks})`);
+  if (r.factors.young) tags.push('🌱 Young core');
+  if (r.factors.aging) tags.push('⏳ Aging core');
+  if (r.factors.thin) tags.push('⚠️ Thin pipeline −3%/yr');
+  return tags;
 }
 
 // Summary card at the bottom of My Team / Rosters.
@@ -537,25 +606,32 @@ function tcTeamValueFooterHTML(teamId) {
   const rows = tcLeagueTeamValues();
   const r = rows.find((x) => x.teamId === teamId);
   if (!r) return '';
-  const in3 = r.projection[3];
-  const change = r.players ? Math.round(((in3 - r.players) / r.players) * 100) : 0;
+  const pct = Math.round(r.change3 * 100);
   const win = tcWindowFor(teamId).label;
+  const tags = tcFactorTags(r);
   return `
     <div class="tv-team-total" data-team-id="${teamId}">
-      <div class="tv-team-total-head">
+      <div class="tv-team-total-pair">
         <div>
-          <span class="lbl">Team Value</span>
+          <span class="lbl">Dynasty value</span>
           <b>${tcFmt(r.players)}</b>
+          <span class="tv-team-rank-sm">#${r.rank} of ${rows.length}</span>
         </div>
-        <div class="tv-team-rank">#${r.rank}<span>of ${rows.length}</span></div>
+        <div>
+          <span class="lbl">This season</span>
+          <b class="tv-now">${tcFmt(r.winNow)}</b>
+          <span class="tv-team-rank-sm">#${r.nowRank} of ${rows.length}</span>
+        </div>
       </div>
       <div class="tv-team-total-grid">
         <div><span class="lbl">Draft picks</span><b>${r.picks == null ? '—' : `+${tcFmt(r.picks)}`}</b></div>
         <div><span class="lbl">Avg age</span><b>${r.avgAge ? r.avgAge.toFixed(1) : '—'}</b></div>
-        <div><span class="lbl">In 3 years</span><b class="${change >= 0 ? 'tv-up' : 'tv-down'}">${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}%</b></div>
+        <div><span class="lbl">In 3 years</span><b class="${pct >= 0 ? 'tv-up' : 'tv-down'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}%</b></div>
         <div><span class="lbl">Mode</span><b><span class="tv-window tv-window-${win.toLowerCase()}">${win}</span></b></div>
       </div>
-      <button type="button" class="tv-link" data-tc-open-board>See the league leaderboard →</button>
+      ${tags.length ? `<div class="tv-factor-tags">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <p class="tv-note">This season = best starting lineup's win-now value. Dynasty = every player's long-term value.</p>
+      <button type="button" class="tv-link" data-tc-open-board>See the league leaderboards →</button>
     </div>`;
 }
 
@@ -574,34 +650,64 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-tc-open-board]')) { e.preventDefault(); tcOpenTeamValueBoard(); }
 });
 
+const TC_BOARD_KEY = 'teamValueBoard';
+const TC_BOARDS = {
+  dynasty: { label: 'Dynasty', sub: "Every team's total dynasty value: what the roster is worth long-term.", value: (r) => r.players, rank: 'rank' },
+  now: { label: 'This Season', sub: "Win-now value of each team's best starting lineup: who's built to win this year.", value: (r) => r.winNow, rank: 'nowRank' },
+  future: { label: 'In 3 Years', sub: 'Projected total assets (players + picks) in three years: aging, picks maturing, manager activity.', value: (r) => r.projection[3], rank: 'futureRank' },
+};
+
 function tcRenderTeamValueVault() {
   const board = $('#team-value-board');
   if (!board) return;
   const go = () => {
     const rows = tcLeagueTeamValues();
     if (!rows.length) { board.innerHTML = empty('Team values unavailable.'); return; }
-    const max = rows[0].players || 1;
-    board.innerHTML = rows.map((r) => {
+    let mode = 'dynasty';
+    try { mode = localStorage.getItem(TC_BOARD_KEY) || 'dynasty'; } catch (e) { /* storage blocked */ }
+    if (!TC_BOARDS[mode]) mode = 'dynasty';
+    const cfg = TC_BOARDS[mode];
+    const sorted = rows.slice().sort((a, b) => a[cfg.rank] - b[cfg.rank]);
+    const max = cfg.value(sorted[0]) || 1;
+    $('#team-value-sub').textContent = `${cfg.sub} Tap a team to see its roster.`;
+    $('#team-value-tabs').innerHTML = Object.entries(TC_BOARDS)
+      .map(([k, b]) => `<button type="button" class="seg-btn ${k === mode ? 'active' : ''}" data-board="${k}">${b.label}</button>`).join('');
+    $('#team-value-tabs').onclick = (e) => {
+      const b = e.target.closest('[data-board]');
+      if (!b) return;
+      try { localStorage.setItem(TC_BOARD_KEY, b.dataset.board); } catch (err) { /* storage blocked */ }
+      go();
+    };
+    board.innerHTML = sorted.map((r) => {
       const team = teamById(r.teamId);
       const win = tcWindowFor(r.teamId).label;
-      const change = r.players ? Math.round(((r.projection[3] - r.players) / r.players) * 100) : 0;
+      const pct = Math.round(r.change3 * 100);
       const mine = r.teamId === state.myTeamId;
+      const val = cfg.value(r);
+      const sub = mode === 'dynasty'
+        ? `<span class="${pct >= 0 ? 'tv-up' : 'tv-down'}">${pct >= 0 ? '▲' : '▼'}${Math.abs(pct)}% in 3 yrs</span>`
+        : mode === 'now'
+          ? `<span class="tv-dim">Dynasty #${r.rank}</span>`
+          : `<span class="${pct >= 0 ? 'tv-up' : 'tv-down'}">${pct >= 0 ? '▲' : '▼'}${Math.abs(pct)}% vs now</span>`;
+      const tags = mode === 'future' ? tcFactorTags(r) : [];
       return `
         <button type="button" class="tv-board-row ${mine ? 'mine' : ''}" data-team-id="${r.teamId}">
-          <span class="tv-board-rank">${r.rank}</span>
+          <span class="tv-board-rank">${r[cfg.rank]}</span>
           <span class="tv-board-main">
             <span class="tv-board-name">${escapeHtml(team.name)}</span>
-            <span class="tv-board-bar"><span style="width:${Math.max(4, (r.players / max) * 100)}%"></span></span>
+            <span class="tv-board-bar"><span style="width:${Math.max(4, (val / max) * 100)}%"></span></span>
             <span class="tv-board-meta">
               <span class="tv-window tv-window-${win.toLowerCase()}">${win}</span>
               <span>Age ${r.avgAge ? r.avgAge.toFixed(1) : '—'}</span>
-              ${r.picks != null ? `<span>Picks +${tcFmt(r.picks)}</span>` : ''}
-              ${r.top ? `<span>Top: ${escapeHtml(r.top.name)}</span>` : ''}
+              ${mode === 'now' ? '' : r.picks != null ? `<span>Picks +${tcFmt(r.picks)}</span>` : ''}
+              ${mode === 'dynasty' && r.top ? `<span>Top: ${escapeHtml(r.top.name)}</span>` : ''}
+              ${mode === 'now' ? `<span>This season #${r.nowRank} · Dynasty #${r.rank}</span>` : ''}
+              ${tags.map((t) => `<span class="tv-factor">${escapeHtml(t)}</span>`).join('')}
             </span>
           </span>
           <span class="tv-board-val">
-            <b>${tcFmt(r.players)}</b>
-            <span class="${change >= 0 ? 'tv-up' : 'tv-down'}">${change >= 0 ? '▲' : '▼'}${Math.abs(change)}% in 3 yrs</span>
+            <b>${tcFmt(val)}</b>
+            ${sub}
           </span>
         </button>`;
     }).join('');
@@ -618,6 +724,7 @@ function tcRenderTeamValueVault() {
   board.innerHTML = loading('Adding up rosters...');
   const needs = [tcLoad()];
   if (!state.draftPicks.length) needs.push(loadDraftPicks());
+  if (!state.allTrades.length) needs.push(loadAllTrades());
   Promise.all(needs).then(([ok]) => (ok ? go() : (board.innerHTML = empty('Team values unavailable.'))));
 }
 
@@ -626,12 +733,12 @@ function tcRenderTeamValueChart(rows) {
   if (!canvas || typeof Chart === 'undefined') return;
   const year = CONFIG.SEASON;
   const labels = [`${year} (now)`, `${year + 1}`, `${year + 2}`, `${year + 3}`];
-  const datasets = rows.map((r, i) => {
+  const datasets = rows.slice().sort((a, b) => a.futureRank - b.futureRank).map((r, i) => {
     const color = CHART_COLORS[i % CHART_COLORS.length];
     const mine = r.teamId === state.myTeamId;
     return {
       label: teamName(r.teamId),
-      data: r.projection.map((v) => Math.round(v)),
+      data: r.projection,
       borderColor: color,
       backgroundColor: color + '33',
       borderWidth: mine ? 4 : 2,
@@ -655,7 +762,7 @@ function tcRenderTeamValueChart(rows) {
       },
       scales: {
         x: { ticks: { color: '#9bb8a9' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#9bb8a9', callback: (v) => `${Math.round(v / 1000)}k` }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Team value', color: '#9bb8a9' } },
+        y: { ticks: { color: '#9bb8a9', callback: (v) => `${Math.round(v / 1000)}k` }, grid: { color: 'rgba(255,255,255,0.05)' }, title: { display: true, text: 'Players + picks', color: '#9bb8a9' } },
       },
     },
   });
@@ -881,7 +988,11 @@ function tcRenderTradeFeed() {
   if (!accepted.length) { el.innerHTML = empty('No accepted trades yet. When a deal goes through, it shows up here with its grade.'); return; }
   const list = (side) => {
     const items = (side.players || []).map((p) => `${escapeHtml(p.name)} <span class="tv-dim">${escapeHtml(p.pos || '')}</span>`)
-      .concat((side.picks || []).map((p) => `${p.year} Rd ${p.round}${p.origOwner && !sameTeamName(p.origOwner, teamName(side.teamId)) ? ` <span class="tv-dim">via ${escapeHtml(p.origOwner)}</span>` : ''}`));
+      .concat((side.picks || []).map((p) => {
+        const orig = p.origOwner ? teamByName(p.origOwner) : null;
+        const other = p.origOwner && (orig ? orig.id !== Number(side.teamId) : !sameTeamName(p.origOwner, teamName(side.teamId)));
+        return `${p.year} Rd ${p.round}${other ? ` <span class="tv-dim">via ${escapeHtml(orig ? orig.name.trim() : p.origOwner)}</span>` : ''}`;
+      }));
     return items.map((x) => `<div>${x}</div>`).join('') || '<div class="tv-dim">Nothing</div>';
   };
   el.innerHTML = accepted.map(({ t, st }) => `
@@ -1163,7 +1274,7 @@ function tcFitReasons(teamId, gets, gives, windowLabel) {
     r.future = { good: future > 0, text: `${future > 0 ? '+' : '−'}${tcFmt(Math.abs(future))} long-term value` };
   }
   if (younger != null && Math.abs(younger) >= 1) {
-    r.age = { good: windowLabel === 'Contender' ? true : younger > 0, text: `Gets ${Math.abs(younger).toFixed(1)} yrs ${younger > 0 ? 'younger' : 'older'} at these spots` };
+    r.age = { good: younger > 0, text: `Gets ${Math.abs(younger).toFixed(1)} yrs ${younger > 0 ? 'younger' : 'older'} at these spots` };
   }
   const pg = picks(gets), pv = picks(gives);
   if (pg.length || pv.length) {

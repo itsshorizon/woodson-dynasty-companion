@@ -30,6 +30,7 @@ const state = {
   logoIndex: { cached: {}, custom: {}, version: '' }, // see loadLogoIndex()
   allTrades: [],
   weeklyHistory: {},
+  teamAliases: {},
   pendingTrades: [],
   draftPicks: [],
   tradeBlock: [],
@@ -173,7 +174,14 @@ async function fetchJSON(url, opts) {
 function teamById(id) { return state.teams.find((t) => t.id === id); }
 // ESPN team names can carry stray spaces ("Kalico Kritters "); the sheets don't.
 const sameTeamName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-function teamByName(name) { return state.teams.find((t) => sameTeamName(t.name, name)); }
+// Falls back to past team names (data/team-aliases.json, built from league history)
+// so sheet rows written under an old name still find the right team.
+function teamByName(name) {
+  const exact = state.teams.find((t) => sameTeamName(t.name, name));
+  if (exact) return exact;
+  const id = state.teamAliases?.[String(name || '').trim().toLowerCase()];
+  return id != null ? teamById(Number(id)) : undefined;
+}
 function teamName(id) { return teamById(id)?.name || `Team ${id}`; }
 
 /* ----------------------- Draft Ownership Matching (Beta 1.2) -----------------------
@@ -218,7 +226,8 @@ function myTeamName() { return myTeam()?.name || null; }
 
 // Reverse-standings pick slot: rank 12 (worst) -> pick 1, rank 1 (best) -> pick 12
 function projectedPickSlot(ownerName) {
-  const idx = state.teams.findIndex((t) => sameTeamName(t.name, ownerName));
+  const team = teamByName(ownerName);
+  const idx = team ? state.teams.indexOf(team) : -1;
   if (idx < 0) return null;
   return state.teams.length - idx;
 }
@@ -4007,6 +4016,7 @@ async function boot() {
   const [ok] = await Promise.all([
     loadLeagueData(),
     loadWeeklyHistory(),
+    fetchJSON('./data/team-aliases.json').then((a) => { state.teamAliases = a || {}; }).catch(() => {}),
     loadLogoIndex(),
     domReady.then(() => (typeof tcLoad === 'function' ? tcLoad() : null)),
   ]);
@@ -5773,7 +5783,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.18.0';
+const BUILD_ID = '1.19.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

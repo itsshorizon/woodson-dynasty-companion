@@ -1,6 +1,18 @@
 {
  "entries": [
   {
+   "version": "1.19.0",
+   "title": "📊 Win-Now Rankings + Smarter Projections",
+   "date": "2026-10-03T17:42:09-04:00",
+   "notes": [
+    "📊 NEW: This Season value. See how strong every starting lineup is right now, next to dynasty value, on My Team, Rosters and in the Vault.",
+    "🏆 Vault leaderboards: switch between Dynasty, This Season and In 3 Years.",
+    "🔮 Smarter 3-year projections: picks gain value as the draft nears, active traders trend up, and old rosters with few picks fall off harder.",
+    "🔧 FIXED: picks listed under a team's old name now show the current team and get their proper value.",
+    "🔧 FIXED: a roster getting older now counts as a minus in trade suggestions."
+   ]
+  },
+  {
    "version": "1.18.0",
    "title": "📜 Patch Notes + Smarter Fits",
    "date": "2026-10-03T17:27:41-04:00",

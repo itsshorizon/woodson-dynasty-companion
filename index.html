@@ -201,13 +201,14 @@
       <!-- Sub: Team Value (trade-calc.js) -->
       <div class="vault-section" id="vault-teamvalue" hidden>
         <div class="card" id="team-value-card">
-          <h2>Team Value Leaderboard</h2>
-          <p class="chart-sub">Every team's total dynasty trade value. Tap a team to see its roster.</p>
+          <h2>Team Value Leaderboards</h2>
+          <div class="segmented" id="team-value-tabs"></div>
+          <p class="chart-sub" id="team-value-sub"></p>
           <div id="team-value-board"></div>
         </div>
         <div class="card chart-card" id="team-value-arc-card">
           <h2>Projected Team Value</h2>
-          <p class="chart-sub">Where each roster's value is headed as players age (current players only, using typical age curves). Click a name in the legend to toggle.</p>
+          <p class="chart-sub">Each team's players + picks over the next 3 years. Built from player age curves, picks gaining value as their draft gets closer (then becoming rookies), a boost for active managers (up to +4%/yr), and an extra slide for old rosters with few picks. Click a name in the legend to toggle.</p>
           <div class="chart-wrap chart-tall"><canvas id="team-value-chart"></canvas></div>
         </div>
       </div>
