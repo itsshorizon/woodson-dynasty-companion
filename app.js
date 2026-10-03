@@ -24,6 +24,8 @@ const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'FLEX', 'OP', 'BE', 'IR']
 const state = {
   teams: [],
   matchups: [],
+  boxscores: {},           // { [week]: { byTeam: { [teamId]: players[] }, live } }
+  expandedMatchups: new Set(),
   allTrades: [],
   weeklyHistory: {},
   pendingTrades: [],
@@ -240,9 +242,10 @@ function actualPoints(player) {
 
 /* ----------------------- ESPN API ----------------------- */
 
-async function fetchLeague(views = []) {
+async function fetchLeague(views = [], extra = {}) {
   const params = new URLSearchParams();
   views.forEach((v) => params.append('view', v));
+  Object.entries(extra).forEach(([k, v]) => params.append(k, v));
   return fetchJSON(`${CONFIG.ESPN_BASE}/seasons/${CONFIG.SEASON}/segments/0/leagues/${CONFIG.LEAGUE_ID}?${params}`);
 }
 
@@ -297,6 +300,7 @@ function parseMatchups(raw) {
       home: { teamId: m.home?.teamId, score: m.home?.totalPointsLive ?? m.home?.totalPoints ?? 0 },
       away: { teamId: m.away?.teamId, score: m.away?.totalPointsLive ?? m.away?.totalPoints ?? 0 },
       winner: m.winner,
+      week: m.matchupPeriodId,
     }));
 }
 
@@ -594,6 +598,115 @@ function renderStandings() {
   }).join('');
 }
 
+/* ----------------------- Matchup box scores -----------------------
+ * Tap a This Week card to see each lineup. Player points come from ESPN's
+ * mBoxscore view, fetched once per week on first expand and refreshed by
+ * the Sunday live poll while any card is open.
+ * ------------------------------------------------------------------- */
+
+const matchupKey = (m) => `${m.away.teamId}-${m.home.teamId}`;
+
+// Week-specific actual points from a player's stat log (fallback when mBoxscore fails).
+function weekPoints(player, week) {
+  const row = (player.stats || []).find((s) =>
+    s && s.statSourceId === 0 && s.scoringPeriodId === week && s.seasonId === CONFIG.SEASON
+  );
+  return row?.appliedTotal ?? null;
+}
+
+function parseBoxscoreEntries(entries) {
+  return (entries || []).map((e) => {
+    const p = e.playerPoolEntry?.player || {};
+    return {
+      id: p.id,
+      name: p.fullName || 'Unknown',
+      pos: POSITION_MAP[p.defaultPositionId] || '—',
+      slot: SLOT_MAP[e.lineupSlotId] || 'BE',
+      pts: e.playerPoolEntry?.appliedStatTotal ?? null,
+    };
+  });
+}
+
+// Returns { [teamId]: players[] } for the week, or null when ESPN can't be reached.
+async function loadBoxscores(week, force = false) {
+  if (!force && state.boxscores[week]) return state.boxscores[week];
+  try {
+    const raw = await fetchLeague(['mBoxscore', 'mMatchupScore'], { scoringPeriodId: week });
+    const byTeam = {};
+    (raw.schedule || [])
+      .filter((m) => m.matchupPeriodId === week)
+      .forEach((m) => ['home', 'away'].forEach((side) => {
+        const t = m[side];
+        if (t?.teamId != null) byTeam[t.teamId] = parseBoxscoreEntries(t.rosterForCurrentScoringPeriod?.entries);
+      }));
+    state.boxscores[week] = { byTeam, live: true };
+  } catch (err) {
+    console.warn('Box score load failed:', err);
+    const byTeam = {};
+    state.teams.forEach((t) => {
+      byTeam[t.id] = t.roster.map((p) => ({ id: p.id, name: p.name, pos: p.pos, slot: p.slot, pts: weekPoints(p, week) }));
+    });
+    state.boxscores[week] = { byTeam, live: false };
+  }
+  return state.boxscores[week];
+}
+
+// Re-pull box scores for any open card (called by the live poll).
+async function refreshOpenBoxscores() {
+  if (!state.expandedMatchups.size) return;
+  const weeks = new Set(state.matchups.filter((m) => state.expandedMatchups.has(matchupKey(m))).map((m) => m.week));
+  await Promise.all([...weeks].map((w) => loadBoxscores(w, true)));
+  renderScores();
+}
+
+const shortName = (name) => {
+  const parts = name.split(' ');
+  return parts.length > 1 && !/D\/ST$/.test(name) ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : name;
+};
+
+function boxPlayerCell(p, side) {
+  if (!p) return `<div class="box-player ${side} empty">—</div>`;
+  const pts = p.pts != null ? p.pts.toFixed(1) : '—';
+  return `
+    <div class="box-player ${side}">
+      ${playerPhotoHTML(p)}
+      <span class="box-name" title="${escapeHtml(p.name)}">${escapeHtml(shortName(p.name))}<small>${p.pos}</small></span>
+      <span class="box-pts">${pts}</span>
+    </div>`;
+}
+
+function renderMatchupDetail(m) {
+  const box = state.boxscores[m.week];
+  if (!box) return `<div class="matchup-detail"><div class="box-loading">Loading lineups…</div></div>`;
+  const away = box.byTeam[m.away.teamId] || [];
+  const home = box.byTeam[m.home.teamId] || [];
+  if (!away.length && !home.length) return `<div class="matchup-detail"><div class="box-loading">No lineup data yet</div></div>`;
+
+  const bySlot = (list, slot) => list.filter((p) => p.slot === slot);
+  const rowsFor = (slots, compare = true) => slots.flatMap((slot) => {
+    const a = bySlot(away, slot), h = bySlot(home, slot);
+    return Array.from({ length: Math.max(a.length, h.length) }, (_, i) => {
+      const ap = a[i], hp = h[i];
+      const lead = compare && ap?.pts != null && hp?.pts != null && ap.pts !== hp.pts ? (ap.pts > hp.pts ? 'away' : 'home') : '';
+      return `
+        <div class="box-row ${lead ? 'lead-' + lead : ''}">
+          ${boxPlayerCell(ap, 'away')}
+          <div class="box-slot">${slot === 'BE' ? 'BN' : slot}</div>
+          ${boxPlayerCell(hp, 'home')}
+        </div>`;
+    });
+  }).join('');
+
+  const starterSlots = POS_ORDER.filter((s) => s !== 'BE' && s !== 'IR');
+  const bench = rowsFor(['BE', 'IR'], false);
+  return `
+    <div class="matchup-detail">
+      ${box.live ? '' : '<div class="box-note">Live scores unavailable. Showing last synced stats.</div>'}
+      ${rowsFor(starterSlots)}
+      ${bench ? `<div class="box-bench-h">Bench</div><div class="box-bench">${bench}</div>` : ''}
+    </div>`;
+}
+
 function renderScores() {
   const el = $('#scores-content');
   if (!state.matchups.length) { el.innerHTML = empty('No matchups this week'); return; }
@@ -604,26 +717,53 @@ function renderScores() {
       const games = (t.wins || 0) + (t.losses || 0) + (t.ties || 0);
       return games ? (t.pf / games).toFixed(1) + ' PPG' : '—';
     };
+    const key = matchupKey(m);
+    const open = state.expandedMatchups.has(key);
     return `
-      <div class="matchup">
-        <div class="matchup-row ${m.winner === 'AWAY' ? 'winner' : ''}">
-          <div>
-            <div class="name">${escapeHtml(away.name)}</div>
-            <div style="font-size:10px;color:var(--text-mute);font-weight:700;letter-spacing:.06em;">${ppgOf(away)}</div>
+      <div class="matchup ${open ? 'expanded' : ''}" data-key="${key}">
+        <div class="matchup-head" role="button" tabindex="0" aria-expanded="${open}" aria-label="Show lineups">
+          <div class="matchup-row ${m.winner === 'AWAY' ? 'winner' : ''}">
+            <div>
+              <div class="name">${escapeHtml(away.name)}</div>
+              <div class="matchup-ppg">${ppgOf(away)}</div>
+            </div>
+            <div class="score">${m.away.score.toFixed(1)}</div>
           </div>
-          <div class="score">${m.away.score.toFixed(1)}</div>
-        </div>
-        <div class="matchup-divider"></div>
-        <div class="matchup-row ${m.winner === 'HOME' ? 'winner' : ''}">
-          <div>
-            <div class="name">${escapeHtml(home.name)}</div>
-            <div style="font-size:10px;color:var(--text-mute);font-weight:700;letter-spacing:.06em;">${ppgOf(home)}</div>
+          <div class="matchup-divider"></div>
+          <div class="matchup-row ${m.winner === 'HOME' ? 'winner' : ''}">
+            <div>
+              <div class="name">${escapeHtml(home.name)}</div>
+              <div class="matchup-ppg">${ppgOf(home)}</div>
+            </div>
+            <div class="score">${m.home.score.toFixed(1)}</div>
           </div>
-          <div class="score">${m.home.score.toFixed(1)}</div>
+          <div class="matchup-toggle">${open ? 'Hide lineups' : 'Show lineups'} <span class="chev">▾</span></div>
         </div>
+        ${open ? renderMatchupDetail(m) : ''}
       </div>
     `;
   }).join('');
+
+  const toggle = async (head) => {
+    const card = head.closest('.matchup');
+    const key = card.dataset.key;
+    if (state.expandedMatchups.has(key)) state.expandedMatchups.delete(key);
+    else state.expandedMatchups.add(key);
+    renderScores();
+    const m = state.matchups.find((x) => matchupKey(x) === key);
+    if (m && state.expandedMatchups.has(key) && !state.boxscores[m.week]) {
+      await loadBoxscores(m.week);
+      renderScores();
+    }
+  };
+  el.onclick = (e) => {
+    const head = e.target.closest('.matchup-head');
+    if (head) toggle(head);
+  };
+  el.onkeydown = (e) => {
+    const head = e.target.closest('.matchup-head');
+    if (head && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(head); }
+  };
 }
 
 /* ----------------------- Rosters ----------------------- */
@@ -3613,6 +3753,7 @@ async function boot() {
         if (refreshed) {
           renderStandings();
           renderScores();
+          refreshOpenBoxscores();
           setTimeout(renderScheduleLuckChart, 50);
         }
       }
