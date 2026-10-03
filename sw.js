@@ -1,8 +1,9 @@
-const CACHE_NAME = 'wcc-v1.12.1';
+const CACHE_NAME = 'wcc-v1.13.0';
 const CORE_ASSETS = [
   './',
   './index.html',
   './styles.css',
+  './select.js',
   './app.js',
   './trade-engine.js',
   './trade-calc.js',
