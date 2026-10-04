@@ -1,11 +1,9 @@
 {
-  "version": "1.21.0",
-  "title": "🧭 A Cleaner Standings Page",
+  "version": "1.21.1",
+  "title": "🔧 Updates Load Cleanly",
   "notes": [
-    "📐 New Compact layout: tap the W logo in the top corner to switch. Tighter rows, smaller photos, more on screen. Tap it again to go back. Your choice is saved on this device.",
-    "🏈 This Week's scores now come right after the headline. Leaderboard and the Luck Index follow.",
-    "📰 Collapse the weekly story to just its headline with the − button. A new week's story still opens once so you don't miss it.",
-    "🖥️ Desktop: matchups fill the width, and the Luck chart sits beside the Leaderboard and follows you as you scroll.",
-    "🛠️ FIXED: the page no longer jumps around while loading, and live scores refresh without flickering."
+    "🛠️ FIXED: after an update, some devices showed a half-old, half-new page (wrong Standings layout, flickering). Updates now load all at once.",
+    "⚡ The app no longer loads twice on your first visit.",
+    "🧭 Includes the 1.21 Standings redesign: This Week first, a collapsible story, the new desktop layout, and the Compact layout (tap the W logo to switch)."
   ]
 }

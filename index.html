@@ -13,8 +13,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="compact.css" />
+  <!-- ?v= must match version.json on every release. A new page then can't pick
+       up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
+       caches files ~10 min), which used to mix old and new code. -->
+  <link rel="stylesheet" href="styles.css?v=1.21.1" />
+  <link rel="stylesheet" href="compact.css?v=1.21.1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -526,9 +529,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js"></script>
-  <script src="app.js"></script>
-  <script src="trade-engine.js"></script>
-  <script src="trade-calc.js"></script>
+  <script src="select.js?v=1.21.1"></script>
+  <script src="app.js?v=1.21.1"></script>
+  <script src="trade-engine.js?v=1.21.1"></script>
+  <script src="trade-calc.js?v=1.21.1"></script>
 </body>
 </html>
