@@ -318,9 +318,11 @@ function parseMatchups(raw) {
     }));
 }
 
-async function loadLeagueData() {
+// silent: the live-score poll. Keeps the header steady (no "Loading..." flash
+// every 30s) and doesn't toast on a transient miss.
+async function loadLeagueData(silent = false) {
   const meta = $('#header-meta');
-  meta.textContent = `Loading ${CONFIG.SEASON}...`;
+  if (!silent) meta.textContent = `Loading ${CONFIG.SEASON}...`;
   meta.classList.remove('err');
   try {
     // Beta 1.10: mStatProj unlocks per-scoringPeriod stat logs so weeklyActualLog(player)
@@ -334,6 +336,7 @@ async function loadLeagueData() {
     return true;
   } catch (err) {
     console.error('ESPN load failed:', err);
+    if (silent) return false;
     meta.textContent = `ESPN ${err.message.match(/\d{3}/)?.[0] || 'ERR'}`;
     meta.classList.add('err');
     toast('Could not load ESPN data', 'error');
@@ -1970,11 +1973,6 @@ const teamRingPlugin = {
 function renderScheduleLuckChart() {
   const canvas = $('#luck-chart');
   if (!canvas || typeof Chart === 'undefined' || !state.teams.length) return;
-  // Defensive clear: kill any prior instance so the canvas has fresh dimensions
-  // every time Standings re-renders (prevents the chart from drawing into stale
-  // bounds when returning to the tab via the slide transition).
-  if (_luckChart) { _luckChart.destroy(); _luckChart = null; }
-
   const luck = computeSeasonLuck(state.schedule, regularSeasonWeeks(state.teams));
   const points = state.teams.map((t) => ({
     x: t.pf,
@@ -1985,6 +1983,17 @@ function renderScheduleLuckChart() {
   }));
   const medX = _median(points.map((p) => p.x));
   const medY = _median(points.map((p) => p.y));
+
+  // Live refresh: update the existing chart in place instead of rebuilding it,
+  // which used to blank the chart and replay its animation every 30s.
+  if (_luckChart && _luckChart.canvas === canvas) {
+    _luckChart.data.datasets[0].data = points;
+    _luckChart.$medX = medX;
+    _luckChart.$medY = medY;
+    _luckChart.update('none');
+    return;
+  }
+  if (_luckChart) { _luckChart.destroy(); _luckChart = null; }
 
   _luckChart = new Chart(canvas.getContext('2d'), {
     type: 'scatter',
@@ -3985,16 +3994,11 @@ function setView(name) {
   // Scroll-to-top so the new view always starts at its header
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 
-  // V2.5: Standings overlap fix. When entering Standings, hard-reset the luck
-  // chart's container to a fresh <canvas> so any stale instance from a prior
-  // mount can't bleed into the new one. Defer the actual chart build until
-  // AFTER the slide animation has fully settled (300ms is comfortably past
-  // the 0.55s spring's perceptual midpoint; Chart.js then measures correct dims).
+  // Returning to Standings: the chart sits in a fixed-size slot now, so just
+  // re-measure it once the slide settles. Rebuilding it here made the chart
+  // blink out and redraw on every visit.
   if (name === 'standings') {
-    if (_luckChart) { _luckChart.destroy(); _luckChart = null; }
-    const wrap = $('#schedule-luck-card .chart-wrap');
-    if (wrap) wrap.innerHTML = '<canvas id="luck-chart"></canvas>';
-    setTimeout(() => renderScheduleLuckChart(), 300);
+    setTimeout(() => (_luckChart ? _luckChart.resize() : renderScheduleLuckChart()), 300);
   }
 
   // Resize the rest of Chart.js instances after the slide settles
@@ -4032,6 +4036,14 @@ function wireNavigation() {
 
 /* ----------------------- Boot ----------------------- */
 
+// Cheap fingerprint of everything the Standings page shows.
+function standingsSignature() {
+  return JSON.stringify([
+    state.teams.map((t) => [t.id, t.wins, t.losses, t.ties, t.pf, t.pa, t.name, t.logo]),
+    state.matchups.map((m) => [m.home.teamId, m.home.score, m.away.teamId, m.away.score, m.winner]),
+  ]);
+}
+
 async function boot() {
   loadMyTeamId();
   initTheme();
@@ -4039,6 +4051,10 @@ async function boot() {
   wireNavigation();
   document.body.dataset.theme = 'standings'; // initial tab theme
   $('#standings-content').innerHTML = skeletonRows(8);
+  $('#scores-content').innerHTML = Array.from({ length: 6 }, () => '<div class="skeleton skel-match"></div>').join('');
+  renderFrontPageSkeleton();
+  // The story doesn't depend on ESPN, so fetch it alongside instead of after.
+  fetchFrontPageRows().then(renderFrontPage);
 
   // Beta 1.12: weekly history + trade values load alongside ESPN so the first
   // render already has full-season PPG and value chips. trade-calc.js loads after
@@ -4056,8 +4072,8 @@ async function boot() {
   if (ok) {
     renderStandings();
     renderScores();
-    setTimeout(renderScheduleLuckChart, 50);
-    loadFrontPage();
+    renderScheduleLuckChart();
+    state.standingsSig = standingsSignature();
     if (state.teams.length) {
       const defaultId = state.myTeamId || state.teams[0].id;
       state.selectedRosterTeamId = defaultId;
@@ -4076,13 +4092,16 @@ async function boot() {
     // user is on the Standings tab, so we don't step on their Trade Desk / Vault work.
     setInterval(async () => {
       if (document.body.dataset.theme === 'standings') {
-        const refreshed = await loadLeagueData();
-        if (refreshed) {
-          renderStandings();
-          renderScores();
-          refreshOpenBoxscores();
-          setTimeout(renderScheduleLuckChart, 50);
-        }
+        const refreshed = await loadLeagueData(true);
+        if (!refreshed) return;
+        refreshOpenBoxscores();
+        // Only touch the page when a score or record actually changed.
+        const sig = standingsSignature();
+        if (sig === state.standingsSig) return;
+        state.standingsSig = sig;
+        renderStandings();
+        renderScores();
+        renderScheduleLuckChart();
       }
     }, 30000);
   } else {
@@ -4545,35 +4564,100 @@ function renderMatchmakerBlockHTML() {
 
 /* -------- League Front Page (newsletter hero on Standings) -------- */
 
-async function loadFrontPage() {
+/* Front Page story: three states.
+ *   collapsed  headline only
+ *   preview    headline + faded excerpt (default)
+ *   expanded   full story
+ * The collapse choice is remembered per device. A new week's story shows the
+ * preview once, so nobody misses it, then the saved choice applies again.
+ */
+const FP_KEY = 'fpState'; // { collapsed: bool, seenWeek: string }
+
+function readFpState() {
+  try { return JSON.parse(localStorage.getItem(FP_KEY)) || {}; } catch (err) { return {}; }
+}
+function writeFpState(st) {
+  try { localStorage.setItem(FP_KEY, JSON.stringify(st)); } catch (err) { /* storage blocked */ }
+}
+
+// Placeholder sized like the state the reader will likely see, so the story
+// arriving doesn't push This Week down the page.
+function renderFrontPageSkeleton() {
   const el = $('#front-page');
   if (!el) return;
+  const collapsed = !!readFpState().collapsed;
+  el.className = `front-page loading ${collapsed ? 'collapsed' : ''}`;
+  el.innerHTML = collapsed
+    ? '<div class="skeleton skel-mast"></div><div class="skeleton skel-headline"></div><div class="skeleton skel-actions"></div>'
+    : `<div class="skeleton skel-mast"></div>
+       <div class="skeleton skel-headline"></div><div class="skeleton skel-headline short"></div>
+       <div class="skeleton skel-story"></div><div class="skeleton skel-actions"></div>`;
+}
+
+async function fetchFrontPageRows() {
   try {
     const data = await fetchJSON(`${CONFIG.SHEETS_BASE}/newsletter`);
     const rows = Array.isArray(data) ? data : [];
-    if (!rows.length) { el.hidden = true; return; }
     // Beta 1.10: sort by weekNumber DESC — bypasses the missing createdAt column
     // that was making stale releases stick to the front page.
     rows.sort((a, b) => (parseInt(b.weekNumber, 10) || 0) - (parseInt(a.weekNumber, 10) || 0));
-    const latest = rows[0];
-    if (!latest.headline && !latest.storyText) { el.hidden = true; return; }
-    el.innerHTML = `
-      <div class="fp-mast">Front Page · Week ${escapeHtml(latest.weekNumber || '?')}</div>
-      <h2 class="fp-headline">${escapeHtml(latest.headline || 'Untitled')}</h2>
-      <div class="fp-story">${escapeHtml(latest.storyText || '')}</div>
-      <button class="fp-toggle" id="fp-toggle">Read more ↓</button>
-      <button class="fp-toggle" id="fp-archive-btn" style="margin-left:10px;">View Archive 📚</button>
-    `;
-    el.hidden = false;
-    $('#fp-toggle').onclick = (e) => {
-      const expanded = el.classList.toggle('expanded');
-      e.currentTarget.textContent = expanded ? 'Collapse ↑' : 'Read more ↓';
-    };
-    $('#fp-archive-btn').onclick = () => openNewsletterArchive(rows);
+    return rows;
   } catch (err) {
-    // Sheet missing or empty — silently hide
-    el.hidden = true;
+    return []; // Sheet missing or empty — the section just hides
   }
+}
+
+async function loadFrontPage() {
+  renderFrontPage(await fetchFrontPageRows());
+}
+
+function renderFrontPage(rows) {
+  const el = $('#front-page');
+  if (!el) return;
+  const latest = rows[0];
+  if (!latest || (!latest.headline && !latest.storyText)) { el.hidden = true; return; }
+
+  const week = String(latest.weekNumber || '?');
+  const saved = readFpState();
+  const newWeek = saved.seenWeek !== week;
+  let mode = saved.collapsed && !newWeek ? 'collapsed' : 'preview';
+  if (newWeek) writeFpState({ ...saved, seenWeek: week });
+
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="fp-mast">
+      <span>Front Page · Week ${escapeHtml(week)}</span>
+      <button class="fp-collapse" type="button" aria-controls="fp-story"></button>
+    </div>
+    <h2 class="fp-headline">${escapeHtml(latest.headline || 'Untitled')}</h2>
+    <div class="fp-story" id="fp-story">${escapeHtml(latest.storyText || '')}</div>
+    <div class="fp-actions">
+      <button class="fp-toggle" type="button" data-fp="more"></button>
+      <button class="fp-toggle" type="button" data-fp="archive">View Archive 📚</button>
+    </div>
+  `;
+
+  const apply = () => {
+    el.className = `front-page ${mode === 'preview' ? '' : mode}`;
+    const collapseBtn = el.querySelector('.fp-collapse');
+    collapseBtn.textContent = mode === 'collapsed' ? '+' : '−';
+    collapseBtn.setAttribute('aria-expanded', String(mode !== 'collapsed'));
+    collapseBtn.setAttribute('aria-label', mode === 'collapsed' ? 'Show story' : 'Collapse to headline');
+    el.querySelector('[data-fp="more"]').textContent =
+      mode === 'collapsed' ? 'Read story ↓' : mode === 'preview' ? 'Read more ↓' : 'Show less ↑';
+  };
+  const setMode = (next) => {
+    mode = next;
+    // Only the headline-vs-story choice is remembered, not "read more".
+    writeFpState({ ...readFpState(), collapsed: mode === 'collapsed', seenWeek: week });
+    apply();
+  };
+  apply();
+
+  el.querySelector('.fp-collapse').onclick = () => setMode(mode === 'collapsed' ? 'preview' : 'collapsed');
+  el.querySelector('.fp-headline').onclick = () => { if (mode === 'collapsed') setMode('preview'); };
+  el.querySelector('[data-fp="more"]').onclick = () => setMode(mode === 'expanded' ? 'preview' : 'expanded');
+  el.querySelector('[data-fp="archive"]').onclick = () => openNewsletterArchive(rows);
 }
 
 // Beta 1.10 — pop the full newsletter history (already sorted DESC by weekNumber)
@@ -4814,8 +4898,8 @@ function positionalRankFor(playerId) {
 }
 // Invalidate cache when ESPN data reloads
 const _origLoadLeagueData = loadLeagueData;
-loadLeagueData = async function () {
-  const r = await _origLoadLeagueData();
+loadLeagueData = async function (...args) {
+  const r = await _origLoadLeagueData(...args); // pass through (e.g. silent polling)
   _posRankCache = null;
   return r;
 };
@@ -5816,7 +5900,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.20.0';
+const BUILD_ID = '1.21.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

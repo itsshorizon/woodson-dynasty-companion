@@ -330,8 +330,12 @@ body {
   position: relative;
   /* Hide horizontal slide overflow AND vertical bleed so inactive views can't paint
      over the active view during the transition. Each view is `position: absolute`
-     when inactive — without this clip they'd briefly stack visually. */
+     when inactive — without this clip they'd briefly stack visually.
+     `clip` (not `hidden`) clips the same way without making #app a scroll
+     container, which would break position: sticky inside views. Older
+     browsers ignore `clip` and keep `hidden`. */
   overflow: hidden;
+  overflow: clip;
   isolation: isolate;
 }
 .view {
@@ -1139,21 +1143,46 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error { border-color: var(--red); color: var(--red); }
 
-/* ---------- Standings split (Leaderboard + Scores side-by-side) ---------- */
-.standings-split {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 16px;
-}
+/* ---------- Standings layout ----------
+ * Story, This Week, Leaderboard, Luck. Each section owns a fixed slot, so
+ * data arriving late (story, scores, chart) never moves the other sections.
+ *   phone:    one column in that order
+ *   desktop:  story and This Week full width; Leaderboard beside Luck
+ */
+.standings-layout { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+.standings-layout > * { min-width: 0; margin-bottom: 0; }
+.skel-headline { height: 28px; width: 72%; }
+.skel-match { height: 104px; }
 @media (min-width: 760px) {
-  .standings-split {
+  #scores-content {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 10px;
+    align-items: start;
   }
+  #scores-content .matchup { margin-bottom: 0; }
+  /* An open box score gets the whole row; neighbors keep their size. */
+  #scores-content .matchup.expanded { grid-column: 1 / -1; }
+  #scores-content > :not(.matchup) { grid-column: 1 / -1; }
 }
-.split-col { min-width: 0; }
+@media (min-width: 1000px) {
+  .standings-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "story story"
+      "week  week"
+      "board luck";
+    gap: 20px;
+    align-items: start;
+  }
+  .standings-layout > .front-page { grid-area: story; }
+  .st-week { grid-area: week; }
+  .st-board { grid-area: board; }
+  /* Stays in view beside the (longer) leaderboard while scrolling. */
+  /* Higher specificity than .card's own position: relative. */
+  .standings-layout > .st-luck { grid-area: luck; position: sticky; top: 92px; }
+}
 .split-h {
   font-size: 11px;
   font-weight: 900;
@@ -2280,12 +2309,50 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   position: relative;
 }
 .front-page .fp-mast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 10px;
   font-weight: 900;
   color: var(--tab-accent);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   margin-bottom: 6px;
+}
+.front-page .fp-collapse {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--tab-accent);
+  background: transparent;
+  color: var(--tab-accent);
+  font: 900 16px/1 var(--font);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.front-page .fp-collapse:hover { background: rgba(var(--tab-accent-rgb), 0.15); }
+.front-page .fp-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+/* Headline only */
+.front-page.collapsed { padding: 12px 16px; }
+.front-page.collapsed .fp-headline { font-size: 18px; margin: 0 0 4px; cursor: pointer; }
+.front-page.collapsed .fp-story { display: none; }
+.front-page.collapsed .fp-toggle { margin-top: 2px; }
+/* Loading placeholder, sized like the state the reader will see */
+/* Loading placeholder: roughly the real story's footprint (mast, 2-line
+   headline, faded excerpt, buttons) so its arrival barely moves the page. */
+.front-page.loading .skel-mast { height: 12px; width: 140px; margin-bottom: 10px; }
+.front-page.loading .skel-headline { margin-bottom: 8px; }
+.front-page.loading .skel-headline.short { width: 45%; }
+.front-page.loading .skel-story { height: 160px; margin-top: 6px; }
+.front-page.loading .skel-actions { height: 14px; width: 180px; margin-top: 10px; }
+.front-page.loading.collapsed .skel-headline { height: 22px; }
+@media (max-width: 520px) {
+  /* Long headlines wrap to 3-4 lines on phones. */
+  .front-page.loading:not(.collapsed) .skel-headline.short { width: 85%; box-shadow: 0 36px 0 -1px var(--bg-elev-2); margin-bottom: 44px; }
 }
 .front-page .fp-headline {
   font-size: 24px;
@@ -3623,18 +3690,6 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   body {
     --max-width: 1100px;
   }
-
-  /* Standings tab only: split view side-by-side */
-  .view.active#view-standings {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    align-items: start;
-  }
-  .view.active#view-standings .segmented { display: none; }
-  .view.active#view-standings .tab-pane { display: block; }
-  .view.active#view-standings #standings-content { grid-column: 1; }
-  .view.active#view-standings #scores-content { grid-column: 2; }
 
   /* Trade builder: stack sides horizontally */
   .view.active#view-trades .trade-builder { flex-direction: row; }
