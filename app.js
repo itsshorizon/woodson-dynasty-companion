@@ -870,6 +870,12 @@ function playerStatsLineHTML(player) {
   return (pointsBase || ppg != null) ? `${rankChunk}${pointsBase}${ppgChunk}` : rankChunk;
 }
 
+// Icon + label as separate spans so compact mode can show the icon alone.
+// Reads as "☆ Block" in classic mode, same as before.
+function actionLabel(icon, label) {
+  return `<span class="pa-ic">${icon}</span> <span class="pa-lbl">${label}</span>`;
+}
+
 function renderPlayerRow(player, ownerTeam, context = 'none') {
   const valueChunk = typeof tcValueChipHTML === 'function' ? tcValueChipHTML(player.id) : '';
   const points = playerStatsLineHTML(player);
@@ -882,13 +888,13 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
   const hasInterest = blockEntry && (safeParse(blockEntry.interestedTeamIds) || []).map(String).includes(String(state.myTeamId));
   let actions = '';
   if (context === 'mine') {
-    actions = `<button class="player-action ${isPubliclyBlocked ? 'on' : ''}" data-action="toggle-block" data-player-id="${player.id}">${isPubliclyBlocked ? '★ On Block' : '☆ Block'}</button>`;
+    actions = `<button class="player-action ${isPubliclyBlocked ? 'on' : ''}" data-action="toggle-block" data-player-id="${player.id}" title="${isPubliclyBlocked ? 'On the block' : 'Put on the block'}">${isPubliclyBlocked ? actionLabel('★', 'On Block') : actionLabel('☆', 'Block')}</button>`;
   } else if (context === 'other' && ownerTeam) {
     // "Interested" is always available — even if player isn't formally on the block.
     // Clicking it creates an int_ shadow row if none exists, so owner can see the signal.
     actions = `
-      <button class="player-action" data-action="trade-for" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
-      <button class="player-action ${hasInterest ? 'on' : ''}" data-action="mark-interest" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}">${hasInterest ? '✓ Interested' : '+ Interested'}</button>
+      <button class="player-action" data-action="trade-for" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}" title="Trade for">${actionLabel('↔', 'Trade For')}</button>
+      <button class="player-action ${hasInterest ? 'on' : ''}" data-action="mark-interest" data-player-id="${player.id}" data-owner-id="${ownerTeam.id}" title="${hasInterest ? 'Interested' : 'Mark interest'}">${hasInterest ? actionLabel('✓', 'Interested') : actionLabel('+', 'Interested')}</button>
     `;
   }
 
@@ -1289,10 +1295,10 @@ function renderTradeBlockSection() {
         </div>
         <div class="block-actions">
           ${isOwner
-            ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}">★ Unblock</button>`
+            ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}" title="Take off the block">${actionLabel('★', 'Unblock')}</button>`
             : ownerTeam && live ? `
-              <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
-              <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}">${youInterested ? '✓ Interested' : '+ Interested'}</button>
+              <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}" title="Trade for">${actionLabel('↔', 'Trade For')}</button>
+              <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}" title="${youInterested ? 'Interested' : 'Mark interest'}">${youInterested ? actionLabel('✓', 'Interested') : actionLabel('+', 'Interested')}</button>
             ` : ''}
         </div>
       </div>
@@ -3909,6 +3915,32 @@ function initTheme() {
   };
 }
 
+/* ----------------------- Density (Beta 1.20) -----------------------
+ * Compact layout lives in compact.css, scoped to html[data-density="compact"].
+ * Classic stays the default. Tap the W logo to switch; the choice is per device.
+ * To make compact the league default, change DEFAULT_DENSITY below.
+ * ------------------------------------------------------------------ */
+
+const DEFAULT_DENSITY = 'classic';
+
+function initDensity() {
+  const apply = (d) => document.documentElement.setAttribute('data-density', d);
+  apply(localStorage.getItem('density') || DEFAULT_DENSITY);
+  const logo = $('.logo-dot');
+  if (!logo) return;
+  logo.setAttribute('role', 'button');
+  logo.setAttribute('tabindex', '0');
+  logo.setAttribute('aria-label', 'Switch layout density');
+  const toggle = () => {
+    const next = document.documentElement.getAttribute('data-density') === 'compact' ? 'classic' : 'compact';
+    apply(next);
+    localStorage.setItem('density', next);
+    toast(next === 'compact' ? 'Compact layout on. Tap the W to switch back.' : 'Classic layout on.', 'success');
+  };
+  logo.onclick = toggle;
+  logo.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+}
+
 /* ----------------------- Navigation ----------------------- */
 
 const VIEW_TITLES = {
@@ -4003,6 +4035,7 @@ function wireNavigation() {
 async function boot() {
   loadMyTeamId();
   initTheme();
+  initDensity();
   wireNavigation();
   document.body.dataset.theme = 'standings'; // initial tab theme
   $('#standings-content').innerHTML = skeletonRows(8);
