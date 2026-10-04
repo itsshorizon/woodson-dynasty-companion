@@ -1,0 +1,190 @@
+/* ===========================================================
+ * Compact layout (Beta 1.20)
+ * Opt-in density mode. Every rule is scoped under
+ * html[data-density="compact"], so classic mode is untouched.
+ * To remove: delete this file and its <link> in index.html.
+ * =========================================================== */
+
+[data-density="compact"] {
+  --radius: 8px;
+  --radius-sm: 6px;
+  --nav-h: 56px;
+  --shadow: none;
+}
+
+[data-density="compact"] body {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+/* ---------- Header: one tight line ---------- */
+[data-density="compact"] .app-header {
+  padding: 8px 12px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+}
+[data-density="compact"] .brand { gap: 8px; min-width: 0; }
+[data-density="compact"] .logo-dot {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  box-shadow: 0 0 10px var(--green-glow), 1px 1px 0 var(--blue);
+}
+[data-density="compact"] .logo-dot::after { font-size: 13px; }
+[data-density="compact"] .app-header h1 {
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-density="compact"] .header-right { gap: 6px; flex-shrink: 0; }
+[data-density="compact"] .theme-toggle { width: 28px; height: 28px; }
+[data-density="compact"] .theme-toggle svg { width: 15px; height: 15px; }
+[data-density="compact"] .header-meta {
+  font-size: 9px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Bottom nav ---------- */
+[data-density="compact"] .nav-btn { gap: 2px; padding: 6px 2px; }
+[data-density="compact"] .nav-btn svg { width: 18px; height: 18px; }
+[data-density="compact"] .nav-btn span { font-size: 9px; letter-spacing: 0.04em; }
+
+/* ---------- Page rhythm ---------- */
+[data-density="compact"] .view { padding: 10px 10px 6px; }
+[data-density="compact"] .card { padding: 12px; margin-bottom: 10px; }
+[data-density="compact"] .card h2 { font-size: 12px; margin-bottom: 10px; }
+[data-density="compact"] .loading,
+[data-density="compact"] .empty { padding: 14px 12px; font-size: 12px; }
+[data-density="compact"] .search-input { padding: 8px 14px; margin-bottom: 8px; }
+[data-density="compact"] .team-pills { gap: 6px; padding: 0 10px 8px; margin: 0 -10px 8px; }
+[data-density="compact"] .team-pill { padding: 5px 11px; font-size: 11px; border-width: 1px; }
+
+/* ---------- My Team hero ---------- */
+[data-density="compact"] .myteam-hero {
+  padding: 12px;
+  margin-bottom: 12px;
+  border-width: 1px;
+  box-shadow: 0 0 14px var(--green-glow);
+}
+[data-density="compact"] .myteam-id { gap: 10px; }
+[data-density="compact"] .myteam-hero .team-logo,
+[data-density="compact"] .myteam-hero .team-logo-txt { width: 40px; height: 40px; }
+[data-density="compact"] .myteam-id-text h2 { font-size: 18px; }
+[data-density="compact"] .myteam-hero .owner { font-size: 12px; margin-top: 1px; }
+[data-density="compact"] .myteam-hero .stats { gap: 18px; margin-top: 8px; }
+[data-density="compact"] .myteam-hero .stat-val { font-size: 17px; }
+[data-density="compact"] .myteam-hero .stat-label { font-size: 9px; }
+[data-density="compact"] .myteam-hero .change-team { top: 10px; right: 10px; padding: 3px 8px; font-size: 9px; }
+[data-density="compact"] .commish-launch { margin-top: 10px; padding: 6px 10px; font-size: 10px; border-width: 1px; }
+[data-density="compact"] .myteam-section { margin-bottom: 12px; }
+[data-density="compact"] .myteam-section-header { margin: 0 2px 6px; }
+[data-density="compact"] .myteam-section-header h3 { font-size: 11px; }
+
+/* ---------- Roster: rows in one panel per position ---------- */
+[data-density="compact"] .roster-team-header { margin: 0 0 8px 2px; }
+[data-density="compact"] .roster-team-header h2 { font-size: 17px; }
+[data-density="compact"] .roster-team-header .roster-team-owner { font-size: 10px; margin-top: 0; }
+[data-density="compact"] .pos-group { margin-bottom: 12px; }
+[data-density="compact"] .pos-label { font-size: 11px; margin: 0 0 4px 2px; }
+[data-density="compact"] .pos-label .count { font-size: 10px; }
+
+[data-density="compact"] .player-row {
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 8px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 1px 1px 3px;
+  box-shadow: none;
+}
+[data-density="compact"] .pos-label + .player-row {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .player-row:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+/* A list should not bounce on hover/tap. Keep a subtle tint instead. */
+[data-density="compact"] .player-row:hover,
+[data-density="compact"] .player-row[class*="pos-row-"]:hover,
+[data-density="compact"] .player-row:active {
+  transform: none;
+  box-shadow: none;
+  background: var(--bg-elev-2);
+}
+
+[data-density="compact"] .player-row .player-photo-wrap,
+[data-density="compact"] .player-row .player-photo,
+[data-density="compact"] .player-row .player-photo-fallback {
+  width: 32px; height: 32px;
+  border-width: 1px;
+}
+[data-density="compact"] .player-row .player-photo-fallback { font-size: 10px; }
+[data-density="compact"] .player-row .pos-tag { display: none; }
+
+/* Two lines: name + value on top, stats + actions below. */
+[data-density="compact"] .player-row .player-info {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name val"
+    "meta act";
+  column-gap: 8px;
+  row-gap: 1px;
+  align-items: center;
+}
+[data-density="compact"] .player-row .player-name { grid-area: name; font-size: 13px; }
+[data-density="compact"] .player-row .player-meta {
+  grid-area: meta;
+  margin-top: 0;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  min-width: 0;
+}
+[data-density="compact"] .player-row .tv-row-val-line {
+  grid-area: val;
+  margin-top: 0;
+  text-align: right;
+  font-size: 12px;
+}
+[data-density="compact"] .player-row .tv-row-val .stat-lbl { display: none; }
+[data-density="compact"] .player-row .player-actions {
+  grid-area: act;
+  margin-top: 0;
+  gap: 4px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+[data-density="compact"] .player-row .stat-pts { margin-left: 2px; }
+[data-density="compact"] .player-row .stat-lbl { font-size: 8px; }
+[data-density="compact"] .player-row .pos-rank {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 4px;
+  margin-right: 2px;
+}
+[data-density="compact"] .player-row .block-tag { font-size: 8px; padding: 0 4px; }
+
+/* Icon-only action chips. Labels stay in the DOM for screen readers. */
+[data-density="compact"] .player-row .player-action {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-density="compact"] .player-row .player-action .pa-lbl {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
