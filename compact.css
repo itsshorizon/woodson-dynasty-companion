@@ -188,3 +188,427 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* ===========================================================
+ * Phase 3+: everything else
+ * =========================================================== */
+
+/* ---------- Shared controls ---------- */
+[data-density="compact"] .btn-primary {
+  padding: 10px;
+  font-size: 12px;
+  margin-top: 10px;
+  border-radius: 8px;
+  box-shadow: 3px 3px 0 var(--blue);
+}
+[data-density="compact"] .btn-ghost { padding: 6px; font-size: 10px; border-width: 1px; margin-top: 4px; }
+[data-density="compact"] .btn-accept,
+[data-density="compact"] .btn-reject,
+[data-density="compact"] .btn-counter,
+[data-density="compact"] .btn-cancel {
+  padding: 7px 6px;
+  font-size: 11px;
+  border-width: 1px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+}
+[data-density="compact"] .trade-actions { gap: 6px; margin-top: 8px; }
+[data-density="compact"] .segmented { padding: 3px; border-width: 1px; border-radius: 8px; margin-bottom: 10px; gap: 3px; }
+[data-density="compact"] .seg-btn { padding: 6px 8px; font-size: 11px; border-radius: 6px; }
+[data-density="compact"] select,
+[data-density="compact"] input { padding: 7px 10px; font-size: 13px; border-radius: 6px; }
+[data-density="compact"] .fs-trigger { min-height: 34px; padding: 6px 10px; font-size: 13px; border-radius: 6px; }
+[data-density="compact"] .fs-ico { width: 20px; height: 20px; }
+[data-density="compact"] .card::before { left: 12px; width: 28px; height: 2px; }
+
+/* ---------- Standings: one panel, one tight row per team ---------- */
+[data-density="compact"] .split-h { margin: 0 0 6px 2px; font-size: 11px; }
+[data-density="compact"] .standings-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 7px 10px 7px 6px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 1px 1px 3px;
+  box-shadow: none;
+}
+[data-density="compact"] .standings-row:first-child {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .standings-row:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .standings-row:hover { transform: none; }
+[data-density="compact"] .rank { font-size: 14px; }
+[data-density="compact"] .standings-row .team-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-density="compact"] .standings-row .team-logo { --logo-size: 18px !important; margin-right: 6px; }
+/* Owner, power rank and storyline badges share one line under the name. */
+[data-density="compact"] .standings-row > div:nth-child(2) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 5px;
+  min-width: 0;
+}
+[data-density="compact"] .standings-row .team-name { flex: 1 0 100%; }
+[data-density="compact"] .standings-row .team-owner { margin-top: 0; font-size: 10px; }
+[data-density="compact"] .power-rank,
+[data-density="compact"] .storyline-badge {
+  font-size: 8px;
+  padding: 0 4px;
+  margin-top: 0;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+[data-density="compact"] .storyline-badges { margin-top: 0; gap: 3px; }
+[data-density="compact"] .standings-row .record { font-size: 13px; }
+[data-density="compact"] .standings-stats { gap: 0; }
+[data-density="compact"] .standings-stats .points { font-size: 11px; }
+
+/* ---------- Scoreboard: one panel, two lines per matchup ---------- */
+[data-density="compact"] .matchup {
+  padding: 6px 10px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 1px 1px;
+  box-shadow: none;
+}
+[data-density="compact"] .matchup:first-child {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .matchup:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .matchup-head { position: relative; padding-right: 18px; }
+[data-density="compact"] .matchup-row { padding: 1px 0; gap: 8px; }
+[data-density="compact"] .matchup-row .name {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-density="compact"] .matchup-row .team-logo { --logo-size: 18px !important; margin-right: 6px; }
+[data-density="compact"] .matchup-ppg { display: none; }
+[data-density="compact"] .matchup-row .score { font-size: 15px; }
+[data-density="compact"] .matchup-divider { display: none; }
+/* Toggle becomes a chevron on the right edge. */
+[data-density="compact"] .matchup-toggle {
+  position: absolute;
+  right: 0; top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  font-size: 0;
+}
+[data-density="compact"] .matchup-toggle .chev { font-size: 12px; }
+[data-density="compact"] .matchup-detail { margin-top: 6px; padding-top: 4px; }
+[data-density="compact"] .box-row { padding: 2px 0; }
+
+/* ---------- Trade cards (My Team + Trade Desk) ---------- */
+[data-density="compact"] .trade-card { padding: 10px; margin-bottom: 8px; }
+[data-density="compact"] .trade-card:hover { transform: none; }
+[data-density="compact"] .trade-header { margin-bottom: 6px; font-size: 11px; }
+[data-density="compact"] .trade-status { padding: 1px 7px; font-size: 9px; }
+[data-density="compact"] .trade-teams { gap: 8px; margin-bottom: 6px; }
+[data-density="compact"] .trade-team h5 { font-size: 10px; margin-bottom: 4px; }
+[data-density="compact"] .trade-asset { font-size: 12px; padding: 3px 6px; margin-bottom: 2px; }
+
+/* Trade grades and analysis */
+[data-density="compact"] .tv-analysis { margin-top: 6px; }
+[data-density="compact"] .tv-analysis summary { padding: 6px 8px; gap: 2px 8px; }
+[data-density="compact"] .tv-analysis-body { padding: 0 8px 8px; }
+[data-density="compact"] .tv-compact { margin-top: 6px; padding: 5px 8px; }
+[data-density="compact"] #trade-meter { margin-top: 10px; }
+[data-density="compact"] .tv-meter { padding: 10px; }
+[data-density="compact"] .tv-verdict { margin-bottom: 6px; }
+[data-density="compact"] .tv-band { font-size: 18px; }
+[data-density="compact"] .tv-meter[data-band="empty"] .tv-band { font-size: 13px; }
+[data-density="compact"] .tv-pct { font-size: 13px; }
+[data-density="compact"] .tv-sub { font-size: 11px; }
+[data-density="compact"] .tv-bar { height: 26px; }
+
+/* ---------- Trade builder ---------- */
+[data-density="compact"] .trade-builder { gap: 6px; }
+[data-density="compact"] .trade-side { padding: 10px; }
+[data-density="compact"] .trade-side label { font-size: 10px; margin-bottom: 4px; }
+[data-density="compact"] .trade-divider { font-size: 16px; line-height: 1; }
+[data-density="compact"] .asset-section { margin-top: 8px; }
+[data-density="compact"] .asset-section h4 { font-size: 10px; margin-bottom: 4px; }
+[data-density="compact"] .asset-list { max-height: 220px; padding: 2px; border-radius: 6px; }
+[data-density="compact"] .asset-list:empty::before { padding: 8px; font-size: 11px; }
+[data-density="compact"] .asset-item { padding: 4px 8px; gap: 8px; }
+[data-density="compact"] .trade-side label.asset-item { font-size: 12px; }
+[data-density="compact"] .asset-item .player-photo-wrap,
+[data-density="compact"] .asset-item .player-photo,
+[data-density="compact"] .asset-item .player-photo-fallback { width: 24px; height: 24px; font-size: 8px; }
+[data-density="compact"] #reset-trade { margin-top: 10px; }
+
+/* ---------- Trade finder ---------- */
+[data-density="compact"] .tv-filters { gap: 4px; margin: 8px 0 0; }
+[data-density="compact"] .tv-filter-row { gap: 4px; }
+[data-density="compact"] .tv-filter-row .lbl { width: 58px; font-size: 9px; }
+[data-density="compact"] .tv-filter { padding: 3px 8px; font-size: 11px; }
+[data-density="compact"] #finder-results { gap: 6px; margin-top: 8px; }
+[data-density="compact"] .tv-finder-item { padding: 8px 10px; }
+[data-density="compact"] .tv-finder-sides { margin: 4px 0; gap: 8px; font-size: 12px; }
+[data-density="compact"] .tv-asset-chip { margin-top: 3px; gap: 6px; }
+[data-density="compact"] .tv-note,
+[data-density="compact"] .chart-sub { font-size: 11px; line-height: 1.35; }
+
+/* ---------- League trade feed ---------- */
+[data-density="compact"] #trade-feed-list { gap: 6px; }
+[data-density="compact"] .tv-feed-item { padding: 8px 10px; }
+[data-density="compact"] .tv-feed-head { font-size: 12px; }
+[data-density="compact"] .tv-feed-sides { margin-top: 4px; gap: 8px; font-size: 12px; }
+[data-density="compact"] .tv-feed-sides .lbl { font-size: 9px; }
+
+/* ---------- Trade block ---------- */
+[data-density="compact"] .block-entry {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 6px 10px 6px 8px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 1px 1px 3px;
+}
+[data-density="compact"] .block-entry:first-child {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .block-entry:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .block-entry:hover { transform: none; }
+[data-density="compact"] .block-entry .player-photo-wrap,
+[data-density="compact"] .block-entry .player-photo,
+[data-density="compact"] .block-entry .player-photo-fallback { width: 32px; height: 32px; border-width: 1px; font-size: 10px; }
+[data-density="compact"] .block-player { font-size: 13px; }
+[data-density="compact"] .block-pos { font-size: 8px; padding: 0 4px; margin-left: 4px; }
+[data-density="compact"] .block-stats { margin-top: 1px; font-size: 10px; }
+[data-density="compact"] .block-stats .pos-rank { font-size: 9px; padding: 0 4px; }
+[data-density="compact"] .block-stats .stat-lbl,
+[data-density="compact"] .block-entry .tv-row-val .stat-lbl { font-size: 8px; }
+[data-density="compact"] .block-entry .tv-row-val-line { margin-top: 0; font-size: 11px; }
+[data-density="compact"] .block-owner { font-size: 10px; margin-top: 0; }
+[data-density="compact"] .block-interest-list { font-size: 9px; margin-top: 1px; }
+[data-density="compact"] .block-actions { flex-direction: row; gap: 4px; }
+[data-density="compact"] .block-actions .player-action {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-density="compact"] .block-actions .player-action .pa-lbl {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- My Team: matchmaker, draft assets, value ---------- */
+[data-density="compact"] .matchmaker-card { padding: 10px; margin-bottom: 12px; border-width: 1px; }
+[data-density="compact"] .mm-header { margin-bottom: 8px; }
+[data-density="compact"] .matchmaker-card h4 { font-size: 11px; margin-bottom: 6px; }
+[data-density="compact"] .mm-nav { gap: 4px; }
+[data-density="compact"] .mm-nav button { width: 24px; height: 24px; font-size: 14px; }
+[data-density="compact"] .mm-count { font-size: 10px; min-width: 44px; }
+[data-density="compact"] .matchmaker-needs { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .matchmaker-need { padding: 6px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+[data-density="compact"] .matchmaker-need .label { flex: 1 0 100%; font-size: 9px; }
+[data-density="compact"] .matchmaker-need .pos-tag { margin-top: 0; font-size: 10px; padding: 1px 6px; }
+[data-density="compact"] .matchmaker-need .pts { margin-top: 0; font-size: 10px; }
+[data-density="compact"] .matchmaker-suggest { padding: 8px 10px; border-left-width: 3px; }
+[data-density="compact"] .matchmaker-suggest .label { font-size: 9px; }
+[data-density="compact"] .matchmaker-suggest .partner { font-size: 14px; margin: 1px 0; }
+[data-density="compact"] .matchmaker-suggest .reason { font-size: 11px; line-height: 1.35; }
+
+[data-density="compact"] .draft-summary { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .draft-summary-card { padding: 6px; }
+[data-density="compact"] .draft-summary-card:hover { transform: none; }
+[data-density="compact"] .draft-summary-year { font-size: 10px; }
+[data-density="compact"] .draft-summary-count { font-size: 18px; line-height: 1.15; }
+[data-density="compact"] .draft-summary-label { font-size: 8px; }
+[data-density="compact"] .myteam-draft-detail { margin-top: 6px; gap: 0; }
+[data-density="compact"] .draft-detail-row {
+  padding: 5px 10px;
+  border-radius: 0;
+  border-width: 0 1px 1px 3px;
+}
+[data-density="compact"] .draft-detail-row:first-child {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .draft-detail-row:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+[data-density="compact"] .draft-detail-slot { font-size: 12px; }
+[data-density="compact"] .draft-detail-sub { font-size: 10px; margin-top: 0; }
+[data-density="compact"] .draft-pick-row { padding: 6px 10px; gap: 8px; grid-template-columns: 44px 1fr auto; margin-bottom: 4px; }
+[data-density="compact"] .round-badge { width: 44px; height: 30px; }
+
+[data-density="compact"] .tv-team-total { margin: 10px 0 6px; padding: 10px; }
+[data-density="compact"] .tv-team-total-pair { gap: 8px; }
+[data-density="compact"] .tv-team-total-pair b,
+[data-density="compact"] .tv-team-total-head b { font-size: 20px; }
+[data-density="compact"] .tv-team-rank { font-size: 18px; }
+[data-density="compact"] .tv-team-total-grid { gap: 4px; margin: 8px 0 6px; grid-template-columns: repeat(4, 1fr); }
+[data-density="compact"] .tv-team-total-grid > div { padding: 5px 6px; border-radius: 6px; }
+[data-density="compact"] .tv-team-total-grid b { font-size: 12px; }
+[data-density="compact"] .tv-team-total .lbl { font-size: 8px; }
+
+/* ---------- Vault ---------- */
+[data-density="compact"] .extremes-grid { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .extreme-cell { padding: 7px 8px; border-left-width: 3px; }
+[data-density="compact"] .extreme-cell .label { font-size: 9px; }
+[data-density="compact"] .extreme-cell .val { font-size: 17px; margin: 1px 0; }
+[data-density="compact"] .extreme-cell .sub { font-size: 10px; line-height: 1.25; }
+[data-density="compact"] .allplay-row { padding: 5px 8px; margin-bottom: 0; border-radius: 0; border-width: 0 0 1px; font-size: 12px; gap: 8px; }
+[data-density="compact"] .vault-subnav-fade { margin-bottom: 8px; }
+[data-density="compact"] #vault-subnav.vault-subnav .seg-btn { font-size: 10px; padding: 6px 10px; }
+[data-density="compact"] .draft-board-wrap { padding: 8px; margin-bottom: 8px; }
+[data-density="compact"] .draft-board { gap: 4px; grid-template-columns: 36px repeat(12, minmax(78px, 1fr)); min-width: 1000px; }
+[data-density="compact"] .board-slot-head { padding: 4px; font-size: 9px; border-radius: 4px; }
+[data-density="compact"] .board-round-label { font-size: 12px; border-radius: 4px; }
+[data-density="compact"] .board-cell { padding: 4px 5px; min-height: 44px; border-radius: 4px; }
+[data-density="compact"] #team-value-board { gap: 0; }
+[data-density="compact"] .tv-board-row {
+  padding: 6px 10px;
+  border-radius: 0;
+  border-width: 0 1px 1px;
+  gap: 8px;
+}
+[data-density="compact"] .tv-board-row:first-child { border-top-width: 1px; border-top-left-radius: var(--radius-sm); border-top-right-radius: var(--radius-sm); }
+[data-density="compact"] .tv-board-row:last-child { border-bottom-left-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+[data-density="compact"] .tv-board-rank { font-size: 14px; }
+[data-density="compact"] .tv-board-name { font-size: 13px; }
+[data-density="compact"] .tv-board-main { gap: 2px; }
+[data-density="compact"] .tv-board-bar { height: 4px; }
+[data-density="compact"] .tv-board-val b { font-size: 14px; }
+
+/* ---------- Trade history + regret ---------- */
+[data-density="compact"] .history-card { padding: 8px 10px; margin-bottom: 6px; border-left-width: 3px; }
+[data-density="compact"] .history-header { margin-bottom: 3px; }
+[data-density="compact"] .history-teams { font-size: 12px; }
+[data-density="compact"] .history-badge { font-size: 9px; padding: 1px 7px; }
+[data-density="compact"] .history-assets { font-size: 11px; line-height: 1.4; }
+[data-density="compact"] .regret-bar { margin-top: 6px; padding: 5px 8px; gap: 6px; }
+[data-density="compact"] .regret-side { font-size: 9px; }
+[data-density="compact"] .regret-side .points { font-size: 13px; margin-top: 0; }
+[data-density="compact"] .regret-vs { font-size: 9px; }
+[data-density="compact"] .regret-net { padding-top: 3px; font-size: 10px; }
+[data-density="compact"] .regret-net b { font-size: 12px; }
+
+/* ---------- Misc ---------- */
+[data-density="compact"] .patch-notes-btn { margin: 12px 0 4px; padding: 8px; font-size: 12px; }
+[data-density="compact"] .tv-team-total-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+[data-density="compact"] .tv-team-total-grid .tv-window,
+[data-density="compact"] .tv-team-total-grid .tv-window-select { font-size: 9px; padding: 1px 5px; max-width: 100%; }
+[data-density="compact"] .tv-factor-tags { gap: 4px; margin-bottom: 4px; }
+[data-density="compact"] .tv-factor-tags span,
+[data-density="compact"] .tv-factor { font-size: 9px; padding: 1px 6px; }
+[data-density="compact"] .standings-row .team-logo-txt,
+[data-density="compact"] .matchup-row .team-logo-txt { width: 18px; height: 18px; font-size: 6px; overflow: hidden; }
+[data-density="compact"] .consistency-summary { margin-top: 6px; padding: 6px 8px; gap: 4px; font-size: 10px; }
+[data-density="compact"] .consistency-summary .side h6 { font-size: 9px; margin-bottom: 2px; }
+[data-density="compact"] .consistency-summary .side .row { margin-bottom: 0; }
+[data-density="compact"] .consistency-summary .vs { font-size: 11px; padding: 0 2px; }
+
+/* ---------- Vault sub-tabs ---------- */
+[data-density="compact"] .rivalry-pickers { margin-bottom: 8px; gap: 6px; }
+[data-density="compact"] .rivalry-summary { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .rivalry-summary-card { padding: 6px; }
+[data-density="compact"] .rivalry-summary-card .label { font-size: 9px; }
+[data-density="compact"] .rivalry-summary-card .val { font-size: 17px; }
+[data-density="compact"] .rivalry-row {
+  grid-template-columns: 62px 1fr 1fr;
+  gap: 8px;
+  padding: 5px 10px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 1px 1px 3px;
+}
+[data-density="compact"] .rivalry-row:first-of-type { border-top-width: 1px; }
+[data-density="compact"] .rivalry-row .yr { font-size: 10px; }
+[data-density="compact"] .rivalry-row .score { font-size: 12px; line-height: 1.25; }
+
+[data-density="compact"] .resume-grid { gap: 4px; margin-bottom: 10px; }
+[data-density="compact"] .resume-tile { padding: 6px 4px; font-size: 11px; line-height: 1.2; }
+[data-density="compact"] .resume-card { padding: 12px; border-width: 1px; }
+[data-density="compact"] .resume-card h3 { font-size: 18px; }
+[data-density="compact"] .resume-card .resume-handle { font-size: 10px; margin-bottom: 8px; }
+[data-density="compact"] .resume-stats { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .resume-stat { padding: 6px 8px; }
+[data-density="compact"] .resume-stat .label { font-size: 9px; }
+[data-density="compact"] .resume-stat .val { font-size: 15px; }
+[data-density="compact"] .resume-badges { gap: 4px; margin-top: 8px; }
+
+[data-density="compact"] .tm-pick { grid-template-columns: 40px 32px 1fr auto; gap: 8px; }
+[data-density="compact"] .tm-pick .pick-photo,
+[data-density="compact"] .tm-pick .pick-photo .player-photo,
+[data-density="compact"] .tm-pick .pick-photo .player-photo-fallback { width: 30px; height: 30px; font-size: 9px; }
+[data-density="compact"] .pick-title { font-size: 13px; }
+[data-density="compact"] .pick-origin { font-size: 10px; margin-top: 0; }
+
+[data-density="compact"] .player-index-controls { gap: 6px; margin-bottom: 8px; }
+[data-density="compact"] .player-index,
+[data-density="compact"] .manager-index { font-size: 12px; }
+[data-density="compact"] .player-index thead th,
+[data-density="compact"] .manager-index thead th { padding: 6px; font-size: 9px; }
+[data-density="compact"] .player-index tbody td,
+[data-density="compact"] .manager-index tbody td { padding: 5px 6px; }
+[data-density="compact"] .player-index tbody td:first-child { white-space: nowrap; max-width: 128px; overflow: hidden; text-overflow: ellipsis; }
+[data-density="compact"] .allplay-row.head { padding: 2px 8px; font-size: 9px; }
+[data-density="compact"] .tv-board-meta { font-size: 9px; gap: 2px 6px; }
+[data-density="compact"] .tv-board-meta .tv-window { font-size: 8px; padding: 0 5px; }
+
+/* ---------- Modals + player profile ---------- */
+[data-density="compact"] .modal-overlay { padding: 12px; }
+[data-density="compact"] .modal { border-width: 1px; max-height: 88vh; }
+[data-density="compact"] .modal-header { padding: 12px 14px 10px; }
+[data-density="compact"] .modal-header h2 { font-size: 17px; margin-bottom: 2px; }
+[data-density="compact"] .modal-header p { font-size: 12px; }
+[data-density="compact"] .modal-body { padding: 8px; gap: 4px; }
+[data-density="compact"] .modal-team-btn { padding: 8px 10px; font-size: 13px; }
+[data-density="compact"] #player-profile-header { gap: 12px; padding: 12px 14px 10px; }
+[data-density="compact"] .profile-photo-wrap,
+[data-density="compact"] .profile-photo-wrap.clean,
+[data-density="compact"] .profile-photo,
+[data-density="compact"] .profile-photo-fallback { width: 52px; height: 52px; }
+[data-density="compact"] .profile-photo-fallback { font-size: 14px; }
+[data-density="compact"] .profile-name { font-size: 18px; }
+[data-density="compact"] .profile-stats { gap: 6px; margin: 0 12px 10px; }
+[data-density="compact"] .profile-stat { padding: 6px; }
+[data-density="compact"] .profile-stat .val { font-size: 15px; }
+[data-density="compact"] .weekly-bars { height: 84px; padding: 0 12px 4px; }
+[data-density="compact"] .weekly-labels { padding: 0 12px 8px; }
+[data-density="compact"] .weekly-legend { padding: 0 12px 8px; gap: 6px; font-size: 9px; }
+[data-density="compact"] .career-arc { margin: 10px 12px; padding-top: 8px; }
+[data-density="compact"] .career-arc-table { font-size: 12px; }
+[data-density="compact"] .career-arc-table thead th,
+[data-density="compact"] .career-arc-table tbody td { padding: 5px 6px; }
+[data-density="compact"] .tv-profile { margin: 10px 12px; padding-top: 8px; }
+[data-density="compact"] .tv-profile h4 { margin-bottom: 6px; }
+[data-density="compact"] .tv-outlook { height: 84px; margin-top: 4px; }
+[data-density="compact"] .tv-profile-row { margin: 3px 0; }

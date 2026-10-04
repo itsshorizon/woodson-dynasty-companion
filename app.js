@@ -1295,10 +1295,10 @@ function renderTradeBlockSection() {
         </div>
         <div class="block-actions">
           ${isOwner
-            ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}">★ Unblock</button>`
+            ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}" title="Take off the block">${actionLabel('★', 'Unblock')}</button>`
             : ownerTeam && live ? `
-              <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}">↔ Trade For</button>
-              <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}">${youInterested ? '✓ Interested' : '+ Interested'}</button>
+              <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}" title="Trade for">${actionLabel('↔', 'Trade For')}</button>
+              <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}" title="${youInterested ? 'Interested' : 'Mark interest'}">${youInterested ? actionLabel('✓', 'Interested') : actionLabel('+', 'Interested')}</button>
             ` : ''}
         </div>
       </div>
