@@ -4575,3 +4575,4 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   border: 1px solid var(--border);
 }
 #team-value-tabs { margin-bottom: 8px; }
+.tv-sentence { color: var(--text); font-weight: 800; }

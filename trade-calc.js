@@ -203,9 +203,36 @@ function tcMeterSVG(result) {
     </svg>`;
 }
 
-function tcVerdictText(result, names) {
+// Manager's first name for a team ("Kyla"), falling back to the team name.
+function tcManager(teamId) {
+  const team = teamById(Number(teamId));
+  if (!team) return null;
+  const first = String(team.owner || '').split(',')[0].trim().split(/\s+/)[0];
+  return first && first !== '—' ? first : team.name.trim();
+}
+
+/**
+ * Plain-English verdict: "Kyla is fleecing Zack", "Zack is slightly winning".
+ * side: 'a' | 'b' | null (who's ahead). ids: { a, b } team ids. When the
+ * viewer's own team is involved it reads "You're..." / "...fleecing you".
+ */
+function tcWinnerSentence(bandKey, side, ids) {
+  if (bandKey === 'fair' || !side) return "Even trade. Nobody's winning this one.";
+  const winId = ids?.[side], loseId = ids?.[side === 'a' ? 'b' : 'a'];
+  const meWin = winId != null && Number(winId) === state.myTeamId;
+  const meLose = loseId != null && Number(loseId) === state.myTeamId;
+  const winner = meWin ? 'You' : (tcManager(winId) || (side === 'a' ? 'Side A' : 'Side B'));
+  const loser = meLose ? 'you' : (tcManager(loseId) || 'the other side');
+  const is = meWin ? "You're" : `${winner} is`;
+  if (bandKey === 'slight') return `${is} slightly winning`;
+  if (bandKey === 'lopsided') return `${is} clearly winning`;
+  return `${is} fleecing ${loser}`;
+}
+
+function tcVerdictText(result, names, ids) {
   if (result.empty) return { title: 'Add players or picks', sub: 'The meter updates as you build the trade.' };
-  if (result.band.key === 'fair') return { title: 'Fair', sub: 'Both sides get similar value.' };
+  if (result.band.key === 'fair') return { title: 'Fair', sub: "Even trade. Nobody's winning this one." };
+  if (ids) return { title: `${result.band.label}`, sub: tcWinnerSentence(result.band.key, result.winner, ids) };
   const who = result.winner === 'a' ? names.a : names.b;
   return { title: `${result.band.label}`, sub: `Favors ${who}` };
 }
@@ -217,7 +244,7 @@ function tcVerdictText(result, names) {
  */
 function tcMeterHTML(opts) {
   const r = TradeEngine.evaluate(opts.trade, TC.ctx);
-  const v = tcVerdictText(r, opts.names);
+  const v = tcVerdictText(r, opts.names, opts.ownerIds || opts.teamIds);
   const bandKey = r.empty ? 'empty' : r.band.key;
   if (opts.compact) {
     return `
@@ -931,13 +958,14 @@ function tcTradeAnalysisHTML(t, viewerTeamId, opts = {}) {
     teamIds: left.id && right.id && t.status !== 'Accepted' ? { a: left.id, b: right.id } : null,
     sends: { a: (left.sends.players || []).map((p) => p.id), b: (right.sends.players || []).map((p) => p.id) },
     readOnly: true,
+    ownerIds: { a: left.id, b: right.id },
   };
   const now = TradeEngine.evaluate(meterOpts.trade, TC.ctx);
   if (now.empty) return '';
   const verdictLine = (band, edge, winner) => {
-    const who = winner === 'a' ? left.name : winner === 'b' ? right.name : null;
+    const pct = Math.abs(edge) >= 0.95 ? '95%+' : `${Math.round(Math.abs(edge) * 100)}%`;
     return `<span class="tv-chip">${escapeHtml(band.label)}</span>
-      <span class="tv-compact-sub">${who ? `Favors ${escapeHtml(who)} · ${Math.abs(edge) >= 0.95 ? '95%+' : `${Math.round(Math.abs(edge) * 100)}%`}` : 'Even trade'}</span>`;
+      <span class="tv-compact-sub"><b class="tv-sentence">${escapeHtml(tcWinnerSentence(band.key, winner, { a: left.id, b: right.id }))}</b>${winner ? ` · ${pct}` : ''}</span>`;
   };
   let summary, bandKey = now.band.key, note = '';
   const snap = st.snapshot;
@@ -1040,6 +1068,8 @@ function tcRenderFinderCard() {
 /* ----------------------- Shop my players ----------------------- */
 
 const TC_MODE_KEY = 'tradeFinderMode';
+// Anything short of a fleece can be suggested (Lopsided tops out at 25%).
+const TC_NO_FLEECE = 0.249;
 const TC_SHOP_KEY = 'tradeShopFilters';
 TC.shop = new Set(); // asset keys I'm selling
 
@@ -1155,19 +1185,20 @@ function tcRunShop() {
       const offers = TradeEngine.shopOffers({
         give, theirs: tcTeamAssets(partner),
         myWindow, theirWindow: tcWindowFor(partner.id).label,
-        get: { players: f.players, picks: f.picks }, sizes: f.sizes, limit: 1,
+        get: { players: f.players, picks: f.picks }, sizes: f.sizes, limit: 1, maxEdge: TC_NO_FLEECE,
       }, TC.ctx);
       results = results.concat(offers.map((o) => ({ ...o, partner })));
     });
-    results.sort((x, y) => (y.theyWant - x.theyWant) || (y.iWant - x.iWant) || Math.abs(x.edge) - Math.abs(y.edge));
+    const bandRank = { fair: 0, slight: 1, lopsided: 2, fleece: 3 };
+    results.sort((x, y) => bandRank[x.band.key] - bandRank[y.band.key] || (y.theyWant - x.theyWant) || (y.iWant - x.iWant) || Math.abs(x.edge) - Math.abs(y.edge));
     state._finderResults = results;
     if (!results.length) {
-      out.innerHTML = empty('No team has a fair offer with these filters. Try allowing picks or more pieces back.');
+      out.innerHTML = empty('No team can make an offer short of a fleece with these filters. Try allowing picks or more pieces back.');
       return;
     }
-    out.innerHTML = `<p class="tv-note"><b>${results.length}</b> team${results.length > 1 ? 's' : ''} can make a fair offer. Best fits first.</p>` +
+    out.innerHTML = `<p class="tv-note"><b>${results.length}</b> team${results.length > 1 ? 's' : ''} can make an offer. Fairest first.</p>` +
       results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') +
-      '<p class="tv-note">Offers are within 8% of fair. "Why they\'d say yes" is based on their team mode: Contenders care about this season, Rebuilders about long-term value.</p>';
+      '<p class="tv-note">Fleeces are never suggested; fairest offers come first. "Why they\'d say yes" is based on their team mode: Contenders care about this season, Rebuilders about long-term value.</p>';
     out.onclick = tcFinderResultsClick;
   }, 30);
 }
@@ -1344,11 +1375,14 @@ function tcRunFinder() {
         give: { players: f.givePlayers, picks: f.givePicks },
         get: { players: f.getPlayers || !!target, picks: f.getPicks },
         shapes: f.shapes,
+        // Only hard rule: no fleeces. Fairest and best-fitting deals rank first.
+        maxEdge: TC_NO_FLEECE, requireMutual: false,
         limit: partnerId ? 8 : 3,
       }, TC.ctx);
       results = results.concat(found.map((r) => ({ ...r, partner })));
     }
-    results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
+    const bandRank = { fair: 0, slight: 1, lopsided: 2, fleece: 3 };
+    results.sort((x, y) => bandRank[x.band.key] - bandRank[y.band.key] || y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
     // Variety: don't let one package of mine (or one partner) fill the list.
     const keyOf = (list) => list.map((a) => TradeEngine.assetValue(a, TC.ctx).key).sort().join('|');
     const giveCount = {}, partnerCount = {};
@@ -1363,15 +1397,12 @@ function tcRunFinder() {
     state._finderResults = results;
     if (!results.length) {
       const partner = partnerId ? teamById(partnerId) : null;
-      const sameMode = partner && tcWindowFor(partner.id).label === myWindow && myWindow !== 'Middle';
-      out.innerHTML = empty(sameMode
-        ? `You and ${partner.name} are both ${myWindow.toLowerCase()}s, so few fair deals help both of you right now. Try another team, a bigger deal size, or allowing picks.`
-        : targetId
-          ? 'No fair deal that helps both teams for that player. Try a bigger deal size or allow picks.'
-          : 'No fair deals that help both teams with these filters. Try loosening them.');
+      out.innerHTML = empty(targetId
+          ? 'No deal short of a fleece for that player. Try a bigger deal size or allow picks.'
+          : 'No deals short of a fleece with these filters. Try loosening them.');
       return;
     }
-    out.innerHTML = results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') + `<p class="tv-note">Contenders are judged mostly on this season (lineup points), Rebuilders on long-term value and age. Every suggestion is within 8% of fair and helps both teams.</p>`;
+    out.innerHTML = results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') + `<p class="tv-note">Fleeces are never suggested. Fairest deals come first, then the ones that fit both teams best. Contenders are judged mostly on this season, Rebuilders on long-term value and age.</p>`;
     out.onclick = tcFinderResultsClick;
   }, 30);
 }
@@ -1380,7 +1411,7 @@ function tcFinderItemHTML(r, i, my, myWindow) {
   const theirWindow = tcWindowFor(r.partner.id).label;
   const iWant = r.iWant != null ? r.iWant : r.myFit > 0;
   const theyWant = r.theyWant != null ? r.theyWant : r.theirFit > 0;
-  const winner = r.band.key === 'fair' ? null : r.edge > 0 ? 'You' : r.partner.name;
+  const sentence = tcWinnerSentence(r.band.key, r.band.key === 'fair' ? null : r.edge > 0 ? 'a' : 'b', { a: my.id, b: r.partner.id });
   const reasons = (list) => `<ul class="tv-why-list">${list.map((x) => `<li class="${x.good ? 'good' : 'bad'}">${escapeHtml(x.text)}</li>`).join('')}</ul>`;
   const side = (ok, okTitle, mixedTitle, noTitle, win, list) => {
     const mixed = !ok && list.some((x) => x.good);
@@ -1398,7 +1429,7 @@ function tcFinderItemHTML(r, i, my, myWindow) {
       </div>
       <div class="tv-finder-score">
         <span class="tv-chip">${escapeHtml(r.band.label)}</span>
-        <span class="tv-compact-sub">${winner ? `Favors ${escapeHtml(winner)} · ${Math.round(Math.abs(r.edge) * 100)}%` : 'Even trade'}</span>
+        <span class="tv-compact-sub"><b class="tv-sentence">${escapeHtml(sentence)}</b>${r.band.key === 'fair' ? '' : ` · ${Math.round(Math.abs(r.edge) * 100)}%`}</span>
         ${tcMiniBar(r.edge)}
       </div>
       <div class="tv-finder-sides">

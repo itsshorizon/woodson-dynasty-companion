@@ -1,6 +1,16 @@
 {
  "entries": [
   {
+   "version": "1.20.0",
+   "title": "🗣️ Who's Winning?",
+   "date": "2026-10-04T16:33:57-04:00",
+   "notes": [
+    "🗣️ Every trade grade now says it plainly: \"Kyla is fleecing Zack\", \"Zack is slightly winning\", or \"Even trade. Nobody's winning this one.\"",
+    "🔍 Trade Finder and Shop show more ideas: anything short of a fleece, fairest deals first.",
+    "🚫 Fleeces are still never suggested."
+   ]
+  },
+  {
    "version": "1.19.0",
    "title": "📊 Win-Now Rankings + Smarter Projections",
    "date": "2026-10-03T17:42:09-04:00",

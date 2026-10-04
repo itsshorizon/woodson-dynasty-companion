@@ -1,11 +1,9 @@
 {
-  "version": "1.19.0",
-  "title": "📊 Win-Now Rankings + Smarter Projections",
+  "version": "1.20.0",
+  "title": "🗣️ Who's Winning?",
   "notes": [
-    "📊 NEW: This Season value. See how strong every starting lineup is right now, next to dynasty value, on My Team, Rosters and in the Vault.",
-    "🏆 Vault leaderboards: switch between Dynasty, This Season and In 3 Years.",
-    "🔮 Smarter 3-year projections: picks gain value as the draft nears, active traders trend up, and old rosters with few picks fall off harder.",
-    "🔧 FIXED: picks listed under a team's old name now show the current team and get their proper value.",
-    "🔧 FIXED: a roster getting older now counts as a minus in trade suggestions."
+    "🗣️ Every trade grade now says it plainly: \"Kyla is fleecing Zack\", \"Zack is slightly winning\", or \"Even trade. Nobody's winning this one.\"",
+    "🔍 Trade Finder and Shop show more ideas: anything short of a fleece, fairest deals first.",
+    "🚫 Fleeces are still never suggested."
   ]
 }
