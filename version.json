@@ -1,9 +1,12 @@
 {
-  "version": "1.21.1",
-  "title": "🔧 Updates Load Cleanly",
+  "version": "1.22.0",
+  "title": "📡 Live Win Probability",
   "notes": [
-    "🛠️ FIXED: after an update, some devices showed a half-old, half-new page (wrong Standings layout, flickering). Updates now load all at once.",
-    "⚡ The app no longer loads twice on your first visit.",
-    "🧭 Includes the 1.21 Standings redesign: This Week first, a collapsible story, the new desktop layout, and the Compact layout (tap the W logo to switch)."
+    "📊 NEW: every matchup on This Week shows each team's live chance to win, with a bar that moves as the games go. It's the same number the ESPN app shows.",
+    "🔮 Under each score is the live projected total, and every player shows a faded projection under their points that updates during their game.",
+    "🏈 Open a matchup to see each player's game: score, clock, and kickoff time. Players whose team has the ball are highlighted yellow, and red when in the red zone.",
+    "⤢ Tap Full Screen in an open matchup for an ESPN-style view that keeps your phone awake, plus a chart of how the win % has swung while you watched.",
+    "⚡ Scores refresh every 15 seconds while NFL games are on, and flash green when they go up.",
+    "🏆 Standings now highlight the top 6 teams, matching the 6 playoff spots."
   ]
 }

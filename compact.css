@@ -314,6 +314,14 @@
 }
 [data-density="compact"] .matchup-toggle .chev { font-size: 12px; }
 [data-density="compact"] .matchup-detail { margin-top: 6px; padding-top: 4px; }
+/* Win % stays as a chip beside each score plus a hairline bar; the live
+   projection and the Live pill give way to save height. */
+[data-density="compact"] .matchup-proj,
+[data-density="compact"] .matchup-toggle .live-pill { display: none; }
+[data-density="compact"] .score-col { min-width: 44px; }
+[data-density="compact"] .wp-chip { font-size: 10px; padding: 0 5px; }
+[data-density="compact"] .matchup-head > .wp { margin-top: 3px; }
+[data-density="compact"] .matchup-head > .wp .wp-bar { height: 3px; }
 /* Wider screens lay matchups out as a grid, so each one is its own small card. */
 @media (min-width: 760px) {
   [data-density="compact"] #scores-content { gap: 6px; }

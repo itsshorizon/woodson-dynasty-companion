@@ -1,6 +1,41 @@
 {
  "entries": [
   {
+   "version": "1.22.0",
+   "title": "📡 Live Win Probability",
+   "date": "2026-10-04T17:21:25-04:00",
+   "notes": [
+    "📊 NEW: every matchup on This Week shows each team's live chance to win, with a bar that moves as the games go. It's the same number the ESPN app shows.",
+    "🔮 Under each score is the live projected total, and every player shows a faded projection under their points that updates during their game.",
+    "🏈 Open a matchup to see each player's game: score, clock, and kickoff time. Players whose team has the ball are highlighted yellow, and red when in the red zone.",
+    "⤢ Tap Full Screen in an open matchup for an ESPN-style view that keeps your phone awake, plus a chart of how the win % has swung while you watched.",
+    "⚡ Scores refresh every 15 seconds while NFL games are on, and flash green when they go up.",
+    "🏆 Standings now highlight the top 6 teams, matching the 6 playoff spots."
+   ]
+  },
+  {
+   "version": "1.21.1",
+   "title": "🔧 Updates Load Cleanly",
+   "date": "2026-10-04T20:58:38Z",
+   "notes": [
+    "🛠️ FIXED: after an update, some devices showed a half-old, half-new page (wrong Standings layout, flickering). Updates now load all at once.",
+    "⚡ The app no longer loads twice on your first visit.",
+    "🧭 Includes the 1.21 Standings redesign: This Week first, a collapsible story, the new desktop layout, and the Compact layout (tap the W logo to switch)."
+   ]
+  },
+  {
+   "version": "1.21.0",
+   "title": "🧭 A Cleaner Standings Page",
+   "date": "2026-10-04T20:51:09Z",
+   "notes": [
+    "📐 New Compact layout: tap the W logo in the top corner to switch. Tighter rows, smaller photos, more on screen. Tap it again to go back. Your choice is saved on this device.",
+    "🏈 This Week's scores now come right after the headline. Leaderboard and the Luck Index follow.",
+    "📰 Collapse the weekly story to just its headline with the − button. A new week's story still opens once so you don't miss it.",
+    "🖥️ Desktop: matchups fill the width, and the Luck chart sits beside the Leaderboard and follows you as you scroll.",
+    "🛠️ FIXED: the page no longer jumps around while loading, and live scores refresh without flickering."
+   ]
+  },
+  {
    "version": "1.20.0",
    "title": "🗣️ Who's Winning?",
    "date": "2026-10-04T16:33:57-04:00",

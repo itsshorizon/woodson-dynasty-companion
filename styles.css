@@ -579,6 +579,197 @@ body {
   letter-spacing: 0.1em;
 }
 
+/* ---------- Live scoreboard: win %, live projections, game state ---------- */
+.matchup-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.score-col { text-align: right; min-width: 54px; }
+.matchup-proj { font-size: 11px; font-weight: 700; color: var(--text-mute); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.wp-chip {
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.wp-chip.fav { color: var(--green); border-color: var(--green); }
+.wp-chip.est { border-style: dashed; }
+.wp { margin-top: 8px; }
+.wp-bar { display: flex; height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-elev-2); }
+.wp-bar i { display: block; height: 100%; background: var(--text-mute); opacity: .4; transition: width .6s ease; }
+.wp-bar .wp-away { border-right: 2px solid var(--bg-elev); }
+.wp-bar i.fav { background: var(--green); opacity: 1; }
+.wp.est .wp-bar i.fav { opacity: .5; }
+.wp-big { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 10px; margin: 2px 0 14px; }
+.wp-big .wp-bar { height: 8px; }
+.wp-pct { font-weight: 900; font-size: 18px; font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.wp-pct.fav { color: var(--green); }
+.wp-label {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 77, 109, 0.16);
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.live-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+@keyframes live-pulse { 50% { opacity: .25; } }
+.live-txt { color: var(--red); }
+.matchup.is-live { border-color: rgba(255, 77, 109, 0.45); }
+
+/* A score that just went up flashes green. */
+.bump { animation: score-bump 1.8s ease-out; }
+@keyframes score-bump {
+  0%, 35% { color: var(--green); text-shadow: 0 0 12px var(--green-glow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bump, .live-pill::before { animation: none; }
+  .wp-bar i { transition: none; }
+}
+
+/* Lineup rows: big points with the faded live projection under it. */
+.box-player { position: relative; padding: 3px 4px; border-radius: 6px; }
+/* The game line wraps to a second line rather than losing the score/clock. */
+.box-name small { font-weight: 700; letter-spacing: .02em; white-space: normal; line-height: 1.25; }
+.box-pts { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.box-player.home .box-pts { align-items: flex-start; }
+.box-pts small { font-size: 10px; font-weight: 700; color: var(--text-mute); }
+.box-player.playing .box-pts { color: var(--text); }
+.box-player.on-field { background: rgba(241, 196, 15, 0.14); }
+.box-player.away.on-field { box-shadow: inset 3px 0 0 var(--yellow); }
+.box-player.home.on-field { box-shadow: inset -3px 0 0 var(--yellow); }
+.box-player.red-zone { background: rgba(255, 77, 109, 0.18); }
+.box-player.away.red-zone { box-shadow: inset 3px 0 0 var(--red); }
+.box-player.home.red-zone { box-shadow: inset -3px 0 0 var(--red); }
+.rz {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--red);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 900;
+}
+.box-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.box-legend, .mfs-legend { display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; color: var(--text-mute); }
+.box-legend i, .mfs-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.lg-field { background: var(--yellow); }
+.lg-rz { background: var(--red); margin-left: 6px; }
+.fs-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.fs-btn:hover, .fs-btn:focus-visible { border-color: var(--green); color: var(--green); }
+
+/* Full-screen matchup */
+html.mfs-open, html.mfs-open body { overflow: hidden; }
+.mfs {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top);
+  animation: fade .2s ease;
+}
+.mfs-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.mfs-close {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.mfs-title { flex: 1; font-weight: 900; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.mfs-title .live-pill { margin: 0; }
+.mfs-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+}
+.mfs-head { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.mfs-team { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.mfs-team.home { align-items: flex-end; text-align: right; }
+.mfs-score { margin-top: 6px; font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.mfs-team.winner .mfs-score { color: var(--green); }
+.mfs-proj { font-size: 13px; font-weight: 700; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.mfs-name { margin-top: 6px; font-weight: 800; font-size: 15px; overflow-wrap: anywhere; }
+.mfs-rec, .mfs-status { font-size: 11px; font-weight: 600; color: var(--text-mute); }
+.mfs .matchup-detail { margin-top: 4px; }
+.mfs .box-name { font-size: 13px; }
+.mfs .box-pts { font-size: 15px; }
+@media (max-width: 380px) {
+  .mfs-score { font-size: 30px; }
+  .mfs-legend { display: none; }
+}
+
+/* Win % swing chart (full screen) */
+.wp-spark { margin: 0 0 14px; }
+.wp-spark-h { margin-bottom: 4px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); }
+.wp-spark-h span { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.wp-spark-plot { position: relative; height: 56px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elev); }
+.wp-spark-plot svg { display: block; width: 100%; height: 100%; }
+.wp-spark-plot path { fill: none; stroke: var(--green); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.wp-spark-plot .mid { stroke: var(--border-strong); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.wp-spark-lbl {
+  position: absolute;
+  left: 6px;
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-mute);
+}
+.wp-spark-lbl.top { top: 3px; }
+.wp-spark-lbl.bot { bottom: 3px; }
+
 /* ---------- Team pills ---------- */
 .team-pills {
   display: flex;
