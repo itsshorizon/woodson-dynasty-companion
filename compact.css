@@ -314,6 +314,11 @@
 }
 [data-density="compact"] .matchup-toggle .chev { font-size: 12px; }
 [data-density="compact"] .matchup-detail { margin-top: 6px; padding-top: 4px; }
+/* Wider screens lay matchups out as a grid, so each one is its own small card. */
+@media (min-width: 760px) {
+  [data-density="compact"] #scores-content { gap: 6px; }
+  [data-density="compact"] #scores-content .matchup { border-width: 1px; border-radius: var(--radius-sm); }
+}
 [data-density="compact"] .box-row { padding: 2px 0; }
 
 /* ---------- Trade cards (My Team + Trade Desk) ---------- */

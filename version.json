@@ -1,9 +1,11 @@
 {
-  "version": "1.20.0",
-  "title": "🗣️ Who's Winning?",
+  "version": "1.21.0",
+  "title": "🧭 A Cleaner Standings Page",
   "notes": [
-    "🗣️ Every trade grade now says it plainly: \"Kyla is fleecing Zack\", \"Zack is slightly winning\", or \"Even trade. Nobody's winning this one.\"",
-    "🔍 Trade Finder and Shop show more ideas: anything short of a fleece, fairest deals first.",
-    "🚫 Fleeces are still never suggested."
+    "📐 New Compact layout: tap the W logo in the top corner to switch. Tighter rows, smaller photos, more on screen. Tap it again to go back. Your choice is saved on this device.",
+    "🏈 This Week's scores now come right after the headline. Leaderboard and the Luck Index follow.",
+    "📰 Collapse the weekly story to just its headline with the − button. A new week's story still opens once so you don't miss it.",
+    "🖥️ Desktop: matchups fill the width, and the Luck chart sits beside the Leaderboard and follows you as you scroll.",
+    "🛠️ FIXED: the page no longer jumps around while loading, and live scores refresh without flickering."
   ]
 }

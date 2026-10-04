@@ -38,25 +38,29 @@
   <main id="app">
     <!-- Standings View -->
     <section class="view active" id="view-standings">
-      <!-- League Front Page (latest newsletter, populated from Stein /newsletter) -->
-      <div class="front-page" id="front-page" hidden></div>
+      <!-- Standings layout: story, this week, then leaderboard + luck.
+           Every section has a fixed slot (see .standings-layout in styles.css),
+           so late-arriving data never pushes other sections around. -->
+      <div class="standings-layout">
+        <!-- League Front Page (latest newsletter, populated from Stein /newsletter) -->
+        <div class="front-page loading" id="front-page"><div class="skeleton skel-headline"></div></div>
 
-      <div class="standings-split">
-        <div class="split-col">
-          <h3 class="split-h">Leaderboard</h3>
-          <div id="standings-content"></div>
-        </div>
-        <div class="split-col">
+        <section class="st-week" aria-label="This week's matchups">
           <h3 class="split-h">This Week</h3>
           <div id="scores-content"></div>
-        </div>
-      </div>
+        </section>
 
-      <!-- Schedule Luck scatter plot: PF (x) vs PA (y) with median quadrants -->
-      <div class="card chart-card" id="schedule-luck-card">
-        <h2>Schedule Luck Index</h2>
-        <p class="chart-sub">Points For (right = strong offense) vs Points Against (up = tough schedule).<br/>Quadrants: <b>True Contenders</b> (lower-right), <b>Lucky Wins</b> (lower-left), <b>Unlucky Hard Schedules</b> (upper-right), <b>Rebuilders</b> (upper-left).<br/>Badge = wins above (<b style="color:var(--yellow);">+</b>) or below (<b style="color:#4cc9f0;">−</b>) what your weekly scores earned.</p>
-        <div class="chart-wrap chart-luck"><canvas id="luck-chart"></canvas></div>
+        <section class="st-board" aria-label="Leaderboard">
+          <h3 class="split-h">Leaderboard</h3>
+          <div id="standings-content"></div>
+        </section>
+
+        <!-- Schedule Luck scatter plot: PF (x) vs PA (y) with median quadrants -->
+        <div class="card chart-card st-luck" id="schedule-luck-card">
+          <h2>Schedule Luck Index</h2>
+          <p class="chart-sub">Points For (right = strong offense) vs Points Against (up = tough schedule).<br/>Quadrants: <b>True Contenders</b> (lower-right), <b>Lucky Wins</b> (lower-left), <b>Unlucky Hard Schedules</b> (upper-right), <b>Rebuilders</b> (upper-left).<br/>Badge = wins above (<b style="color:var(--yellow);">+</b>) or below (<b style="color:#4cc9f0;">−</b>) what your weekly scores earned.</p>
+          <div class="chart-wrap chart-luck"><canvas id="luck-chart"></canvas></div>
+        </div>
       </div>
 
       <!-- Press Room secret unlock (commish only) -->
