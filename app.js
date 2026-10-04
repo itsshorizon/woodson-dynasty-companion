@@ -5900,7 +5900,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.21.0';
+const BUILD_ID = '1.21.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
@@ -5913,9 +5913,15 @@ if ('serviceWorker' in navigator) {
   });
   // Beta 1.7: auto-reload once when a new SW takes control (skipWaiting + clients.claim
   // fire this on the next visit after a deploy). Guarded so we only reload one time.
+  // Only reload when a NEW worker replaces an existing one. On a first install
+  // (or right after the update button wipes workers) there was no controller,
+  // and reloading then just made the page load twice.
+  const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) { refreshing = true; window.location.reload(); }
+    if (!hadController || refreshing) return;
+    refreshing = true;
+    window.location.reload();
   });
 }
 

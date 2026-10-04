@@ -1,4 +1,6 @@
-const CACHE_NAME = 'wcc-v1.21.0';
+/* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
+ * and every ?v= in index.html to the same version. */
+const CACHE_NAME = 'wcc-v1.21.1';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -14,7 +16,9 @@ const CORE_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+    // cache: 'reload' skips the browser's HTTP cache, so a new install can't
+    // store last release's files under this release's name.
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -48,7 +52,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets
+  // App code and pages: network-first (revalidated), cache only when offline.
+  // Cache-first here is what kept old code running after a release.
+  const isCode = url.origin === self.location.origin
+    && (req.mode === 'navigate' || /\.(html|js|css|json)$/.test(url.pathname) || url.pathname.endsWith('/'));
+  if (isCode) {
+    event.respondWith(
+      fetch(req, { cache: 'no-cache' }).then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      }).catch(() => caches.match(req, { ignoreSearch: true }))
+    );
+    return;
+  }
+
+  // Cache-first for everything else (icons, images)
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req).then((res) => {
       if (res.ok && url.origin === self.location.origin) {
