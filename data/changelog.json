@@ -1,6 +1,17 @@
 {
  "entries": [
   {
+   "version": "1.23.0",
+   "title": "📌 Your Matchup, Front and Center",
+   "date": "2026-10-04T21:13:26-04:00",
+   "notes": [
+    "📌 NEW: your own matchup is pinned at the very top of Standings, so you don't have to find it. Your team is always listed first.",
+    "👤 Tap any player's name in a lineup to open their player card.",
+    "🧮 Tap a player's points to see how they scored them, like 9 receptions for +9 and 145 receiving yards for +14.5. It updates live during the game.",
+    "⤢ Both work in the full-screen view too."
+   ]
+  },
+  {
    "version": "1.22.0",
    "title": "📡 Live Win Probability",
    "date": "2026-10-04T17:21:25-04:00",

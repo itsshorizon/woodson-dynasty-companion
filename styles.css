@@ -1361,6 +1361,7 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
+      "mine  mine"
       "story story"
       "week  week"
       "board luck";
@@ -1368,6 +1369,7 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
     align-items: start;
   }
   .standings-layout > .front-page { grid-area: story; }
+  .st-mine { grid-area: mine; }
   .st-week { grid-area: week; }
   .st-board { grid-area: board; }
   /* Stays in view beside the (longer) leaderboard while scrolling. */
@@ -4822,3 +4824,127 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 }
 #team-value-tabs { margin-bottom: 8px; }
 .tv-sentence { color: var(--text); font-weight: 800; }
+
+/* ---------- Your Matchup (pinned) + lineup taps ---------- */
+.st-mine[hidden] { display: none; }
+.st-mine { margin-bottom: 18px; }
+.matchup.mine { border-color: var(--green); box-shadow: var(--shadow), 0 0 0 1px var(--green), 0 0 24px var(--green-glow); }
+.matchup-row.me .name { color: var(--text); }
+
+.box-photo { display: contents; }
+.box-photo[data-profile] .player-photo-wrap { cursor: pointer; }
+.box-link {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: inherit;
+  display: block;
+}
+.box-player.home .box-link { margin-left: auto; }
+.box-link:hover, .box-link:focus-visible { text-decoration: underline; text-underline-offset: 2px; outline: none; }
+button.box-pts {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  cursor: pointer;
+}
+.mfs button.box-pts { font-size: 15px; }
+.box-player.playing button.box-pts { color: var(--text); }
+.box-row.lead-away .box-player.away button.box-pts,
+.box-row.lead-home .box-player.home button.box-pts { color: var(--green); }
+button.box-pts:hover, button.box-pts:focus-visible { background: var(--bg-elev-2); outline: none; }
+
+/* The player card opens on top of the full-screen matchup. */
+html.mfs-open .modal-overlay { z-index: 450; }
+
+/* Points breakdown */
+.pts-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 460;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  animation: fade .2s ease;
+}
+.pts-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 18px 16px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.pts-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.pts-head { display: flex; align-items: center; gap: 10px; padding-right: 34px; margin-bottom: 12px; }
+.pts-head .player-photo-wrap,
+.pts-head .player-photo,
+.pts-head .player-photo-fallback { width: 44px; height: 44px; flex-shrink: 0; }
+.pts-head .pos-tag { display: none; }
+.pts-who { flex: 1; min-width: 0; }
+.pts-name { font-weight: 900; font-size: 16px; overflow-wrap: anywhere; }
+.pts-meta { font-size: 11px; font-weight: 600; color: var(--text-mute); }
+.pts-total { display: flex; flex-direction: column; align-items: flex-end; font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
+.pts-total small { margin-top: 3px; font-size: 11px; font-weight: 700; color: var(--text-mute); }
+.pts-list { border-top: 1px solid var(--border); }
+.pts-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.pts-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+.pts-v { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--green); }
+.pts-row.neg .pts-v { color: var(--red); }
+.pts-row.total { border-bottom: 0; font-weight: 900; color: var(--text); }
+.pts-row.total .pts-v { color: var(--text); font-size: 15px; }
+.pts-empty { margin: 12px 0 4px; font-size: 13px; color: var(--text-mute); text-align: center; }
+.pts-card-link {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.pts-card-link:hover { border-color: var(--green); color: var(--green); }

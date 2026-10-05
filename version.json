@@ -1,12 +1,10 @@
 {
-  "version": "1.22.0",
-  "title": "📡 Live Win Probability",
+  "version": "1.23.0",
+  "title": "📌 Your Matchup, Front and Center",
   "notes": [
-    "📊 NEW: every matchup on This Week shows each team's live chance to win, with a bar that moves as the games go. It's the same number the ESPN app shows.",
-    "🔮 Under each score is the live projected total, and every player shows a faded projection under their points that updates during their game.",
-    "🏈 Open a matchup to see each player's game: score, clock, and kickoff time. Players whose team has the ball are highlighted yellow, and red when in the red zone.",
-    "⤢ Tap Full Screen in an open matchup for an ESPN-style view that keeps your phone awake, plus a chart of how the win % has swung while you watched.",
-    "⚡ Scores refresh every 15 seconds while NFL games are on, and flash green when they go up.",
-    "🏆 Standings now highlight the top 6 teams, matching the 6 playoff spots."
+    "📌 NEW: your own matchup is pinned at the very top of Standings, so you don't have to find it. Your team is always listed first.",
+    "👤 Tap any player's name in a lineup to open their player card.",
+    "🧮 Tap a player's points to see how they scored them, like 9 receptions for +9 and 145 receiving yards for +14.5. It updates live during the game.",
+    "⤢ Both work in the full-screen view too."
   ]
 }

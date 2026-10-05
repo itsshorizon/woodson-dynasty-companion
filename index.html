@@ -16,8 +16,8 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.22.0" />
-  <link rel="stylesheet" href="compact.css?v=1.22.0" />
+  <link rel="stylesheet" href="styles.css?v=1.23.0" />
+  <link rel="stylesheet" href="compact.css?v=1.23.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -45,6 +45,12 @@
            Every section has a fixed slot (see .standings-layout in styles.css),
            so late-arriving data never pushes other sections around. -->
       <div class="standings-layout">
+        <!-- Your own matchup, pinned first (filled by renderScores) -->
+        <section class="st-mine" id="my-matchup-wrap" aria-label="Your matchup" hidden>
+          <h3 class="split-h">Your Matchup</h3>
+          <div id="my-matchup"></div>
+        </section>
+
         <!-- League Front Page (latest newsletter, populated from Stein /newsletter) -->
         <div class="front-page loading" id="front-page"><div class="skeleton skel-headline"></div></div>
 
@@ -529,9 +535,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.22.0"></script>
-  <script src="app.js?v=1.22.0"></script>
-  <script src="trade-engine.js?v=1.22.0"></script>
-  <script src="trade-calc.js?v=1.22.0"></script>
+  <script src="select.js?v=1.23.0"></script>
+  <script src="app.js?v=1.23.0"></script>
+  <script src="trade-engine.js?v=1.23.0"></script>
+  <script src="trade-calc.js?v=1.23.0"></script>
 </body>
 </html>
