@@ -10,9 +10,9 @@
  *   2. Best-player bonus beta · gap · (gap / best)^gamma, where gap = best s received
  *                        − other side's best s; only when the other side is
  *                        taking more pieces (stacking). Bigger gaps weigh more.
- *   3. Roster-spot cost  the side taking more pieces must cut someone for each
- *                        extra one: −s(replacement) per extra piece (picks become
- *                        players, so they count too)
+ *   3. Roster-spot cost  the side taking more players must cut someone for each
+ *                        extra one: −s(replacement) per extra player. Draft
+ *                        picks don't take a roster spot, so they don't count.
  *   Totals convert back to plain value units, so a 1-for-1 edge equals the
  *   simple value gap; Fairness = (A − B) / max(A, B, minStakes)
  * =========================================================== */
@@ -30,7 +30,7 @@
     beta: 2,
     gamma: 3,
     rosterSpotShare: 0.25,
-    futurePickDiscount: 0.85,
+    futurePickDiscount: 0.8,
     minStakes: 2000,
     bands: [
       { max: 0.05, label: 'Fair', key: 'fair' },
@@ -229,12 +229,16 @@
     const top = Math.max(bestA, bestB) || 1;
     const bonus = stacking ? ctx.beta * gap * Math.pow(gap / top, ctx.gamma) : 0;
     const bonusTo = stacking ? bestSide : null;
-    // Taking extra pieces means cutting someone for each. An extra piece worse
-    // than what's on waivers just gets cut itself, so it nets to zero, never below.
-    const extra = A.rows.length - B.rows.length;
+    // Taking extra players means cutting someone for each. An extra player worse
+    // than what's on waivers just gets cut himself, so it nets to zero, never below.
+    // Draft picks don't count: they don't take a roster spot (commissioner call,
+    // 2026-10-06), which bumps picks' trade value slightly.
+    const playersA = A.rows.filter((r) => r.type === 'player');
+    const playersB = B.rows.filter((r) => r.type === 'player');
+    const extra = playersA.length - playersB.length;
     const rosterCostTo = extra > 0 ? 'a' : extra < 0 ? 'b' : null;
     const spot = starValue(rosterSpotValue(ctx), ctx);
-    const takerRows = rosterCostTo === 'a' ? A.rows : rosterCostTo === 'b' ? B.rows : [];
+    const takerRows = rosterCostTo === 'a' ? playersA : rosterCostTo === 'b' ? playersB : [];
     // An extra piece below waiver level adds nothing: you could add that player for free.
     const waiver = ((ctx.values && ctx.values.replacement) || {}).ALL || 0;
     const rosterCost = takerRows.slice(takerRows.length - Math.abs(extra))

@@ -967,24 +967,30 @@ function tcTradeAnalysisHTML(t, viewerTeamId, opts = {}) {
     return `<span class="tv-chip">${escapeHtml(band.label)}</span>
       <span class="tv-compact-sub"><b class="tv-sentence">${escapeHtml(tcWinnerSentence(band.key, winner, { a: left.id, b: right.id }))}</b>${winner ? ` · ${pct}` : ''}</span>`;
   };
-  let summary, bandKey = now.band.key, note = '';
+  // The preview always matches the breakdown underneath: today's values.
+  // When the trade carries a snapshot from when it was proposed, show that
+  // grade as a note so nothing is hidden if values have moved since.
+  const summary = `${verdictLine(now.band, now.edge, now.winner)}${tcMiniBar(now.edge)}`;
+  const bandKey = now.band.key;
   const snap = st.snapshot;
-  if (opts.atTradeTime && snap && snap.band) {
-    // Snapshot edge is from the proposer's side; flip if the receiver is on the left.
-    const edge = flip ? -snap.edge : snap.edge;
-    const band = TC.ctx.bands.find((b) => b.key === snap.band) || now.band;
-    const winner = band.key === 'fair' ? null : edge > 0 ? 'a' : 'b';
-    bandKey = band.key;
-    summary = `${verdictLine(band, edge, winner)}${tcMiniBar(edge)}`;
-    const moved = now.band.key !== band.key || (now.winner && now.winner !== winner);
-    note = moved
-      ? `<span class="tv-analysis-today">Today: ${escapeHtml(now.band.label)}${now.winner ? ` → ${escapeHtml(now.winner === 'a' ? left.name : right.name)}` : ''}</span>`
-      : '<span class="tv-analysis-today">Still holds today</span>';
-  } else {
-    summary = `${verdictLine(now.band, now.edge, now.winner)}${tcMiniBar(now.edge)}`;
-    if (opts.atTradeTime) note = '<span class="tv-analysis-today">Graded with today\'s values</span>';
-  }
   const snapDate = snap?.date ? new Date(snap.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null;
+  let note = '';
+  if (opts.atTradeTime) {
+    if (snap && snap.band) {
+      // Snapshot edge is from the proposer's side; flip if the receiver is on the left.
+      const edge = flip ? -snap.edge : snap.edge;
+      const band = TC.ctx.bands.find((b) => b.key === snap.band) || now.band;
+      const winner = band.key === 'fair' ? null : edge > 0 ? 'a' : 'b';
+      const same = band.key === now.band.key && winner === now.winner;
+      const then = band.key === 'fair' ? 'it was an even trade'
+        : tcWinnerSentence(band.key, winner, { a: left.id, b: right.id }).replace(/ is /, ' was ').replace(/^You're /, 'You were ');
+      note = same
+        ? `<span class="tv-analysis-today">Same grade as when proposed${snapDate ? ` (${escapeHtml(snapDate)})` : ''}</span>`
+        : `<span class="tv-analysis-today">When proposed${snapDate ? ` (${escapeHtml(snapDate)})` : ''}: ${escapeHtml(then)}${winner ? ` · ${Math.round(Math.abs(edge) * 100)}%` : ''}</span>`;
+    } else {
+      note = '<span class="tv-analysis-today">Proposed before grades were saved; graded with today\'s values</span>';
+    }
+  }
   return `
     <details class="tv-analysis" data-band="${bandKey}">
       <summary>
@@ -993,7 +999,6 @@ function tcTradeAnalysisHTML(t, viewerTeamId, opts = {}) {
         <span class="tv-analysis-toggle">See the analysis</span>
       </summary>
       <div class="tv-analysis-body">
-        ${opts.atTradeTime && snap ? `<p class="tv-note">Grade above uses values from ${escapeHtml(snapDate || 'trade time')}, when the trade was proposed. The breakdown below uses today's values.</p>` : ''}
         ${tcMeterHTML(meterOpts)}
       </div>
     </details>`;

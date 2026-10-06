@@ -1,10 +1,9 @@
 {
-  "version": "1.23.0",
-  "title": "📌 Your Matchup, Front and Center",
+  "version": "1.24.0",
+  "title": "🎟️ Pick Values + Clearer Grades",
   "notes": [
-    "📌 NEW: your own matchup is pinned at the very top of Standings, so you don't have to find it. Your team is always listed first.",
-    "👤 Tap any player's name in a lineup to open their player card.",
-    "🧮 Tap a player's points to see how they scored them, like 9 receptions for +9 and 145 receiving yards for +14.5. It updates live during the game.",
-    "⤢ Both work in the full-screen view too."
+    "🎟️ Draft picks no longer lose value for taking up a roster spot, so trades with picks grade a little friendlier to the side getting them.",
+    "📅 Picks further out lose a bit more per year: a 1st now is worth next year's 1st + 2nd.",
+    "🔎 Trade grade previews now always match the full breakdown. If a trade's grade has changed since it was proposed, you'll see the original grade right below it."
   ]
 }

@@ -28,7 +28,7 @@
     "beta": 2,
     "gamma": 3,
     "rosterSpotShare": 0.25,
-    "futurePickDiscount": 0.85,
+    "futurePickDiscount": 0.8,
     "replacementRank": 5,
     "minStakes": 2000,
     "bands": [

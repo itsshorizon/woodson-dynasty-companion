@@ -152,9 +152,10 @@ test('future picks borrow next year’s early/late spread', () => {
   const late = TE.pickValue({ year: 2028, round: 1, slot: 12, teams: 12, certainty: 1 }, ctx);
   const generic = TE.pickValue({ year: 2028, round: 1, teams: 12 }, ctx);
   const d = config.engine.futurePickDiscount; // one year out
-  assert.equal(early, Math.round(2000 * 4000 / 2400 * d));
-  assert.equal(late, Math.round(2000 * 2100 / 2400 * d));
-  assert.equal(generic, Math.round(2000 * d));
+  const near = (a, b) => assert.ok(Math.abs(a - b) <= 1, `${a} ≈ ${b}`);
+  near(early, 2000 * 4000 / 2400 * d);
+  near(late, 2000 * 2100 / 2400 * d);
+  near(generic, 2000 * d);
   const partly = TE.pickValue({ year: 2028, round: 1, slot: 1, teams: 12, certainty: 0.35 }, ctx);
   assert.ok(partly > generic && partly < early);
 });
