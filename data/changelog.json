@@ -1,6 +1,14 @@
 {
  "entries": [
   {
+   "version": "1.24.1",
+   "title": "📱 Fits Smaller Phones",
+   "date": "2026-10-06T21:00:00-04:00",
+   "notes": [
+    "📱 The top bar now fits on smaller phones. The page no longer slides sideways, and pop-ups fit on screen again."
+   ]
+  },
+  {
    "version": "1.24.0",
    "title": "🎟️ Pick Values + Clearer Grades",
    "date": "2026-10-06T19:57:14-04:00",

@@ -262,7 +262,7 @@ body {
   opacity: 0.7;
 }
 
-.brand { display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
 .logo-dot {
   width: 30px; height: 30px;
@@ -290,9 +290,14 @@ body {
   letter-spacing: -0.01em;
   color: var(--text);
   text-transform: uppercase;
+  /* Ellipsize rather than push .header-right past the viewport on narrow phones. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.header-right { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: 10px; }
 
 .theme-toggle {
   background: var(--bg-elev);
@@ -324,6 +329,16 @@ body {
   white-space: nowrap;
 }
 .header-meta.err { color: var(--red); border-color: var(--red); }
+/* Narrow phones: drop the season so the badge stays readable next to long titles. */
+@media (max-width: 400px) {
+  .header-meta .meta-season { display: none; }
+}
+@media (max-width: 380px) {
+  .brand { gap: 9px; }
+  .app-header h1 { font-size: 18px; }
+  .header-right { gap: 6px; margin-left: 8px; }
+  .header-meta { padding: 5px 8px; }
+}
 
 /* ---------- Views (sliding tab carousel via translate3d) ---------- */
 #app {

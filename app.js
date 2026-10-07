@@ -363,7 +363,8 @@ async function loadLeagueData(silent = false) {
     state.lastFullLoad = Date.now();
     state.schedule = raw.schedule || [];
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
-    meta.textContent = `${CONFIG.SEASON} • Wk ${state.currentWeek} • ${state.teams.length} Teams`;
+    // The season span is hidden under 400px (styles.css) so the badge fits narrow phones.
+    meta.innerHTML = `<span class="meta-season">${CONFIG.SEASON} • </span>Wk ${state.currentWeek} • ${state.teams.length} Teams`;
     return true;
   } catch (err) {
     console.error('ESPN load failed:', err);
@@ -6446,7 +6447,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.24.0';
+const BUILD_ID = '1.24.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

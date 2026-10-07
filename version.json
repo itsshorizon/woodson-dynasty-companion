@@ -1,9 +1,7 @@
 {
-  "version": "1.24.0",
-  "title": "🎟️ Pick Values + Clearer Grades",
+  "version": "1.24.1",
+  "title": "📱 Fits Smaller Phones",
   "notes": [
-    "🎟️ Draft picks no longer lose value for taking up a roster spot, so trades with picks grade a little friendlier to the side getting them.",
-    "📅 Picks further out lose a bit more per year: a 1st now is worth next year's 1st + 2nd.",
-    "🔎 Trade grade previews now always match the full breakdown. If a trade's grade has changed since it was proposed, you'll see the original grade right below it."
+    "📱 The top bar now fits on smaller phones. The page no longer slides sideways, and pop-ups fit on screen again."
   ]
 }
