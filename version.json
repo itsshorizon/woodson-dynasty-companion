@@ -1,9 +1,9 @@
 {
-  "version": "1.24.0",
-  "title": "🎟️ Pick Values + Clearer Grades",
+  "version": "1.24.1",
+  "title": "❌ Close Buttons You Can Tap",
   "notes": [
-    "🎟️ Draft picks no longer lose value for taking up a roster spot, so trades with picks grade a little friendlier to the side getting them.",
-    "📅 Picks further out lose a bit more per year: a 1st now is worth next year's 1st + 2nd.",
-    "🔎 Trade grade previews now always match the full breakdown. If a trade's grade has changed since it was proposed, you'll see the original grade right below it."
+    "🛠️ FIXED: on iPhones, the × on player profiles and other pop-ups hid behind the battery icon. It now sits inside each pop-up's top-right corner.",
+    "👆 The × is a little bigger and easier to tap.",
+    "📱 Pop-ups now stay clear of the iPhone notch and home bar."
   ]
 }
