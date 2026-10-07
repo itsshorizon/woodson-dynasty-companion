@@ -625,3 +625,11 @@
 [data-density="compact"] .tv-profile h4 { margin-bottom: 6px; }
 [data-density="compact"] .tv-outlook { height: 84px; margin-top: 4px; }
 [data-density="compact"] .tv-profile-row { margin: 3px 0; }
+
+/* The week picker sits above the list, so the first card needs its top edge. */
+[data-density="compact"] .week-nav { margin-bottom: 6px; }
+[data-density="compact"] .week-nav + .matchup {
+  border-top-width: 1px;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}

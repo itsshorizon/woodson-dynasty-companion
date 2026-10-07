@@ -28,6 +28,8 @@ const state = {
   boxscores: {},           // { [week]: { byTeam: { [teamId]: players[] }, live } }
   expandedMatchups: new Set(),
   nflGames: {},            // { [proTeamId]: game } from ESPN's NFL scoreboard (live poll)
+  nflWeeks: {},            // same, for past weeks the scoreboard has shown (final, fetched once)
+  scoreWeek: null,         // week shown in the scoreboard; null = current week
   fsKey: null,             // matchup open in the full-screen view
   logoIndex: { cached: {}, custom: {}, version: '' }, // see loadLogoIndex()
   allTrades: [],
@@ -280,6 +282,7 @@ function parseTeams(raw) {
       abbrev: t.abbrev || '',
       logo: t.logo || '',
       owner,
+      ownerIds: t.owners || [], // member ids, for all-time head-to-head
       wins: rec.wins ?? 0,
       losses: rec.losses ?? 0,
       ties: rec.ties ?? 0,
@@ -657,7 +660,18 @@ function renderStandings() {
  * clocks, possession and red zone come from ESPN's public NFL scoreboard.
  * ------------------------------------------------------------------- */
 
-const matchupKey = (m) => `${m.away.teamId}-${m.home.teamId}`;
+const matchupKey = (m) => `${m.week}:${m.away.teamId}-${m.home.teamId}`;
+
+// Any week's matchups. The current week is the live state.matchups; past weeks
+// come from the season schedule already in the full league load.
+function matchupsForWeek(week) {
+  if (week === state.currentWeek) return state.matchups;
+  return parseMatchups({ schedule: state.schedule, scoringPeriodId: week });
+}
+const findMatchup = (key) => {
+  const week = parseInt(key, 10);
+  return matchupsForWeek(week).find((m) => matchupKey(m) === key) || null;
+};
 const NFL_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 
 // A player's actual stat row for one week (statSourceId 0).
@@ -757,10 +771,10 @@ async function loadLiveScores() {
   }
 }
 
-// { [proTeamId]: game } for this NFL week, from both teams' point of view.
-async function loadNflGames() {
+// { [proTeamId]: game } for one NFL week (default: this week), from both teams' point of view.
+async function loadNflGames(week = state.currentWeek || 1) {
   try {
-    const raw = await fetchJSON(`${NFL_SCOREBOARD}?seasontype=2&week=${state.currentWeek || 1}&dates=${CONFIG.SEASON}`);
+    const raw = await fetchJSON(`${NFL_SCOREBOARD}?seasontype=2&week=${week}&dates=${CONFIG.SEASON}`);
     const games = {};
     (raw.events || []).forEach((ev) => {
       const c = ev.competitions?.[0];
@@ -786,7 +800,8 @@ async function loadNflGames() {
         };
       });
     });
-    state.nflGames = games;
+    if (week === state.currentWeek) state.nflGames = games;
+    else state.nflWeeks[week] = games;
     return true;
   } catch (err) {
     console.warn('NFL scoreboard load failed:', err);
@@ -794,8 +809,9 @@ async function loadNflGames() {
   }
 }
 
-const nflLoaded = () => Object.keys(state.nflGames).length > 0;
-const nflGameFor = (p) => (p?.proTeamId != null ? state.nflGames[String(p.proTeamId)] : null);
+const nflGamesFor = (week = state.currentWeek) => (week === state.currentWeek ? state.nflGames : state.nflWeeks[week] || {});
+const nflLoaded = (week) => Object.keys(nflGamesFor(week)).length > 0;
+const nflGameFor = (p, week) => (p?.proTeamId != null ? nflGamesFor(week)[String(p.proTeamId)] : null);
 const anyNflLive = () => Object.values(state.nflGames).some((g) => g.state === 'in');
 
 // Share of a game still to play, from the quarter and clock. Overtime counts as done.
@@ -808,16 +824,16 @@ function gameLeft(g) {
 // The faded number under a player's points, as ESPN shows it: the pregame
 // projection before kickoff and after the final, and while the game is on,
 // points so far plus the unplayed share of the projection.
-function livePlayerProj(p) {
+function livePlayerProj(p, week) {
   if (p.projPre == null) return null;
-  const g = nflGameFor(p);
+  const g = nflGameFor(p, week);
   if (!g || g.state !== 'in') return p.projPre;
   return (p.pts || 0) + p.projPre * gameLeft(g);
 }
 
 // "@LV 7-7 · 15:00 2nd", "vs KC 24-20 Final", "@CAR Sun 8:20 PM"
-function gameLine(g) {
-  if (!g) return nflLoaded() ? 'BYE' : '';
+function gameLine(g, week) {
+  if (!g) return nflLoaded(week) ? 'BYE' : '';
   const vs = g.home ? `vs ${g.opp}` : `@${g.opp}`;
   if (g.state === 'pre') {
     const d = new Date(g.date);
@@ -827,10 +843,10 @@ function gameLine(g) {
   return g.state === 'post' ? `${vs} ${score} Final` : `${vs} ${score} · ${g.detail.replace(' - ', ' ')}`;
 }
 
-// Starters still playing / yet to play, from the live roster.
-function lineupStatus(teamId) {
+// Starters still playing / yet to play, from the live roster (current week only).
+function lineupStatus(teamId, week = state.currentWeek) {
   const t = teamById(teamId);
-  if (!t || !nflLoaded()) return null;
+  if (week !== state.currentWeek || !t || !nflLoaded()) return null;
   let playing = 0, toGo = 0;
   t.roster.filter((p) => p.slot !== 'BE' && p.slot !== 'IR').forEach((p) => {
     const g = nflGameFor(p);
@@ -893,6 +909,10 @@ const winnerCode = (side) => (side === 'home' ? 'HOME' : 'AWAY');
 
 // Small "60%" chip next to a score on the collapsed card.
 function winChip(m, side) {
+  if (m.winner === 'HOME' || m.winner === 'AWAY') {
+    const won = m.winner === winnerCode(side);
+    return `<span class="wp-chip ${won ? 'fav' : ''}">${won ? 'W' : 'L'}</span>`;
+  }
   const p = m[side].winProb;
   if (p == null) return '';
   const other = m[side === 'away' ? 'home' : 'away'].winProb;
@@ -901,7 +921,7 @@ function winChip(m, side) {
 
 // Split bar: the first side's share fills from the left, the other's from the right.
 function winProbBar(m, big = false) {
-  if (m.home.winProb == null) return '';
+  if (m.home.winProb == null || m.winner !== 'UNDECIDED') return '';
   const [first] = sidesOf(m);
   const a = pct(m[first].winProb), h = 100 - a;
   const label = m.winProbEst ? 'Projected win %' : 'Win probability';
@@ -957,16 +977,16 @@ const shortName = (name) => {
 
 function boxPlayerCell(p, side, week) {
   if (!p) return `<div class="box-player ${side} empty">—</div>`;
-  const g = nflGameFor(p);
-  const notStarted = nflLoaded() && (!g || g.state === 'pre');
+  const g = nflGameFor(p, week);
+  const notStarted = nflLoaded(week) && (!g || g.state === 'pre');
   const pts = p.pts == null || (notStarted && !p.pts) ? '–' : p.pts.toFixed(1);
-  const proj = livePlayerProj(p);
+  const proj = livePlayerProj(p, week);
   const cls = [
     g?.state === 'in' ? 'playing' : '',
     g?.hasBall ? 'on-field' : '',
     g?.redZone ? 'red-zone' : '',
   ].join(' ');
-  const line = gameLine(g);
+  const line = gameLine(g, week);
   const fieldTitle = g?.hasBall ? ` title="${escapeHtml(g.redZone ? 'In the red zone' : 'On the field')}${g.down ? ': ' + escapeHtml(g.down) : ''}"` : '';
   return `
     <div class="box-player ${side} ${cls}"${fieldTitle}>
@@ -1020,8 +1040,8 @@ const BYE_TEAM = { name: 'BYE', wins: 0, losses: 0, ties: 0, pf: 0 };
 const recordOf = (t) => `${t.wins || 0}-${t.losses || 0}${t.ties ? '-' + t.ties : ''}`;
 
 // Under the team name: who's still playing on game day, PPG otherwise.
-function matchupSubline(t, teamId) {
-  const s = lineupStatus(teamId);
+function matchupSubline(t, teamId, week = state.currentWeek) {
+  const s = lineupStatus(teamId, week);
   const started = Object.values(state.nflGames).some((g) => g.state !== 'pre');
   if (s && s.playing) return `<span class="live-txt">${s.playing} playing</span>${s.toGo ? ` · ${s.toGo} to go` : ''}`;
   if (s && started && s.toGo) return `${s.toGo} yet to play`;
@@ -1032,14 +1052,14 @@ function matchupSubline(t, teamId) {
 function matchupCardHTML(m, mine = false) {
   const key = matchupKey(m);
   const open = state.expandedMatchups.has(key);
-  const live = [m.away.teamId, m.home.teamId].some((id) => lineupStatus(id)?.playing);
+  const live = [m.away.teamId, m.home.teamId].some((id) => lineupStatus(id, m.week)?.playing);
   const row = (side) => {
     const t = teamById(m[side].teamId) || BYE_TEAM;
     return `
           <div class="matchup-row ${m.winner === winnerCode(side) ? 'winner' : ''} ${m[side].teamId === state.myTeamId ? 'me' : ''}">
             <div>
               <div class="name">${teamLogoHTML(t, 22)}${escapeHtml(t.name)}</div>
-              <div class="matchup-ppg">${matchupSubline(t, m[side].teamId)}</div>
+              <div class="matchup-ppg">${matchupSubline(t, m[side].teamId, m.week)}</div>
             </div>
             ${winChip(m, side)}
             <div class="score-col">
@@ -1070,13 +1090,18 @@ function wireScoreboard(el) {
     if (state.expandedMatchups.has(key)) state.expandedMatchups.delete(key);
     else state.expandedMatchups.add(key);
     renderScores();
-    const m = state.matchups.find((x) => matchupKey(x) === key);
-    if (m && state.expandedMatchups.has(key) && !state.boxscores[m.week]) {
-      await Promise.all([loadBoxscores(m.week), nflLoaded() ? null : loadNflGames()]);
+    const m = findMatchup(key);
+    if (m && state.expandedMatchups.has(key) && (!state.boxscores[m.week] || !nflLoaded(m.week))) {
+      await Promise.all([
+        state.boxscores[m.week] ? null : loadBoxscores(m.week),
+        nflLoaded(m.week) ? null : loadNflGames(m.week),
+      ]);
       renderScores();
     }
   };
   el.onclick = (e) => {
+    const step = e.target.closest('[data-week-step]');
+    if (step) { showScoreWeek((state.scoreWeek || state.currentWeek) + Number(step.dataset.weekStep)); return; }
     if (handleLineupClick(e)) return;
     const fs = e.target.closest('.fs-btn');
     if (fs) { openMatchupFs(fs.dataset.fs); return; }
@@ -1098,6 +1123,14 @@ function handleLineupClick(e) {
   return false;
 }
 
+function showScoreWeek(week) {
+  const w = Math.max(1, Math.min(state.currentWeek, week));
+  state.scoreWeek = w === state.currentWeek ? null : w;
+  renderScores();
+  // Past weeks' NFL results only feed the game lines in opened lineups.
+  if (w !== state.currentWeek && !nflLoaded(w)) loadNflGames(w).then(renderScores);
+}
+
 function renderScores() {
   const el = $('#scores-content');
   // Your own matchup is pinned above everything on Standings.
@@ -1109,8 +1142,20 @@ function renderScores() {
     $('#my-matchup').innerHTML = mine ? matchupCardHTML(mine, true) : '';
     wireScoreboard($('#my-matchup'));
   }
-  const rest = state.matchups.filter((m) => m !== mine);
-  el.innerHTML = rest.length ? rest.map((m) => matchupCardHTML(m)).join('') : empty('No matchups this week');
+  // The list below can step back through past weeks; the pinned card stays live.
+  const cur = state.currentWeek;
+  const week = state.scoreWeek || cur;
+  const shown = week === cur ? state.matchups.filter((m) => m !== mine) : matchupsForWeek(week);
+  const heading = $('.st-week .split-h');
+  if (heading) heading.textContent = week === cur ? 'This Week' : `Week ${week} Results`;
+  const nav = `
+    <div class="week-nav">
+      <button type="button" data-week-step="-1" ${week <= 1 ? 'disabled' : ''} aria-label="Previous week">‹</button>
+      <span>Week ${week}${week === cur ? ' · this week' : ''}</span>
+      <button type="button" data-week-step="1" ${week >= cur ? 'disabled' : ''} aria-label="Next week">›</button>
+    </div>`;
+  el.innerHTML = (cur > 1 ? nav : '')
+    + (shown.length ? shown.map((m) => matchupCardHTML(m)).join('') : empty(week === cur ? 'No other matchups this week' : 'No games that week'));
   wireScoreboard(el);
   renderMatchupFs();
   renderPointsBreakdown();
@@ -1129,12 +1174,12 @@ async function requestWakeLock() {
 function renderMatchupFs() {
   const el = $('#matchup-fs');
   if (!el) return;
-  const m = state.matchups.find((x) => matchupKey(x) === state.fsKey);
+  const m = findMatchup(state.fsKey);
   if (!m) { closeMatchupFs(); return; }
   const [first, second] = sidesOf(m);
   const left = teamById(m[first].teamId) || BYE_TEAM;
   const right = teamById(m[second].teamId) || BYE_TEAM;
-  const live = [m.away.teamId, m.home.teamId].some((id) => lineupStatus(id)?.playing);
+  const live = [m.away.teamId, m.home.teamId].some((id) => lineupStatus(id, m.week)?.playing);
   // pos is the column (away = left, home = right); s is the matchup side.
   const side = (t, s, pos) => `
     <div class="mfs-team ${pos} ${m.winner === winnerCode(s) ? 'winner' : ''}">
@@ -1143,7 +1188,7 @@ function renderMatchupFs() {
       ${m[s].proj != null ? `<div class="mfs-proj">${m[s].proj.toFixed(1)} proj</div>` : ''}
       <div class="mfs-name">${escapeHtml(t.name)}</div>
       <div class="mfs-rec">${escapeHtml(t.owner || '')} · ${recordOf(t)}</div>
-      <div class="mfs-status">${matchupSubline(t, m[s].teamId)}</div>
+      <div class="mfs-status">${matchupSubline(t, m[s].teamId, m.week)}</div>
     </div>`;
   $('.mfs-title', el).innerHTML = `Week ${m.week}${live ? ' <span class="live-pill">Live</span>' : ''}`;
   $('.mfs-body', el).innerHTML = `
@@ -1154,7 +1199,7 @@ function renderMatchupFs() {
 }
 
 async function openMatchupFs(key) {
-  const m = state.matchups.find((x) => matchupKey(x) === key);
+  const m = findMatchup(key);
   if (!m) return;
   state.fsKey = key;
   let el = $('#matchup-fs');
@@ -1181,8 +1226,8 @@ async function openMatchupFs(key) {
   requestWakeLock();
   renderMatchupFs();
   el.querySelector('.mfs-close').focus();
-  if (!state.boxscores[m.week] || !nflLoaded()) {
-    await Promise.all([state.boxscores[m.week] ? null : loadBoxscores(m.week), nflLoaded() ? null : loadNflGames()]);
+  if (!state.boxscores[m.week] || !nflLoaded(m.week)) {
+    await Promise.all([state.boxscores[m.week] ? null : loadBoxscores(m.week), nflLoaded(m.week) ? null : loadNflGames(m.week)]);
     renderMatchupFs();
   }
 }
@@ -1251,9 +1296,10 @@ function renderPointsBreakdown() {
   if (!el || !state.ptsOpen) return;
   const p = findBoxPlayer(state.ptsOpen.week, state.ptsOpen.playerId);
   if (!p) { closePointsBreakdown(); return; }
-  const g = nflGameFor(p);
-  const proj = livePlayerProj(p);
-  const notStarted = nflLoaded() && (!g || g.state === 'pre');
+  const { week } = state.ptsOpen;
+  const g = nflGameFor(p, week);
+  const proj = livePlayerProj(p, week);
+  const notStarted = nflLoaded(week) && (!g || g.state === 'pre');
   const fmtPts = (v) => (v < 0 ? '−' : '') + Number(Math.abs(v).toFixed(2)); // 6.64, 12, −2
   const rows = (p.breakdown || []).map((b) => `
       <div class="pts-row ${b.pts < 0 ? 'neg' : ''}">
@@ -1269,7 +1315,7 @@ function renderPointsBreakdown() {
       <span class="box-photo">${playerPhotoHTML(p)}</span>
       <div class="pts-who">
         <div class="pts-name">${escapeHtml(p.name)}</div>
-        <div class="pts-meta">${escapeHtml(p.pos)}${gameLine(g) ? ' · ' + escapeHtml(gameLine(g)) : ''}</div>
+        <div class="pts-meta">${escapeHtml(p.pos)}${gameLine(g, week) ? ' · ' + escapeHtml(gameLine(g, week)) : ''}</div>
       </div>
       <div class="pts-total">${notStarted && !p.pts ? '–' : (p.pts || 0).toFixed(1)}${proj != null ? `<small>${proj.toFixed(1)} proj</small>` : ''}</div>
     </div>
@@ -5233,6 +5279,9 @@ function wirePressRoom() {
   const trigger = $('#press-room-trigger');
   if (trigger) {
     trigger.onclick = () => {
+      // Default to the week that just finished (Tuesday's recap is last week's games).
+      $('#press-week').value = lastCompletedWeek();
+      $('#press-week').max = state.currentWeek || 17;
       $('#press-modal').hidden = false;
       $('#press-step-key').hidden = false;
       $('#press-step-draft').hidden = true;
@@ -5249,31 +5298,133 @@ function wirePressRoom() {
   if (pub) pub.onclick = handlePressPublish;
 }
 
-function generateWeeklyDataDump() {
-  // Snapshot of CURRENT week matchups (with margins) + recent trade ledger entries.
-  const teamById = Object.fromEntries(state.teams.map((t) => [t.id, t]));
-  const matchups = state.matchups.map((m) => {
-    const h = teamById[m.home.teamId], a = teamById[m.away.teamId];
-    const margin = (m.home.score || 0) - (m.away.score || 0);
+// Last week whose games are all decided (or the week before the current one).
+function lastCompletedWeek() {
+  const cur = state.currentWeek || 1;
+  const done = state.matchups.length && state.matchups.every((m) => m.winner !== 'UNDECIDED');
+  return done ? cur : Math.max(1, cur - 1);
+}
+
+const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
+
+// All-time regular + playoff record between two current teams' managers,
+// from past seasons (history.json). Null when they've never met.
+function allTimeSeries(teamIdA, teamIdB, h2h) {
+  const a = teamById(teamIdA), b = teamById(teamIdB);
+  const cell = h2h?.matrix?.[a?.ownerIds?.[0]]?.[b?.ownerIds?.[0]];
+  if (!cell || !(cell.wins + cell.losses + cell.ties)) return null;
+  const lead = cell.wins === cell.losses ? 'series tied' : `${(cell.wins > cell.losses ? a.name : b.name).trim()} leads`;
+  return `${lead} ${Math.max(cell.wins, cell.losses)}-${Math.min(cell.wins, cell.losses)}${cell.ties ? `-${cell.ties}` : ''} (${CONFIG.SEASON - 4}-${CONFIG.SEASON - 1} seasons)`;
+}
+
+/* Everything the recap writer needs for one week: final scores, every
+ * lineup with player points vs projection, computed highlights, the whole
+ * season's results so far, standings, all-time series, the upcoming week,
+ * recent trades and recent headlines. Player scores come from the week's
+ * box score (fetched here), so past weeks are just as complete as this one. */
+async function generateWeeklyDataDump(week) {
+  const cur = state.currentWeek;
+  await Promise.all([
+    loadBoxscores(week, week === cur),
+    ensureHistoryLoaded().catch(() => null),
+  ]);
+  const h2h = state.historyLoaded ? computeH2HMatrix() : null;
+  const name = (id) => (teamById(id)?.name || `Team ${id}`).trim();
+  const box = state.boxscores[week]?.byTeam || {};
+  const isStarter = (p) => p.slot !== 'BE' && p.slot !== 'IR';
+
+  const lineupOf = (teamId) => {
+    const list = box[teamId] || [];
+    const bench = list.filter((p) => p.slot === 'BE');
     return {
-      home: h?.name || `Team ${m.home.teamId}`,
-      away: a?.name || `Team ${m.away.teamId}`,
-      homeScore: m.home.score,
-      awayScore: m.away.score,
-      margin: Math.abs(margin).toFixed(1),
-      winner: margin > 0 ? (h?.name) : (a?.name),
+      starters: list.filter(isStarter).sort((x, y) => POS_ORDER.indexOf(x.slot) - POS_ORDER.indexOf(y.slot)).map((p) => ({
+        slot: p.slot, player: p.name, pos: p.pos, points: r1(p.pts), projected: r1(p.projPre),
+        scoring: (p.breakdown || []).map((x) => `${x.count != null ? Math.round(x.count * 100) / 100 + ' ' : ''}${STAT_LABELS[x.id] || 'stat ' + x.id} ${x.pts > 0 ? '+' : ''}${r1(x.pts)}`).join(', ') || undefined,
+      })),
+      benchPoints: r1(bench.reduce((sum, p) => sum + (p.pts || 0), 0)),
+      bestBench: bench.filter((p) => p.pts > 0).sort((x, y) => y.pts - x.pts).slice(0, 3)
+        .map((p) => ({ player: p.name, pos: p.pos, points: r1(p.pts) })),
+    };
+  };
+
+  const games = matchupsForWeek(week);
+  const matchups = games.map((m) => {
+    const decided = m.winner === 'HOME' || m.winner === 'AWAY';
+    const side = (s) => ({
+      team: name(m[s].teamId), manager: teamById(m[s].teamId)?.owner, score: r1(m[s].score),
+      projectedTotal: decided ? undefined : r1(m[s].proj),
+      winProbability: decided || m[s].winProb == null ? undefined : `${pct(m[s].winProb)}%`,
+      lineup: lineupOf(m[s].teamId),
+    });
+    const margin = Math.abs((m.home.score || 0) - (m.away.score || 0));
+    return {
+      status: decided ? 'final' : (week === cur ? 'in progress (not final yet)' : 'not final'),
+      home: side('home'),
+      away: side('away'),
+      winner: decided ? name(m[m.winner === 'HOME' ? 'home' : 'away'].teamId) : null,
+      margin: r1(margin),
+      allTimeSeries: allTimeSeries(m.home.teamId, m.away.teamId, h2h) || 'first meeting before this season',
     };
   });
-  // Recent trades (last 8 accepted/rejected)
+
+  // Highlights worked out here so the writer doesn't have to do arithmetic.
+  const teamScores = games.flatMap((m) => [m.home, m.away]).map((s) => ({ team: name(s.teamId), score: r1(s.score) }));
+  teamScores.sort((x, y) => y.score - x.score);
+  const byMargin = [...matchups].sort((x, y) => x.margin - y.margin);
+  const allStarters = Object.entries(box).flatMap(([teamId, list]) =>
+    list.filter(isStarter).map((p) => ({ ...p, team: name(Number(teamId)) })));
+  const fmtPlayer = (p) => ({ player: p.name, pos: p.pos, team: p.team, points: r1(p.pts), projected: r1(p.projPre) });
+  const highlights = {
+    highScore: teamScores[0],
+    lowScore: teamScores[teamScores.length - 1],
+    closestGame: byMargin[0] ? `${byMargin[0].home.team} vs ${byMargin[0].away.team}, margin ${byMargin[0].margin}` : null,
+    biggestBlowout: byMargin.length ? `${byMargin[byMargin.length - 1].winner || byMargin[byMargin.length - 1].home.team} by ${byMargin[byMargin.length - 1].margin}` : null,
+    topPerformers: [...allStarters].sort((x, y) => (y.pts || 0) - (x.pts || 0)).slice(0, 6).map(fmtPlayer),
+    biggestBusts: allStarters.filter((p) => p.projPre >= 8 && p.pts != null)
+      .sort((x, y) => (x.pts - x.projPre) - (y.pts - y.projPre)).slice(0, 4).map(fmtPlayer),
+    mostPointsLeftOnBench: matchups.flatMap((m) => [m.home, m.away])
+      .sort((x, y) => y.lineup.benchPoints - x.lineup.benchPoints).slice(0, 2)
+      .map((s) => ({ team: s.team, benchPoints: s.lineup.benchPoints, best: s.lineup.bestBench[0] })),
+  };
+
+  // One line per game for every week so far, for streaks and callbacks.
+  const seasonResults = [];
+  for (let w = 1; w <= cur; w++) {
+    const lines = matchupsForWeek(w)
+      .filter((m) => m.winner === 'HOME' || m.winner === 'AWAY' || (m.home.score || m.away.score))
+      .map((m) => {
+        const [win, lose] = m.winner === 'AWAY' ? [m.away, m.home] : [m.home, m.away];
+        const final = m.winner === 'HOME' || m.winner === 'AWAY';
+        return `${name(win.teamId)} ${r1(win.score)} ${final ? 'def.' : 'vs'} ${name(lose.teamId)} ${r1(lose.score)}${final ? '' : ' (in progress)'}`;
+      });
+    if (lines.length) seasonResults.push({ week: w, games: lines });
+  }
+
+  const playoffSpots = state.playoffTeamCount || 6;
+  const standings = state.teams.map((t, i) => ({
+    rank: i + 1, team: t.name.trim(), manager: t.owner, record: recordOf(t),
+    pointsFor: r1(t.pf), pointsAgainst: r1(t.pa), inPlayoffSpot: i < playoffSpots,
+  }));
+
+  // The week after the recap: who plays whom, with projections, for the prediction.
+  const nextWeek = week < cur ? week + 1 : null;
+  const upcoming = nextWeek ? matchupsForWeek(nextWeek).map((m) => ({
+    home: name(m.home.teamId), away: name(m.away.teamId),
+    homeScoreSoFar: r1(m.home.score), awayScoreSoFar: r1(m.away.score),
+    homeProjected: r1(m.home.proj), awayProjected: r1(m.away.proj),
+    homeWinProbability: m.home.winProb == null ? undefined : `${pct(m.home.winProb)}%`,
+    allTimeSeries: allTimeSeries(m.home.teamId, m.away.teamId, h2h) || undefined,
+  })) : null;
+
   const recentTrades = (state.allTrades || [])
     .filter((t) => t.status !== 'Pending')
     .slice(-8)
     .map((t) => {
       const offered = safeParse(t.assestsOffered) || {};
       const requested = safeParse(t.assetsRequested) || {};
-      const namesFor = (s) => [
-        ...(s.players || []).map((p) => `${p.name} (${p.pos})`),
-        ...(s.picks || []).map((p) => `${p.year} R${p.round}`),
+      const namesFor = (side) => [
+        ...(side.players || []).map((p) => `${p.name} (${p.pos})`),
+        ...(side.picks || []).map((p) => `${p.year} R${p.round}`),
       ].join(', ');
       return {
         proposing: t.teamProposing,
@@ -5283,16 +5434,24 @@ function generateWeeklyDataDump() {
         receivingSent: namesFor(requested),
       };
     });
-  const standings = state.teams.map((t, i) => ({
-    rank: i + 1, name: t.name, owner: t.owner, record: `${t.wins}-${t.losses}`, pf: t.pf, pa: t.pa,
-  }));
+
+  const pastStories = (await fetchFrontPageRows()).slice(0, 3)
+    .map((r) => ({ week: parseInt(r.weekNumber, 10) || null, headline: r.headline }));
+
   return {
     league: 'Woodson Clan Championship',
+    format: '12-team dynasty, full PPR (TE 1.5 PPR), 6-pt passing TD, lineup 1QB/2RB/2WR/1TE/3FLEX',
     season: CONFIG.SEASON,
-    week: pressSession.week,
-    standings,
+    recapWeek: week,
+    currentWeek: cur,
+    playoffSpots,
     matchups,
+    highlights,
+    standings,
+    seasonResults,
+    upcomingWeek: upcoming ? { week: nextWeek, matchups: upcoming } : null,
     recentTrades,
+    previousHeadlines: pastStories,
   };
 }
 
@@ -5308,7 +5467,7 @@ async function callAnthropic(apiKey, model, system, userPrompt) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1200,
+      max_tokens: 2000,
       system,
       messages: [{ role: 'user', content: userPrompt }],
     }),
@@ -5336,9 +5495,9 @@ async function handlePressGenerate() {
   if (btn) btn.textContent = 'Generating...';
 
   try {
-    const dump = generateWeeklyDataDump();
+    const dump = await generateWeeklyDataDump(pressSession.week);
     const system = 'You are a sharp, witty fantasy football beat writer covering the "Woodson Clan Championship" dynasty league. Your voice is conversational, irreverent, lightly profane is fine, and you respect the in-jokes of a friend group. Always respond with valid JSON only — no markdown fences.';
-    const userPrompt = `Here is this week's data dump:\n\n${JSON.stringify(dump, null, 2)}\n\nWrite a punchy weekly recap newsletter. Call out the biggest blowout, the closest game, any notable trades, and throw in some friendly trash talk for the team currently leading and the one struggling at the bottom. End with a one-line prediction for next week.\n\nRespond as JSON with exactly two fields:\n{\n  "headline": "...short bold headline (max 10 words)",\n  "storyText": "...full recap, 220-320 words, plain text, paragraphs separated by \\n\\n"\n}`;
+    const userPrompt = `Here is the complete league data for Week ${pressSession.week} (JSON). It has every final score, every starting lineup with each player's actual points, projection and scoring plays, highlights already worked out, standings, every result so far this season, all-time head-to-head series, the upcoming week's matchups, recent trades, and recent headlines:\n\n${JSON.stringify(dump)}\n\nWrite a punchy Week ${pressSession.week} recap newsletter. Use ONLY these numbers and names. Never invent a score, stat or player. Call out the biggest blowout, the closest game, the top performers and biggest busts by name with their real points, anyone who left big points on the bench, notable trades, and streaks or rivalry history where they add something. Throw in some friendly trash talk for the team on top and the one struggling at the bottom. If a game's status isn't final, say it's still in progress. Don't repeat the angle of the previous headlines. End with a one-line prediction for the upcoming week, using its projections.\n\nRespond as JSON with exactly two fields:\n{\n  "headline": "...short bold headline (max 10 words)",\n  "storyText": "...full recap, 250-380 words, plain text, paragraphs separated by \\n\\n"\n}`;
 
     const out = await callAnthropic(key, pressSession.model, system, userPrompt);
 
@@ -6447,7 +6606,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.24.2';
+const BUILD_ID = '1.25.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

@@ -4979,3 +4979,30 @@ html.mfs-open .modal-overlay { z-index: 450; }
   cursor: pointer;
 }
 .pts-card-link:hover { border-color: var(--green); color: var(--green); }
+
+/* Scoreboard week picker */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.week-nav button {
+  width: 34px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.week-nav button:disabled { opacity: .3; cursor: default; }
+.week-nav button:not(:disabled):hover { border-color: var(--green); color: var(--green); }

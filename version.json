@@ -1,7 +1,9 @@
 {
-  "version": "1.24.2",
-  "title": "📱 Fits Smaller Phones",
+  "version": "1.25.0",
+  "title": "🗓️ Every Week's Scores",
   "notes": [
-    "📱 The top bar now fits on smaller phones, and the page no longer slides sideways."
+    "🗓️ NEW: use the ‹ › arrows on the scoreboard to look back at any past week's scores. Open a game to see every lineup, each player's points, and how they scored them.",
+    "📰 The weekly recap writer now gets the real numbers: every final score, every player's points and projection, the season's results so far, all-time head-to-head records, and next week's matchups. No more guessing.",
+    "📅 The recap now defaults to the week that just finished, not the one starting."
   ]
 }
