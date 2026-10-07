@@ -1,7 +1,7 @@
 {
-  "version": "1.24.1",
+  "version": "1.24.2",
   "title": "📱 Fits Smaller Phones",
   "notes": [
-    "📱 The top bar now fits on smaller phones. The page no longer slides sideways, and pop-ups fit on screen again."
+    "📱 The top bar now fits on smaller phones, and the page no longer slides sideways."
   ]
 }

@@ -599,12 +599,12 @@
 /* ---------- Modals + player profile ---------- */
 [data-density="compact"] .modal-overlay { padding: 12px; }
 [data-density="compact"] .modal { border-width: 1px; max-height: 88vh; }
-[data-density="compact"] .modal-header { padding: 12px 14px 10px; }
+[data-density="compact"] .modal-header { padding: 12px 54px 10px 14px; } /* room for the × */
 [data-density="compact"] .modal-header h2 { font-size: 17px; margin-bottom: 2px; }
 [data-density="compact"] .modal-header p { font-size: 12px; }
 [data-density="compact"] .modal-body { padding: 8px; gap: 4px; }
 [data-density="compact"] .modal-team-btn { padding: 8px 10px; font-size: 13px; }
-[data-density="compact"] #player-profile-header { gap: 12px; padding: 12px 14px 10px; }
+[data-density="compact"] #player-profile-header { gap: 12px; padding: 12px 54px 10px 14px; } /* room for the × */
 [data-density="compact"] .profile-photo-wrap,
 [data-density="compact"] .profile-photo-wrap.clean,
 [data-density="compact"] .profile-photo,

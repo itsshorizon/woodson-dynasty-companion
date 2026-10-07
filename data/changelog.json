@@ -1,11 +1,21 @@
 {
  "entries": [
   {
-   "version": "1.24.1",
+   "version": "1.24.2",
    "title": "📱 Fits Smaller Phones",
    "date": "2026-10-06T21:00:00-04:00",
    "notes": [
-    "📱 The top bar now fits on smaller phones. The page no longer slides sideways, and pop-ups fit on screen again."
+    "📱 The top bar now fits on smaller phones, and the page no longer slides sideways."
+   ]
+  },
+  {
+   "version": "1.24.1",
+   "title": "❌ Close Buttons You Can Tap",
+   "date": "2026-10-06T20:07:08-04:00",
+   "notes": [
+    "🛠️ FIXED: on iPhones, the × on player profiles and other pop-ups hid behind the battery icon. It now sits inside each pop-up's top-right corner.",
+    "👆 The × is a little bigger and easier to tap.",
+    "📱 Pop-ups now stay clear of the iPhone notch and home bar."
    ]
   },
   {

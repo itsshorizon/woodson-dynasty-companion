@@ -1427,7 +1427,7 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 18px 20px 14px;
+  padding: 18px 56px 14px 20px; /* right side leaves room for the × */
 }
 .profile-photo-wrap {
   width: 72px;
@@ -2906,22 +2906,30 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
   align-items: center;
   justify-content: center;
   padding: 20px;
+  /* Keep boxes clear of the iPhone status bar / notch and home bar. */
+  padding-top: max(20px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
   animation: fade .25s ease;
 }
-.modal {
+.modal,
+.modal-card {
+  /* Anchors .modal-close to the box. Without it the × was positioned from the
+     full-screen overlay, i.e. the screen corner under the iPhone battery icon. */
+  position: relative;
   background: var(--bg-elev);
   border: 2px solid var(--green);
   border-radius: var(--radius);
   width: 100%;
   max-width: 420px;
-  max-height: 80vh;
+  max-height: min(80vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px));
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px var(--green-glow);
 }
+.modal-card { max-width: 560px; overflow-y: auto; display: block; }
 .modal-header {
-  padding: 20px 20px 14px;
+  padding: 20px 56px 14px 20px; /* right side leaves room for the × */
   border-bottom: 1px solid var(--border);
 }
 .modal-header h2 {
@@ -2973,20 +2981,28 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 }
 .modal-team-btn .arrow { color: var(--green); font-weight: 900; }
 
-.modal-lg { max-width: 560px; max-height: 88vh; }
+.modal-lg {
+  max-width: 560px;
+  max-height: min(88vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px));
+}
 .modal-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  width: 32px; height: 32px;
+  width: 40px; height: 40px; /* comfortable tap target */
   border-radius: 50%;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 .modal-close:hover { color: var(--green); border-color: var(--green); }
 .commish-header {
