@@ -1,6 +1,14 @@
 {
  "entries": [
   {
+   "version": "1.25.1",
+   "title": "🎟️ Traded Picks Show Up Right",
+   "date": "2026-10-20T18:58:17-04:00",
+   "notes": [
+    "🎟️ Traded picks from teams that changed their name now show on the Draft Board and on each team's pick list. Project Hail Ja'Marry's 2027 1st and 2nd now show as traded, and Tuten-finity's and Zachary's own picks no longer show up twice as \"acquired\"."
+   ]
+  },
+  {
    "version": "1.25.0",
    "title": "🗓️ Every Week's Scores",
    "date": "2026-10-06T20:25:52-04:00",

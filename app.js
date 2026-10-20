@@ -215,6 +215,13 @@ function pickCurrentlyOwnedBy(row, team) {
   return teamMatchesText(row['Current Owner'], team);
 }
 
+// Was this draft_picks row originally `team`'s pick? Alias-aware, because the sheet
+// keeps the name a team had when the row was written.
+function pickOriginallyFrom(row, team) {
+  if (!row || !team) return false;
+  return teamMatchesText(row['Original Owner'], team) || teamByName(row['Original Owner'])?.id === team.id;
+}
+
 // Resolve the current-owner team object for a draft_picks row. ID first, then name.
 function resolveCurrentOwnerTeam(row) {
   if (!row) return null;
@@ -459,7 +466,10 @@ async function updateDraftPickOwner(year, round, originalOwner, newOwner) {
     }),
   });
   if (!res.ok) throw new Error(`Pick update failed: ${res.status}`);
-  return res.json();
+  const out = await res.json();
+  // Stein answers 200 even when the condition matched no row; that pick didn't move.
+  if (out && out.totalUpdates === 0) throw new Error('Pick update matched no sheet row');
+  return out;
 }
 
 // Apply an accepted trade to the draft_picks sheet. Beta 1.3 refactor:
@@ -481,11 +491,17 @@ async function applyTradeToDraftPicks(trade) {
   // the sheet row currently owned by `sourceTeam` at that year/round.
   const resolveOrigOwner = (pick, sourceTeam, fallbackName) => {
     if (sourceTeam) {
-      const row = state.draftPicks.find((p) =>
+      const held = state.draftPicks.filter((p) =>
         String(p.Year) === String(pick.year) &&
         String(p.Round) === String(pick.round) &&
         pickCurrentlyOwnedBy(p, sourceTeam)
       );
+      // A team can hold two picks in one round (its own + an acquired one), so
+      // prefer the row the payload names, matched alias-aware.
+      const origTeam = pick.origOwner ? teamByName(pick.origOwner) : null;
+      const row = held.find((p) => sameTeamName(p['Original Owner'], pick.origOwner)) ||
+        (origTeam && held.find((p) => pickOriginallyFrom(p, origTeam))) ||
+        (!pick.origOwner && held.length === 1 ? held[0] : null);
       if (row && row['Original Owner']) return row['Original Owner'];
     }
     // Fallbacks: payload's embedded origOwner (set at trade creation time), then legacy source name
@@ -498,7 +514,7 @@ async function applyTradeToDraftPicks(trade) {
   let failed = 0;
   for (const p of (offered.picks || [])) {
     try {
-      await updateDraftPickOwner(p.year, p.round, p.origOwner || proposing, receiving);
+      await updateDraftPickOwner(p.year, p.round, resolveOrigOwner(p, proposingTeam, proposing), receiving);
     } catch (err) {
       console.warn('Offered pick update failed:', p, err);
       failed++;
@@ -506,7 +522,7 @@ async function applyTradeToDraftPicks(trade) {
   }
   for (const p of (requested.picks || [])) {
     try {
-      await updateDraftPickOwner(p.year, p.round, p.origOwner || receiving, proposing);
+      await updateDraftPickOwner(p.year, p.round, resolveOrigOwner(p, receivingTeam, receiving), proposing);
     } catch (err) {
       console.warn('Requested pick update failed:', p, err);
       failed++;
@@ -1919,7 +1935,9 @@ function addPickRow(side) {
     roundSel.innerHTML = roundsForYear
       .map((r) => {
         const p = available.find((q) => q.year === y && q.round === r);
-        const ownerNote = p.origOwner !== teamById(teamId).name ? ` (from ${p.origOwner})` : '';
+        const orig = teamByName(p.origOwner);
+        const fromOther = orig ? orig.id !== teamId : !sameTeamName(p.origOwner, teamName(teamId));
+        const ownerNote = fromOther ? ` (from ${escapeHtml(orig ? orig.name.trim() : p.origOwner)})` : '';
         // Beta 1.3: embed the row's true 'Original Owner' string so the trade payload
         // preserves the exact sheet identity — no guessing at PUT-condition time.
         return `<option value="${r}" data-orig-owner="${escapeHtml(p.origOwner)}">Round ${r}${ownerNote}</option>`;
@@ -2908,7 +2926,7 @@ function renderDraftBoard() {
       const row = state.draftPicks.find((p) =>
         String(p.Year) === String(year) &&
         String(p.Round) === String(round) &&
-        teamMatchesText(p['Original Owner'], origTeam)
+        pickOriginallyFrom(p, origTeam)
       );
       // Resolve CURRENT owner via 'Owner ID' first, then 'Current Owner' text
       const currentTeam = row ? resolveCurrentOwnerTeam(row) : origTeam;
@@ -3655,7 +3673,7 @@ function getPickStatus(year, round, viewedTeamId) {
   const ownRow = state.draftPicks.find((p) =>
     String(p.Year) === String(year) &&
     String(p.Round) === String(round) &&
-    teamMatchesText(p['Original Owner'], viewedTeam)
+    pickOriginallyFrom(p, viewedTeam)
   );
   let currentOwner = viewedTeamId;
   let currentOwnerName = viewedName;
@@ -3668,9 +3686,9 @@ function getPickStatus(year, round, viewedTeamId) {
   // Picks acquired from others: currently owned by viewed team, originally someone else's
   const acquired = state.draftPicks.filter((p) => {
     if (String(p.Year) !== String(year) || String(p.Round) !== String(round)) return false;
-    return pickCurrentlyOwnedBy(p, viewedTeam) && !teamMatchesText(p['Original Owner'], viewedTeam);
+    return pickCurrentlyOwnedBy(p, viewedTeam) && !pickOriginallyFrom(p, viewedTeam);
   }).map((p) => ({
-    originalOwnerName: p['Original Owner'],
+    originalOwnerName: teamByName(p['Original Owner'])?.name || p['Original Owner'],
     originalTeamId: teamByName(p['Original Owner'])?.id,
   }));
 
@@ -6606,7 +6624,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.25.0';
+const BUILD_ID = '1.25.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

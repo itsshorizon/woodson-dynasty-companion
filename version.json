@@ -1,9 +1,7 @@
 {
-  "version": "1.25.0",
-  "title": "🗓️ Every Week's Scores",
+  "version": "1.25.1",
+  "title": "🎟️ Traded Picks Show Up Right",
   "notes": [
-    "🗓️ NEW: use the ‹ › arrows on the scoreboard to look back at any past week's scores. Open a game to see every lineup, each player's points, and how they scored them.",
-    "📰 The weekly recap writer now gets the real numbers: every final score, every player's points and projection, the season's results so far, all-time head-to-head records, and next week's matchups. No more guessing.",
-    "📅 The recap now defaults to the week that just finished, not the one starting."
+    "🎟️ Traded picks from teams that changed their name now show on the Draft Board and on each team's pick list. Project Hail Ja'Marry's 2027 1st and 2nd now show as traded, and Tuten-finity's and Zachary's own picks no longer show up twice as \"acquired\"."
   ]
 }
