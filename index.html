@@ -16,8 +16,8 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.25.1" />
-  <link rel="stylesheet" href="compact.css?v=1.25.1" />
+  <link rel="stylesheet" href="styles.css?v=1.26.0" />
+  <link rel="stylesheet" href="compact.css?v=1.26.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -78,9 +78,22 @@
 
     <!-- Rosters View -->
     <section class="view" id="view-rosters">
-      <input type="text" id="roster-player-search" class="search-input" placeholder="🔍 Search any player or manager..." autocomplete="off" />
-      <div class="team-pills" id="roster-team-pills"></div>
-      <div id="roster-content"></div>
+      <div class="segmented" id="roster-mode">
+        <button class="seg-btn active" data-mode="teams" type="button">Rosters</button>
+        <button class="seg-btn" data-mode="waivers" type="button">Waivers</button>
+      </div>
+      <div id="roster-teams-pane">
+        <input type="text" id="roster-player-search" class="search-input" placeholder="🔍 Search any player or manager..." autocomplete="off" />
+        <div class="team-pills" id="roster-team-pills"></div>
+        <div id="roster-content"></div>
+      </div>
+      <!-- Waivers: every unrostered QB/RB/WR/TE (app.js loadWaivers) -->
+      <div id="waivers-pane" hidden>
+        <input type="text" id="waiver-search" class="search-input" placeholder="🔍 Search free agents..." autocomplete="off" />
+        <div class="tv-filters" id="waiver-filters"></div>
+        <div class="waiver-note" id="waiver-note"></div>
+        <div id="waiver-list"></div>
+      </div>
     </section>
 
     <!-- Trade Desk View -->
@@ -535,9 +548,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.25.1"></script>
-  <script src="app.js?v=1.25.1"></script>
-  <script src="trade-engine.js?v=1.25.1"></script>
-  <script src="trade-calc.js?v=1.25.1"></script>
+  <script src="select.js?v=1.26.0"></script>
+  <script src="app.js?v=1.26.0"></script>
+  <script src="trade-engine.js?v=1.26.0"></script>
+  <script src="trade-calc.js?v=1.26.0"></script>
 </body>
 </html>

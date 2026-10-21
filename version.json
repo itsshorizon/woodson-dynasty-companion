@@ -1,7 +1,9 @@
 {
-  "version": "1.25.1",
-  "title": "🎟️ Traded Picks Show Up Right",
+  "version": "1.26.0",
+  "title": "🧲 Waivers Are Here",
   "notes": [
-    "🎟️ Traded picks from teams that changed their name now show on the Draft Board and on each team's pick list. Project Hail Ja'Marry's 2027 1st and 2nd now show as traded, and Tuten-finity's and Zachary's own picks no longer show up twice as \"acquired\"."
+    "🧲 New Waivers view on the Rosters tab. Every unrostered QB, RB, WR and TE, with dynasty value, PPG, last-3-week average, % rostered and waiver status.",
+    "🔥 Filter by position and sort by value, win-now, last 3, PPG, % rostered or age. Trending players get a flag.",
+    "🃏 Tap any free agent for the full player card, same as rostered players."
   ]
 }

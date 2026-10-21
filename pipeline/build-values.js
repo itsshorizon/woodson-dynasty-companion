@@ -8,6 +8,7 @@
  *
  *   data/values.json             small, loaded with the Trades tab
  *   data/player-details.json     lazy-loaded when a player profile opens
+ *   data/waivers.json            unrostered players (status, % rostered) for the Waivers pane
  *   data/history/YYYY-MM-DD.json compact daily snapshot (trend lines + audit)
  *
  * Run:
@@ -159,6 +160,28 @@ async function fetchEspnWeekly(rosteredIds, currentWeek) {
       .map((st) => [st.scoringPeriodId, round(st.appliedTotal, 2)])
       .sort((a, b) => a[0] - b[0]);
     if (weeks.length) out[p.id] = weeks;
+  }
+  return { weekly: out, waivers: waiverPool(top) };
+}
+
+// Compact list of everyone in ESPN's player pool nobody has rostered. The app
+// reads it when its own live waiver request fails (ESPN can refuse browser
+// requests that carry a filter header), and drops anyone added since.
+function waiverPool(entries) {
+  const out = {};
+  for (const e of entries) {
+    const p = e.player;
+    if (!p || e.onTeamId > 0 || !POSITIONS.includes(ESPN_POS[p.defaultPositionId])) continue;
+    out[p.id] = {
+      n: p.fullName,
+      p: ESPN_POS[p.defaultPositionId],
+      tm: p.proTeamId,
+      st: e.status === 'WAIVERS' ? 'WA' : 'FA',
+      wd: e.status === 'WAIVERS' && e.waiverProcessDate ? e.waiverProcessDate : null,
+      own: p.ownership?.percentOwned != null ? round(p.ownership.percentOwned, 1) : null,
+      chg: p.ownership?.percentChange != null ? round(p.ownership.percentChange, 1) : null,
+      inj: p.injuryStatus && p.injuryStatus !== 'ACTIVE' ? p.injuryStatus : null,
+    };
   }
   return out;
 }
@@ -596,7 +619,9 @@ async function main() {
 
   // Week-by-week fantasy points for the app's PPG / consistency / weekly bars.
   const currentWeek = src.league.scoringPeriodId || 1;
-  const weekly = await optional(fetchEspnWeekly([...rostered.keys()], currentWeek), 'ESPN weekly points');
+  const espnPool = await optional(fetchEspnWeekly([...rostered.keys()], currentWeek), 'ESPN weekly points');
+  const weekly = espnPool?.weekly || null;
+  const waivers = espnPool?.waivers || null;
 
   // Details sources.
   const leagueScore = format.scoring;
@@ -714,6 +739,7 @@ async function main() {
     const rosteredWithWeeks = [...rostered.keys()].filter((id) => weekly[id]).length;
     console.log(`\nWeekly points: ${withWeeks} players through week ${currentWeek} (${rosteredWithWeeks}/${rostered.size} rostered)`);
   }
+  if (waivers) console.log(`Waiver pool: ${Object.keys(waivers).length} unrostered players`);
 
   if (unmatchedShare > MAX_UNMATCHED) {
     throw new Error(`Too many rostered players without values (${unmatched.length}). Check the id mapping before publishing.`);
@@ -737,6 +763,7 @@ async function main() {
     fs.writeFileSync(path.join(DATA_DIR, 'values.json'), JSON.stringify(values));
     fs.writeFileSync(path.join(DATA_DIR, 'player-details.json'), JSON.stringify({ generatedAt, season: SEASON, players: detailsOut }));
     if (weekly) fs.writeFileSync(path.join(DATA_DIR, 'weekly.json'), JSON.stringify({ generatedAt, season: SEASON, throughWeek: currentWeek, players: weekly }));
+    if (waivers) fs.writeFileSync(path.join(DATA_DIR, 'waivers.json'), JSON.stringify({ generatedAt, season: SEASON, week: currentWeek, players: waivers }));
     const day = generatedAt.slice(0, 10);
     fs.writeFileSync(path.join(DATA_DIR, 'history', `${day}.json`), JSON.stringify({ d: day, p: historyOut, k: pickValues }));
     updateHistoryIndex(Object.keys(valuesOut));

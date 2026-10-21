@@ -42,6 +42,9 @@ const state = {
   tradePrefill: null,
   selectedRosterTeamId: null,
   selectedDraftTeamId: null,
+  rosterMode: 'teams',     // 'teams' | 'waivers' (Rosters tab toggle)
+  freeAgents: new Map(),   // playerId → player object, same shape as parseRoster rows
+  waivers: { loadedAt: 0, live: false, asOf: null, pos: 'ALL', sort: 'value', q: '', shown: 40 },
   myTeamId: null,
   // V2 additions
   powerRanks: [],          // [{ teamId, rank, score }] sorted best->worst
@@ -1448,6 +1451,8 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
   let actions = '';
   if (context === 'mine') {
     actions = `<button class="player-action ${isPubliclyBlocked ? 'on' : ''}" data-action="toggle-block" data-player-id="${player.id}" title="${isPubliclyBlocked ? 'On the block' : 'Put on the block'}">${isPubliclyBlocked ? actionLabel('★', 'On Block') : actionLabel('☆', 'Block')}</button>`;
+  } else if (context === 'waiver') {
+    actions = waiverChipsHTML(player);
   } else if (context === 'other' && ownerTeam) {
     // "Interested" is always available — even if player isn't formally on the block.
     // Clicking it creates an int_ shadow row if none exists, so owner can see the signal.
@@ -1502,6 +1507,199 @@ function renderRoster() {
     ${typeof tcTeamValueFooterHTML === 'function' ? tcTeamValueFooterHTML(team.id) : ''}
   `;
   wirePlayerActions(el);
+}
+
+/* -------- Waivers (Rosters tab, Beta 1.26) --------
+ * Every unrostered QB/RB/WR/TE, from three layers (later ones win):
+ *   1. data/values.json: anyone with a dynasty value
+ *   2. data/waivers.json: last night's copy of ESPN's free-agent list
+ *   3. ESPN live: status, % rostered, season points and projection. ESPN can
+ *      refuse this from a browser (it needs a filter header), so 1 and 2 cover it.
+ * Anyone on a roster right now is skipped at render, so a stale file can't list them.
+ */
+const NFL_ABBR = {
+  1: 'ATL', 2: 'BUF', 3: 'CHI', 4: 'CIN', 5: 'CLE', 6: 'DAL', 7: 'DEN', 8: 'DET', 9: 'GB', 10: 'TEN',
+  11: 'IND', 12: 'KC', 13: 'LV', 14: 'LAR', 15: 'MIA', 16: 'MIN', 17: 'NE', 18: 'NO', 19: 'NYG', 20: 'NYJ',
+  21: 'PHI', 22: 'ARI', 23: 'PIT', 24: 'LAC', 25: 'SF', 26: 'SEA', 27: 'TB', 28: 'WSH', 29: 'CAR', 30: 'JAX',
+  33: 'BAL', 34: 'HOU',
+};
+const SKILL_POS = ['QB', 'RB', 'WR', 'TE'];
+const WAIVER_TTL = 5 * 60 * 1000;
+const WAIVER_PAGE = 40;
+const WAIVER_SORTS = { value: 'Dynasty value', now: 'Win-now', last3: 'Last 3', ppg: 'PPG', own: '% rostered', age: 'Youngest' };
+const ESPN_ADD_URL = `https://fantasy.espn.com/football/players/add?leagueId=${CONFIG.LEAGUE_ID}`;
+
+function fetchLiveWaivers() {
+  const filter = { players: {
+    filterStatus: { value: ['FREEAGENT', 'WAIVERS'] },
+    filterSlotIds: { value: [0, 2, 4, 6] },
+    sortPercOwned: { sortPriority: 1, sortAsc: false },
+    limit: 300,
+    // Season totals: actual (00) and projected (10)
+    filterStatsForTopScoringPeriodIds: { value: 1, additionalValue: [`00${CONFIG.SEASON}`, `10${CONFIG.SEASON}`] },
+  } };
+  const url = `${CONFIG.ESPN_BASE}/seasons/${CONFIG.SEASON}/segments/0/leagues/${CONFIG.LEAGUE_ID}?view=kona_player_info&scoringPeriodId=${state.currentWeek || 1}`;
+  return fetchJSON(url, { headers: { 'X-Fantasy-Filter': JSON.stringify(filter) } }).then((raw) => raw.players || []);
+}
+
+async function loadWaivers(force = false) {
+  const w = state.waivers;
+  if (!force && w.loadedAt && Date.now() - w.loadedAt < WAIVER_TTL) return;
+  const [live, snap] = await Promise.all([
+    fetchLiveWaivers().catch((err) => { console.warn('Live waivers unavailable:', err); return null; }),
+    fetchJSON('./data/waivers.json').catch(() => null),
+    typeof tcLoad === 'function' ? tcLoad() : null,
+  ]);
+  const fa = new Map();
+  // Merge one layer's fields onto a player, skipping blanks so a thin layer
+  // can't wipe what an earlier one knew.
+  const put = (id, fields) => {
+    id = Number(id);
+    const cur = fa.get(id) || { id, slot: 'FA', nflTeam: '', injuryStatus: 'ACTIVE', stats: [], waiver: { st: 'FA', wd: null, own: null, chg: null } };
+    const next = { ...cur, waiver: { ...cur.waiver } };
+    Object.entries(fields).forEach(([k, v]) => {
+      if (k === 'waiver') Object.entries(v).forEach(([wk, wv]) => { if (wv != null) next.waiver[wk] = wv; });
+      else if (v != null && v !== '') next[k] = v;
+    });
+    next.slot = next.nflTeam || 'FA';
+    fa.set(id, next);
+  };
+
+  const vals = (typeof TC !== 'undefined' && TC.values?.players) || {};
+  Object.entries(vals).forEach(([id, v]) => {
+    if (SKILL_POS.includes(v.p)) put(id, { name: v.n, pos: v.p, nflTeam: v.t });
+  });
+  if (snap?.season === CONFIG.SEASON) {
+    Object.entries(snap.players || {}).forEach(([id, r]) => put(id, {
+      name: r.n, pos: r.p, proTeamId: r.tm, nflTeam: NFL_ABBR[r.tm], injuryStatus: r.inj || 'ACTIVE',
+      waiver: { st: r.st, wd: r.wd, own: r.own, chg: r.chg },
+    }));
+  }
+  (live || []).forEach((e) => {
+    const p = e.player;
+    const pos = POSITION_MAP[p?.defaultPositionId];
+    if (!p || !SKILL_POS.includes(pos)) return;
+    put(p.id, {
+      name: p.fullName, pos, proTeamId: p.proTeamId, nflTeam: NFL_ABBR[p.proTeamId],
+      injuryStatus: p.injuryStatus || 'ACTIVE', stats: p.stats,
+      waiver: { st: e.status === 'WAIVERS' ? 'WA' : 'FA', wd: e.waiverProcessDate, own: p.ownership?.percentOwned, chg: p.ownership?.percentChange },
+    });
+  });
+
+  state.freeAgents = fa;
+  w.loadedAt = Date.now();
+  w.live = !!(live && live.length);
+  w.asOf = w.live ? null : snap?.generatedAt || null;
+}
+
+// Sort keys and the "hot" flag for one free agent. Missing numbers sort last.
+function waiverStats(p) {
+  const v = typeof tcPlayer === 'function' ? tcPlayer(p.id) : null;
+  const played = weeklyActualLog(p).filter((w) => w.points > 0);
+  const avg = (arr) => (arr.length ? arr.reduce((s, w) => s + w.points, 0) / arr.length : null);
+  const recent = played.filter((w) => w.week >= (state.currentWeek || 1) - 3 && w.week < (state.currentWeek || 1));
+  const ppg = avg(played);
+  const last3 = recent.length >= 2 ? avg(recent) : null;
+  const hot = (last3 != null && last3 >= 10 && (ppg == null || last3 >= ppg * 1.3)) || (p.waiver.chg != null && p.waiver.chg >= 5);
+  return { value: v?.dv ?? null, now: v?.wn ?? null, age: v?.a ?? null, ppg, last3, own: p.waiver.own, hot };
+}
+
+function waiverChipsHTML(p) {
+  const s = waiverStats(p);
+  const chips = [];
+  if (p.waiver.st === 'WA') {
+    const day = p.waiver.wd ? new Date(p.waiver.wd).toLocaleDateString(undefined, { weekday: 'short' }) : '';
+    chips.push(`<span class="wv-chip wv-wa">WAIVERS${day ? ' · clears ' + escapeHtml(day) : ''}</span>`);
+  } else {
+    chips.push('<span class="wv-chip wv-fa">FA</span>');
+  }
+  if (s.own != null) {
+    const chg = p.waiver.chg != null && Math.abs(p.waiver.chg) >= 0.5
+      ? ` <span class="${p.waiver.chg > 0 ? 'tv-up' : 'tv-down'}">${p.waiver.chg > 0 ? '▲' : '▼'}${Math.abs(p.waiver.chg).toFixed(1)}</span>` : '';
+    chips.push(`<span class="wv-chip">${s.own.toFixed(1)}% rostered${chg}</span>`);
+  }
+  if (s.last3 != null) chips.push(`<span class="wv-chip">L3 <b>${s.last3.toFixed(1)}</b></span>`);
+  if (s.hot) chips.push('<span class="wv-chip wv-hot">🔥 Trending</span>');
+  return chips.join('');
+}
+
+function waiverSortValue(s, key) {
+  if (key === 'age') return s.age == null ? -Infinity : -s.age; // youngest first
+  return s[key] == null ? -Infinity : s[key];
+}
+
+function renderWaiverFilters() {
+  const host = $('#waiver-filters');
+  if (!host) return;
+  const w = state.waivers;
+  const chip = (key, label, on) => `<button type="button" class="tv-filter ${on ? 'on' : ''}" data-wf="${key}" aria-pressed="${on}">${label}</button>`;
+  host.innerHTML = `
+    <div class="tv-filter-row"><span class="lbl">Position</span>${['ALL', ...SKILL_POS].map((p) => chip(`pos:${p}`, p, w.pos === p)).join('')}</div>
+    <div class="tv-filter-row"><span class="lbl">Sort</span>${Object.entries(WAIVER_SORTS).map(([k, label]) => chip(`sort:${k}`, label, w.sort === k)).join('')}</div>`;
+  host.onclick = (e) => {
+    const btn = e.target.closest('[data-wf]');
+    if (!btn) return;
+    const [kind, val] = btn.dataset.wf.split(':');
+    w[kind] = val;
+    w.shown = WAIVER_PAGE;
+    renderWaivers();
+  };
+}
+
+function renderWaivers() {
+  const list = $('#waiver-list');
+  if (!list) return;
+  const w = state.waivers;
+  renderWaiverFilters();
+
+  const note = $('#waiver-note');
+  if (note) {
+    const src = w.live ? 'Live from ESPN'
+      : w.asOf ? `As of ${new Date(w.asOf).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`
+      : 'From dynasty values';
+    note.innerHTML = `<span>${escapeHtml(src)}. Tap a player for the full card.</span> <a href="${ESPN_ADD_URL}" target="_blank" rel="noopener">Claim on ESPN ↗</a>`;
+  }
+
+  const rostered = new Set(state.teams.flatMap((t) => t.roster.map((p) => p.id)));
+  const q = w.q.trim().toLowerCase();
+  const rows = [...state.freeAgents.values()]
+    .filter((p) => !rostered.has(p.id) && p.name)
+    .filter((p) => w.pos === 'ALL' || p.pos === w.pos)
+    .filter((p) => !q || p.name.toLowerCase().includes(q) || p.nflTeam.toLowerCase() === q)
+    .map((p) => ({ p, s: waiverStats(p) }))
+    .sort((a, b) => waiverSortValue(b.s, w.sort) - waiverSortValue(a.s, w.sort) || (b.s.value ?? 0) - (a.s.value ?? 0));
+
+  if (!rows.length) {
+    list.innerHTML = empty(state.freeAgents.size ? 'No free agents match.' : 'Waiver data unavailable right now.');
+    return;
+  }
+  const shown = rows.slice(0, w.shown);
+  list.innerHTML = shown.map(({ p }) => renderPlayerRow(p, null, 'waiver')).join('')
+    + (rows.length > shown.length ? `<button class="btn-ghost wv-more" id="waiver-more" type="button">Show more (${rows.length - shown.length})</button>` : '');
+  const more = $('#waiver-more');
+  if (more) more.onclick = () => { w.shown += WAIVER_PAGE; renderWaivers(); };
+}
+
+function showWaivers() {
+  if (!state.freeAgents.size) $('#waiver-list').innerHTML = skeletonRows(8);
+  loadWaivers().then(renderWaivers);
+}
+
+function wireRosterMode() {
+  const seg = $('#roster-mode');
+  if (!seg || seg.dataset.wired) return;
+  seg.dataset.wired = '1';
+  seg.onclick = (e) => {
+    const btn = e.target.closest('[data-mode]');
+    if (!btn) return;
+    state.rosterMode = btn.dataset.mode;
+    $$('.seg-btn', seg).forEach((b) => b.classList.toggle('active', b === btn));
+    $('#roster-teams-pane').hidden = state.rosterMode !== 'teams';
+    $('#waivers-pane').hidden = state.rosterMode !== 'waivers';
+    if (state.rosterMode === 'waivers') showWaivers();
+  };
+  const input = $('#waiver-search');
+  if (input) input.oninput = () => { state.waivers.q = input.value; state.waivers.shown = WAIVER_PAGE; renderWaivers(); };
 }
 
 /* -------- Player Search (Rosters + Trade Desk, Beta 1.7) -------- */
@@ -3954,7 +4152,8 @@ function findPlayerAnywhere(playerId) {
     const p = t.roster.find((r) => r.id === playerId);
     if (p) return p;
   }
-  return null;
+  // Waivers pane players, so their cards open too
+  return state.freeAgents.get(playerId) || null;
 }
 
 // Sum live actual season points for an array of trade-assets (players only — picks have no stats)
@@ -4584,7 +4783,12 @@ function setView(name) {
     loadAllTrades().then(renderMyTeam);
     loadTradeBlock(); // refresh for badges
   }
-  if (name === 'rosters') { loadTradeBlock().then(renderRoster); wireRosterSearch(); }
+  if (name === 'rosters') {
+    loadTradeBlock().then(renderRoster);
+    wireRosterSearch();
+    wireRosterMode();
+    if (state.rosterMode === 'waivers') showWaivers();
+  }
   if (name === 'vault') initVaultView();
 }
 
@@ -5677,7 +5881,7 @@ function openPlayerProfile(playerId) {
       <div class="profile-meta-line">
         <span class="pos-chip pos-${player.pos}">${escapeHtml(player.pos)}</span>
         ${rank ? `<span class="rank-chip">${escapeHtml(rank)}</span>` : ''}
-        <span class="owner-chip">${escapeHtml(owner ? owner.name.toUpperCase() : 'FREE AGENT')}</span>
+        <span class="owner-chip">${escapeHtml(owner ? owner.name.toUpperCase() : player.waiver?.st === 'WA' ? 'ON WAIVERS' : 'FREE AGENT')}</span>
         ${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? `<span class="injury-chip">${escapeHtml(player.injuryStatus)}</span>` : ''}
       </div>
     </div>
@@ -6624,7 +6828,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.25.1';
+const BUILD_ID = '1.26.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
