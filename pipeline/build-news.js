@@ -44,9 +44,11 @@ function articles(json) {
   const cutoff = Date.now() - MAX_AGE_DAYS * 864e5;
   return (Array.isArray(list) ? list : [])
     .map((a) => {
-      const blurb = clean(a.description || a.story || a.summary);
+      const h = clean(a.headline || a.title);
+      let blurb = clean(a.description || a.story || a.summary);
+      if (blurb === h) blurb = ''; // short player notes repeat the headline
       return {
-        h: clean(a.headline || a.title),
+        h,
         d: blurb.length > 280 ? blurb.slice(0, 277).replace(/\s\S*$/, '') + '…' : blurb,
         t: a.published || a.lastModified || a.date || null,
         u: a.links?.web?.href || a.link?.href || a.url || null,

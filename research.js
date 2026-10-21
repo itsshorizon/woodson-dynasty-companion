@@ -454,6 +454,7 @@ function rsMovesClick(e) {
  * recent articles link to their ESPN page instead.
  */
 
+const RS_NEWS_MAX = 40;
 const rsEspnPage = (id) => `https://www.espn.com/nfl/player/_/id/${id}`;
 
 function rsLoadNews() {
@@ -473,13 +474,14 @@ function rsAgo(iso) {
   return d === 1 ? 'yesterday' : `${d}d ago`;
 }
 
-function rsArticleHTML(a, player) {
+// players: who the article is about (one ESPN column can cover several of yours)
+function rsArticleHTML(a, players = []) {
   const head = a.u ? `<a href="${escapeHtml(a.u)}" target="_blank" rel="noopener">${escapeHtml(a.h)}</a>` : escapeHtml(a.h);
   return `
     <div class="rs-news-item">
-      ${player ? `<div class="rs-news-who" data-player-id="${player.id}">${escapeHtml(player.name)} <span class="pos-tag-inline pos-${player.pos}">${escapeHtml(player.pos)}</span></div>` : ''}
+      ${players.length ? `<div class="rs-news-whos">${players.map((p) => `<span class="rs-news-who" data-player-id="${p.id}">${escapeHtml(p.name)} <span class="pos-tag-inline pos-${p.pos}">${escapeHtml(p.pos)}</span></span>`).join('')}</div>` : ''}
       <div class="rs-news-head">${head}</div>
-      ${a.d ? `<div class="rs-news-blurb">${escapeHtml(a.d)}</div>` : ''}
+      ${a.d && a.d !== a.h ? `<div class="rs-news-blurb">${escapeHtml(a.d)}</div>` : ''}
       <div class="rs-news-time">${escapeHtml(rsAgo(a.t))}</div>
     </div>`;
 }
@@ -493,13 +495,18 @@ function rsRenderNews() {
   rsLoadNews().then((news) => {
     if (RS.sub !== 'news') return;
     const roster = team.roster.filter((p) => ResearchEngine.POS.includes(p.pos));
-    const items = roster
-      .flatMap((p) => (news.players[p.id] || []).map((a) => ({ a, p })))
-      .sort((x, y) => (Date.parse(y.a.t) || 0) - (Date.parse(x.a.t) || 0));
+    // One entry per article, listing every one of your players it covers.
+    const byHead = new Map();
+    roster.forEach((p) => (news.players[p.id] || []).forEach((a) => {
+      const k = a.u || a.h;
+      if (!byHead.has(k)) byHead.set(k, { a, ps: [] });
+      byHead.get(k).ps.push(p);
+    }));
+    const items = [...byHead.values()].sort((x, y) => (Date.parse(y.a.t) || 0) - (Date.parse(x.a.t) || 0)).slice(0, RS_NEWS_MAX);
     const quiet = roster.filter((p) => !(news.players[p.id] || []).length);
     el.innerHTML = `
       ${rsCard('📰 Latest on Your Players', items.length
-        ? `<div class="rs-news">${items.map(({ a, p }) => rsArticleHTML(a, p)).join('')}</div>`
+        ? `<div class="rs-news">${items.map(({ a, ps }) => rsArticleHTML(a, ps)).join('')}</div>`
         : '<p class="tv-note">No articles in the last 30 days. News refreshes every morning and Sunday at noon (Eastern).</p>',
         news.generatedAt ? `as of ${new Date(news.generatedAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}` : '')}
       ${quiet.length ? rsCard('🔎 No Recent News', `<div class="rs-quiet">${quiet.map((p) => `<a href="${rsEspnPage(p.id)}" target="_blank" rel="noopener">${escapeHtml(p.name)} ↗</a>`).join('')}</div>`) : ''}`;
@@ -521,7 +528,7 @@ function rsEnhanceProfile(playerId) {
     const html = `
       <div class="rs-profile-news">
         <h4>📰 Latest News</h4>
-        ${list.length ? list.map((a) => rsArticleHTML(a, null)).join('') : '<p class="tv-note">No articles in the last 30 days.</p>'}
+        ${list.length ? list.map((a) => rsArticleHTML(a)).join('') : '<p class="tv-note">No articles in the last 30 days.</p>'}
         <a class="rs-link" href="${rsEspnPage(playerId)}" target="_blank" rel="noopener">More on ESPN ↗</a>
       </div>`;
     const arc = body.querySelector('.career-arc');
