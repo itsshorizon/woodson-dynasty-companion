@@ -1923,7 +1923,7 @@ function populateTradeTeamSelects() {
   if (my) {
     aSel.innerHTML = `<option value="${my.id}" ${teamOptionAttrs(my)}>${escapeHtml(my.name)}</option>`;
     aSel.disabled = true;
-    aSel.title = 'Locked to your team. Change "My Team" from the My Team tab.';
+    aSel.title = 'Locked to your team. Change it from the Research tab.';
     // Side B: every OTHER team (self is not tradeable with self)
     bSel.innerHTML = '<option value="">Select trade partner...</option>' +
       state.teams
@@ -1934,9 +1934,9 @@ function populateTradeTeamSelects() {
     // Preload the user's roster on side A
     renderTradeAssets('a');
   } else {
-    aSel.innerHTML = '<option value="">Choose your team in My Team first</option>';
+    aSel.innerHTML = '<option value="">Choose your team in Research first</option>';
     aSel.disabled = true;
-    aSel.title = 'Set your identity on the My Team tab before proposing trades.';
+    aSel.title = 'Set your identity on the Research tab before proposing trades.';
     bSel.innerHTML = '<option value="">Select trade partner...</option>' +
       state.teams.map((t) => `<option value="${t.id}" ${teamOptionAttrs(t)}>${escapeHtml(t.name)}</option>`).join('');
     bSel.disabled = false;
@@ -2017,7 +2017,7 @@ function renderTradeBlockSection() {
   const validEntries = sanitizeTradeBlockRows(state.tradeBlock)
     .filter((e) => e.entryId && e.entryId.startsWith('tb_'));
   if (!validEntries.length) {
-    el.innerHTML = empty('No players on the block. Put yours up from the My Team tab.');
+    el.innerHTML = empty('No players on the block. Put yours up from the Research tab.');
     return;
   }
 
@@ -2279,7 +2279,7 @@ function renderPendingTrades() {
   // so no trade ever leaks to a non-participant, even if one field is missing.
   const myId = state.myTeamId;
   const myName = myTeamName();
-  if (!myId) { el.innerHTML = empty('Pick your team on the My Team tab to see your trades'); return; }
+  if (!myId) { el.innerHTML = empty('Pick your team on the Research tab to see your trades'); return; }
   const mine = state.pendingTrades.filter((t) => {
     const isProposer = (t.teamAId && Number(t.teamAId) === myId) || (t.teamProposing && t.teamProposing === myName);
     const isReceiver = (t.teamBId && Number(t.teamBId) === myId) || (t.teamReceiving && t.teamReceiving === myName);
@@ -5930,6 +5930,8 @@ function openPlayerProfile(playerId) {
   body.insertAdjacentHTML('beforeend', historicalCareerArcHTML(playerId));
   // Dynasty Outlook: trade values, contract, injuries (trade-calc.js)
   if (typeof tcEnhanceProfile === 'function') tcEnhanceProfile(playerId);
+  // Latest news (research.js)
+  if (typeof rsEnhanceProfile === 'function') rsEnhanceProfile(playerId);
 
   $('#player-profile-modal').hidden = false;
 
@@ -6829,7 +6831,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.27.0';
+const BUILD_ID = '1.28.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

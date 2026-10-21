@@ -1,12 +1,9 @@
 {
-  "version": "1.27.0",
-  "title": "🔬 My Team Is Now Research",
+  "version": "1.28.0",
+  "title": "🧠 Moves, News and Ask Claude",
   "notes": [
-    "🔬 My Team is now Research. Everything that was there lives under Overview.",
-    "📈 New Outlook view: record and ranks, playoff odds from 2,000 simulated seasons, luck vs. all-play, and your last-3 scoring.",
-    "🗓️ Up Next shows your next four opponents with their form, injuries and your win chance.",
-    "🧱 Position Rooms grade your healthy starters at QB, RB, WR and TE against the league and count real depth.",
-    "🩹 Injury Luck shows starter games and points lost to injury and where that ranks.",
-    "🔮 Dynasty Window: your window, roster value rank, age vs. the league, and value three years out."
+    "🧠 Research → Moves tells you what to do: sell aging value when your window is closing, buy at a thin position when you're contending, turn surplus into a starter, or grab a hot waiver add. Each one comes with real, fair offers from the trade calculator. Tap Load into proposal to open it on the Trade Desk.",
+    "📰 Research → News shows recent articles on your players, refreshed every morning and Sunday at noon. Player cards show the latest news too.",
+    "🤖 Research → Ask copies your team's full data and opens Claude on your own Claude account. Paste and ask anything. Free accounts work, and it costs the league nothing."
   ]
 }

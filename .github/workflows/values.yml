@@ -2,9 +2,11 @@ name: Refresh trade values
 
 on:
   schedule:
-    # 6am Eastern daily, plus a Monday-night refresh after the weekend's games
+    # 6am Eastern daily, a Monday-night refresh after the weekend's games, and
+    # Sunday noon Eastern so news and injuries are fresh before kickoff
     - cron: '0 10 * * *'
     - cron: '0 4 * * 2'
+    - cron: '0 16 * * 0'
   workflow_dispatch:
 
 permissions:
@@ -42,6 +44,11 @@ jobs:
       # third-party image hosts. A failure here never blocks trade values.
       - name: Cache team logos
         run: node pipeline/cache-logos.js
+        continue-on-error: true
+
+      # Player news for the Research tab. Never blocks trade values.
+      - name: Build news
+        run: node pipeline/build-news.js
         continue-on-error: true
 
       - name: Build changelog
