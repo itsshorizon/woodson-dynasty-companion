@@ -633,3 +633,6 @@
   border-top-left-radius: var(--radius-sm);
   border-top-right-radius: var(--radius-sm);
 }
+
+/* Waivers: status chips wrap under the name instead of squeezing the row */
+[data-density="compact"] .player-row .player-actions:has(.wv-chip) { flex-wrap: wrap; justify-content: flex-start; }

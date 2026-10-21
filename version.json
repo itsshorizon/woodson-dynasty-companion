@@ -1,7 +1,9 @@
 {
-  "version": "1.25.1",
-  "title": "🎟️ Traded Picks Show Up Right",
+  "version": "1.28.0",
+  "title": "🧠 Moves, News and Ask Claude",
   "notes": [
-    "🎟️ Traded picks from teams that changed their name now show on the Draft Board and on each team's pick list. Project Hail Ja'Marry's 2027 1st and 2nd now show as traded, and Tuten-finity's and Zachary's own picks no longer show up twice as \"acquired\"."
+    "🧠 Research → Moves tells you what to do: sell aging value when your window is closing, buy at a thin position when you're contending, turn surplus into a starter, or grab a hot waiver add. Each one comes with real, fair offers from the trade calculator. Tap Load into proposal to open it on the Trade Desk.",
+    "📰 Research → News shows recent articles on your players, refreshed every morning and Sunday at noon. Player cards show the latest news too.",
+    "🤖 Research → Ask copies your team's full data and opens Claude on your own Claude account. Paste and ask anything. Free accounts work, and it costs the league nothing."
   ]
 }
