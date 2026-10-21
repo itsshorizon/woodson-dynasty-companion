@@ -1,6 +1,39 @@
 {
  "entries": [
   {
+   "version": "1.28.0",
+   "title": "🧠 Moves, News and Ask Claude",
+   "date": "2026-10-21T02:09:14Z",
+   "notes": [
+    "🧠 Research → Moves tells you what to do: sell aging value when your window is closing, buy at a thin position when you're contending, turn surplus into a starter, or grab a hot waiver add. Each one comes with real, fair offers from the trade calculator. Tap Load into proposal to open it on the Trade Desk.",
+    "📰 Research → News shows recent articles on your players, refreshed every morning and Sunday at noon. Player cards show the latest news too.",
+    "🤖 Research → Ask copies your team's full data and opens Claude on your own Claude account. Paste and ask anything. Free accounts work, and it costs the league nothing."
+   ]
+  },
+  {
+   "version": "1.27.0",
+   "title": "🔬 My Team Is Now Research",
+   "date": "2026-10-21T02:04:42Z",
+   "notes": [
+    "🔬 My Team is now Research. Everything that was there lives under Overview.",
+    "📈 New Outlook view: record and ranks, playoff odds from 2,000 simulated seasons, luck vs. all-play, and your last-3 scoring.",
+    "🗓️ Up Next shows your next four opponents with their form, injuries and your win chance.",
+    "🧱 Position Rooms grade your healthy starters at QB, RB, WR and TE against the league and count real depth.",
+    "🩹 Injury Luck shows starter games and points lost to injury and where that ranks.",
+    "🔮 Dynasty Window: your window, roster value rank, age vs. the league, and value three years out."
+   ]
+  },
+  {
+   "version": "1.26.0",
+   "title": "🧲 Waivers Are Here",
+   "date": "2026-10-21T01:59:08Z",
+   "notes": [
+    "🧲 New Waivers view on the Rosters tab. Every unrostered QB, RB, WR and TE, with dynasty value, PPG, last-3-week average, % rostered and waiver status.",
+    "🔥 Filter by position and sort by value, win-now, last 3, PPG, % rostered or age. Trending players get a flag.",
+    "🃏 Tap any free agent for the full player card, same as rostered players."
+   ]
+  },
+  {
    "version": "1.25.1",
    "title": "🎟️ Traded Picks Show Up Right",
    "date": "2026-10-20T18:58:17-04:00",
