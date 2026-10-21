@@ -1,9 +1,12 @@
 {
-  "version": "1.26.0",
-  "title": "🧲 Waivers Are Here",
+  "version": "1.27.0",
+  "title": "🔬 My Team Is Now Research",
   "notes": [
-    "🧲 New Waivers view on the Rosters tab. Every unrostered QB, RB, WR and TE, with dynasty value, PPG, last-3-week average, % rostered and waiver status.",
-    "🔥 Filter by position and sort by value, win-now, last 3, PPG, % rostered or age. Trending players get a flag.",
-    "🃏 Tap any free agent for the full player card, same as rostered players."
+    "🔬 My Team is now Research. Everything that was there lives under Overview.",
+    "📈 New Outlook view: record and ranks, playoff odds from 2,000 simulated seasons, luck vs. all-play, and your last-3 scoring.",
+    "🗓️ Up Next shows your next four opponents with their form, injuries and your win chance.",
+    "🧱 Position Rooms grade your healthy starters at QB, RB, WR and TE against the league and count real depth.",
+    "🩹 Injury Luck shows starter games and points lost to injury and where that ranks.",
+    "🔮 Dynasty Window: your window, roster value rank, age vs. the league, and value three years out."
   ]
 }

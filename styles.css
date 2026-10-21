@@ -5037,3 +5037,71 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .wv-wa { border-color: #ffa500; color: #ffa500; }
 .wv-hot { border-color: var(--red); color: var(--red); }
 .wv-more { width: 100%; margin-top: 4px; }
+
+/* ---------- Research tab (research.js, Beta 1.27) ---------- */
+.research-subnav .seg-btn { font-size: 10px; padding: 9px 4px; letter-spacing: 0.03em; }
+.research-pane { animation: fade .2s ease; }
+.rs-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+.rs-card .myteam-section-header { margin: 0 0 10px; }
+.rs-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rs-stats.rs-stats-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rs-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--bg-elev-2);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+.rs-stat-val { font-size: 18px; font-weight: 900; color: var(--tab-accent); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.rs-stat-label { font-size: 9px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.06em; }
+.rs-stat-note { font-size: 10px; color: var(--text-dim); }
+.rs-stat.good .rs-stat-val, .rs-game-win.good, .rs-verdict.good { color: #4cffaf; }
+.rs-stat.bad .rs-stat-val, .rs-game-win.bad, .rs-verdict.bad, .rs-bad { color: var(--red); }
+.rs-verdict { font-size: 13px; font-weight: 700; margin: 10px 0 6px; color: var(--text); }
+.rs-rooms { display: flex; flex-direction: column; gap: 8px; }
+.rs-room { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; }
+.rs-grade {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  font-size: 17px; font-weight: 900;
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+.rs-grade-A { background: #4cffaf; color: #0a1410; }
+.rs-grade-B { background: #a8ff3d; color: #0a1410; }
+.rs-grade-C { background: #f1c40f; color: #0a1410; }
+.rs-grade-D { background: #ffa500; color: #0a1410; }
+.rs-grade-F { background: var(--red); color: #fff; }
+.rs-room-top { font-size: 12px; color: var(--text-dim); }
+.rs-room-top b { font-size: 13px; margin-right: 4px; }
+.rs-room-top b.pos-QB { color: #ff1976; } .rs-room-top b.pos-RB { color: #4cffaf; }
+.rs-room-top b.pos-WR { color: #4c7dff; } .rs-room-top b.pos-TE { color: #ffa500; }
+.rs-room-sub { font-size: 11px; color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-list { display: flex; flex-direction: column; gap: 4px; }
+.rs-list-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12px; padding: 6px 8px;
+  background: var(--bg-elev-2); border-radius: 6px; cursor: pointer;
+}
+.rs-list-row span:last-child { color: var(--text-mute); white-space: nowrap; }
+.rs-sched { display: flex; flex-direction: column; gap: 6px; }
+.rs-game { display: grid; grid-template-columns: 38px 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.rs-game-wk { font-size: 10px; font-weight: 900; color: var(--text-mute); }
+.rs-game-name { font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-game-win { font-size: 16px; font-weight: 900; text-align: right; color: var(--text); line-height: 1; }
+.rs-game-win span { display: block; font-size: 9px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; }
+.rs-proj { display: flex; gap: 8px; align-items: flex-end; height: 110px; margin-top: 12px; }
+.rs-proj-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
+.rs-proj-bar { width: 100%; border-radius: 6px 6px 2px 2px; background: var(--tab-accent); opacity: .85; }
+.rs-proj-col span { font-size: 9px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; }
+.rs-proj-col b { font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (max-width: 360px) { .rs-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

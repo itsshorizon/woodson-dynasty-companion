@@ -4713,7 +4713,7 @@ function initDensity() {
 const VIEW_TITLES = {
   standings: 'STANDINGS',
   rosters: 'ROSTERS',
-  myteam: 'MY TEAM',
+  myteam: 'RESEARCH',
   trades: 'TRADE DESK',
   vault: 'VAULT',
 };
@@ -4782,6 +4782,7 @@ function setView(name) {
   if (name === 'myteam') {
     loadAllTrades().then(renderMyTeam);
     loadTradeBlock(); // refresh for badges
+    if (typeof rsInit === 'function') rsInit(); // Research subnav (research.js)
   }
   if (name === 'rosters') {
     loadTradeBlock().then(renderRoster);
@@ -6828,7 +6829,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.26.0';
+const BUILD_ID = '1.27.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

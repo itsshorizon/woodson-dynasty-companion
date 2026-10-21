@@ -1,6 +1,6 @@
 /* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
  * and every ?v= in index.html to the same version. */
-const CACHE_NAME = 'wcc-v1.26.0';
+const CACHE_NAME = 'wcc-v1.27.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const CORE_ASSETS = [
   './app.js',
   './trade-engine.js',
   './trade-calc.js',
+  './research-engine.js',
+  './research.js',
   './manifest.json',
   './history.json'
 ];
