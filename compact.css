@@ -636,3 +636,9 @@
 
 /* Waivers: status chips wrap under the name instead of squeezing the row */
 [data-density="compact"] .player-row .player-actions:has(.wv-chip) { flex-wrap: wrap; justify-content: flex-start; }
+
+/* Activity + reactions (social.js) */
+[data-density="compact"] .act-item { padding: 10px 12px; }
+[data-density="compact"] .act-feed { gap: 8px; }
+[data-density="compact"] .rx-bar { gap: 4px; margin-top: 8px; }
+[data-density="compact"] .rx-chip, [data-density="compact"] .rx-add { min-height: 26px; padding: 2px 8px; }

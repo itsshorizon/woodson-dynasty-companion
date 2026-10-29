@@ -12,6 +12,15 @@ const CONFIG = {
   DRAFT_ROUNDS: 4,
   // Historical data is served as a static, pre-scraped JSON file (see scrape-history.js)
   HISTORY_PATH: './history.json',
+  // League chat + reactions (social.js). Paste the web app config from
+  // Firebase console → Project settings → Your apps. Empty = features off.
+  // Setup steps are at the top of firestore.rules.
+  FIREBASE: {
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    appId: '',
+  },
 };
 
 const POSITION_MAP = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DST' };
@@ -62,6 +71,8 @@ const state = {
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Reaction row under a card (social.js). Empty when Firebase is off.
+const rxBar = (kind, id, cls = '') => (typeof rxBarHTML === 'function' ? rxBarHTML(rxKey(kind, id), cls) : '');
 
 function toast(msg, type = '') {
   const t = $('#toast');
@@ -1097,6 +1108,8 @@ function matchupCardHTML(m, mine = false) {
           ${winProbBar(m)}
           <div class="matchup-toggle">${live ? '<span class="live-pill">Live</span>' : ''}${open ? 'Hide lineups' : 'Show lineups'} <span class="chev">▾</span></div>
         </div>
+        ${m.winner && m.winner !== 'UNDECIDED' && m.away.teamId != null && m.home.teamId != null
+          ? rxBar('game', `${m.week}:${m.away.teamId}-${m.home.teamId}`, 'rx-matchup') : ''}
         ${open ? renderMatchupDetail(m) : ''}
       </div>
     `;
@@ -4011,6 +4024,8 @@ function setMyTeamId(id) {
   state.myTeamId = id;
   localStorage.setItem('myTeamId', String(id));
   renderScores(); // re-pin "Your Matchup"
+  if (typeof rxRefreshAll === 'function') rxRefreshAll(); // "mine" highlights follow the team
+  if (typeof actDataChanged === 'function') actDataChanged();
 }
 
 const COMMISH_TEAM_NAME = 'toe guano';
@@ -4217,6 +4232,7 @@ function renderHistoryCard(trade) {
         <b>${escapeHtml(trade.teamReceiving)}</b> sent: ${escapeHtml(summarize(requested))}
       </div>
       ${renderTradeRegret(trade)}
+      ${trade.status === 'Accepted' ? rxBar('trade', trade.tradeId) : ''}
     </div>
   `;
 }
@@ -4712,13 +4728,14 @@ function initDensity() {
 
 const VIEW_TITLES = {
   standings: 'STANDINGS',
+  activity: 'ACTIVITY',
   rosters: 'ROSTERS',
   myteam: 'RESEARCH',
   trades: 'TRADE DESK',
   vault: 'VAULT',
 };
 
-const VIEW_ORDER = ['standings', 'rosters', 'myteam', 'trades', 'vault'];
+const VIEW_ORDER = ['standings', 'activity', 'rosters', 'myteam', 'trades', 'vault'];
 
 function flashAmbientBar() {
   const bar = $('#ambient-bar');
@@ -4791,6 +4808,7 @@ function setView(name) {
     if (state.rosterMode === 'waivers') showWaivers();
   }
   if (name === 'vault') initVaultView();
+  if (name === 'activity' && typeof actOpen === 'function') actOpen();
 }
 
 function wireNavigation() {
@@ -5451,6 +5469,7 @@ function renderFrontPage(rows) {
       <button class="fp-toggle" type="button" data-fp="more"></button>
       <button class="fp-toggle" type="button" data-fp="archive">View Archive 📚</button>
     </div>
+    ${rxBar('news', parseInt(week, 10) || week, 'rx-fp')}
   `;
 
   const apply = () => {
@@ -5485,6 +5504,7 @@ function openNewsletterArchive(rows) {
     <div class="archive-article">
       <h3>Week ${escapeHtml(r.weekNumber || '?')}: ${escapeHtml(r.headline || 'Untitled')}</h3>
       <div style="white-space: pre-wrap; font-size:13px; color:var(--text-dim);">${escapeHtml(r.storyText || '')}</div>
+      ${rxBar('news', parseInt(r.weekNumber, 10) || r.weekNumber)}
     </div>
   `).join('');
   modal.hidden = false;
@@ -5926,6 +5946,7 @@ function openPlayerProfile(playerId) {
     `;
   }
 
+  body.insertAdjacentHTML('afterbegin', rxBar('player', playerId, 'rx-profile'));
   // Append Historical Career Arc (scans state.history across all years)
   body.insertAdjacentHTML('beforeend', historicalCareerArcHTML(playerId));
   // Dynasty Outlook: trade values, contract, injuries (trade-calc.js)
@@ -6831,7 +6852,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.28.0';
+const BUILD_ID = '1.29.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

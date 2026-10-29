@@ -1019,6 +1019,12 @@ function tcRenderTradeFeed() {
     .map((t) => ({ t, st: tcStoredTrade(t) }))
     .sort((x, y) => (y.st.date?.getTime() || 0) - (x.st.date?.getTime() || 0));
   if (!accepted.length) { el.innerHTML = empty('No accepted trades yet. When a deal goes through, it shows up here with its grade.'); return; }
+  el.innerHTML = accepted.map(({ t, st }) => tcTradeFeedItemHTML(t, st) + rxBar('trade', t.tradeId)).join('');
+}
+
+// One accepted trade: who got what and its grade. Shared with the Activity
+// tab (social.js).
+function tcTradeFeedItemHTML(t, st = tcStoredTrade(t)) {
   const list = (side) => {
     const items = (side.players || []).map((p) => `${escapeHtml(p.name)} <span class="tv-dim">${escapeHtml(p.pos || '')}</span>`)
       .concat((side.picks || []).map((p) => {
@@ -1028,7 +1034,7 @@ function tcRenderTradeFeed() {
       }));
     return items.map((x) => `<div>${x}</div>`).join('') || '<div class="tv-dim">Nothing</div>';
   };
-  el.innerHTML = accepted.map(({ t, st }) => `
+  return `
     <div class="tv-feed-item">
       <div class="tv-feed-head">
         <b>${escapeHtml(st.proposer.name)} ↔ ${escapeHtml(st.receiver.name)}</b>
@@ -1039,7 +1045,7 @@ function tcRenderTradeFeed() {
         <div><span class="lbl">${escapeHtml(st.receiver.name)} got</span>${list(st.proposer.sends)}</div>
       </div>
       ${tcTradeAnalysisHTML(t, null, { atTradeTime: true })}
-    </div>`).join('');
+    </div>`;
 }
 
 // Player rows inside any expanded analysis open the profile.

@@ -1,0 +1,65 @@
+// Firestore rules for league chat + reactions (social.js).
+//
+// One-time setup (free Spark plan is plenty for one league):
+//   1. console.firebase.google.com → Add project (Analytics off is fine).
+//   2. Build → Authentication → Get started → Sign-in method → Anonymous → Enable.
+//   3. Build → Firestore Database → Create database (production mode, any US region).
+//   4. Firestore → Rules tab → paste this whole file → Publish.
+//   5. Project settings (gear) → Your apps → Web (</>) → register "Woodson Clan".
+//      Copy apiKey, authDomain, projectId and appId into CONFIG.FIREBASE in app.js.
+//   6. Authentication → Settings → Authorized domains → add itsshorizon.github.io.
+//
+// The web apiKey is not a secret; these rules are what protect the data.
+// Identity is the app's team picker, the same trust model as the trade sheet.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function authed() { return request.auth != null; }
+    function stamped() { return request.resource.data.u == request.time; }
+    // Soft delete: blank the content and flag it. Docs are never removed, so
+    // every device's incremental sync sees the change.
+    function softDelete(blanked) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['d', 'u'].concat(blanked))
+        && request.resource.data.d == true && stamped();
+    }
+
+    // One doc per reaction target: { k, r: { "<teamId>~<reactionId>": ms }, u }
+    match /seasons/{season}/reactions/{target} {
+      allow read: if authed();
+      allow create, update: if authed() && stamped()
+        && request.resource.data.keys().hasOnly(['k', 'r', 'u'])
+        && request.resource.data.k is string && request.resource.data.k.size() <= 120
+        && request.resource.data.r is map && request.resource.data.r.size() <= 300;
+    }
+
+    match /seasons/{season}/chat/{id} {
+      allow read: if authed();
+      allow create: if authed() && stamped()
+        && request.resource.data.keys().hasOnly(['t', 'x', 'uid', 'at', 'u', 'd'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.t is int
+        && request.resource.data.x is string
+        && request.resource.data.x.size() > 0 && request.resource.data.x.size() <= 500
+        && request.resource.data.at == request.time
+        && request.resource.data.d == false;
+      allow update: if authed() && softDelete(['x']) && request.resource.data.x == '';
+    }
+
+    // League-made reactions, kept across seasons.
+    match /customReactions/{id} {
+      allow read: if authed();
+      allow create: if authed() && stamped()
+        && request.resource.data.keys().hasOnly(['kind', 'text', 'color', 'img', 'label', 'by', 'uid', 'u', 'd'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['text', 'image']
+        && request.resource.data.text is string && request.resource.data.text.size() <= 10
+        && request.resource.data.color is string && request.resource.data.color.matches('#[0-9a-fA-F]{6}')
+        && request.resource.data.img is string && request.resource.data.img.size() <= 40000
+        && (request.resource.data.img == '' || request.resource.data.img.matches('data:image/(png|jpeg|webp|gif);base64,.*'))
+        && request.resource.data.label is string && request.resource.data.label.size() <= 24
+        && request.resource.data.by is int
+        && request.resource.data.d == false;
+      allow update: if authed() && softDelete(['img']) && request.resource.data.img == '';
+    }
+  }
+}
