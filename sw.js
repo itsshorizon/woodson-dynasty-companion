@@ -1,6 +1,6 @@
 /* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
  * and every ?v= in index.html to the same version. */
-const CACHE_NAME = 'wcc-v1.28.0';
+const CACHE_NAME = 'wcc-v1.29.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const CORE_ASSETS = [
   './trade-calc.js',
   './research-engine.js',
   './research.js',
+  './activity-engine.js',
+  './social.js',
   './manifest.json',
   './history.json'
 ];
@@ -38,6 +40,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+  // Firebase (chat + reactions) streams live updates; leave it to the network.
+  if (url.hostname.endsWith('googleapis.com') || url.hostname === 'www.gstatic.com') return;
   // Trade values refresh daily, so treat them like API data (network-first).
   const isApi = url.hostname.includes('espn.com') || url.hostname.includes('steinhq.com')
     || (url.origin === self.location.origin && url.pathname.includes('/data/'));

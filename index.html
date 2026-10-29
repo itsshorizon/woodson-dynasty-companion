@@ -16,8 +16,8 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.28.0" />
-  <link rel="stylesheet" href="compact.css?v=1.28.0" />
+  <link rel="stylesheet" href="styles.css?v=1.29.0" />
+  <link rel="stylesheet" href="compact.css?v=1.29.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -74,6 +74,19 @@
 
       <!-- Press Room secret unlock (commish only) -->
       <button class="press-room-trigger" id="press-room-trigger" aria-label="Commissioner Press Room">📰</button>
+    </section>
+
+    <!-- Activity View: league feed, chat and reactions (social.js) -->
+    <section class="view" id="view-activity">
+      <div class="act-compose card" id="act-compose" hidden>
+        <button type="button" class="act-compose-who" id="act-compose-who"></button>
+        <div class="act-compose-row">
+          <textarea id="act-chat-input" rows="1" maxlength="500" placeholder="Talk your trash..." aria-label="Message the league"></textarea>
+          <button type="button" class="btn-primary" id="act-chat-send">Send</button>
+        </div>
+      </div>
+      <div class="act-filters" id="act-filters" role="tablist" aria-label="Filter activity"></div>
+      <div class="act-feed" id="act-feed"></div>
     </section>
 
     <!-- Rosters View -->
@@ -419,6 +432,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2 4 4 8-8 4 4"/></svg>
       <span>Standings</span>
     </button>
+    <button class="nav-btn" data-view="activity">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>
+      <span>Activity</span>
+    </button>
     <button class="nav-btn" data-view="rosters">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
       <span>Rosters</span>
@@ -557,13 +574,26 @@
     </div>
   </div>
 
+  <!-- Reaction sheet: picker, who reacted, make a league reaction (social.js) -->
+  <div class="modal-overlay rx-overlay" id="rx-sheet" hidden>
+    <div class="modal rx-modal">
+      <div class="modal-header">
+        <button class="modal-close" id="rx-close" aria-label="Close">×</button>
+        <h2 id="rx-title">React</h2>
+      </div>
+      <div class="modal-body" id="rx-body"></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.28.0"></script>
-  <script src="app.js?v=1.28.0"></script>
-  <script src="trade-engine.js?v=1.28.0"></script>
-  <script src="trade-calc.js?v=1.28.0"></script>
-  <script src="research-engine.js?v=1.28.0"></script>
-  <script src="research.js?v=1.28.0"></script>
+  <script src="select.js?v=1.29.0"></script>
+  <script src="app.js?v=1.29.0"></script>
+  <script src="trade-engine.js?v=1.29.0"></script>
+  <script src="trade-calc.js?v=1.29.0"></script>
+  <script src="research-engine.js?v=1.29.0"></script>
+  <script src="research.js?v=1.29.0"></script>
+  <script src="activity-engine.js?v=1.29.0"></script>
+  <script src="social.js?v=1.29.0"></script>
 </body>
 </html>

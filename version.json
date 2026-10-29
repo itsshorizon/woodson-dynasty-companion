@@ -1,9 +1,10 @@
 {
-  "version": "1.28.0",
-  "title": "🧠 Moves, News and Ask Claude",
+  "version": "1.29.0",
+  "title": "💬 Activity, Chat and Reactions",
   "notes": [
-    "🧠 Research → Moves tells you what to do: sell aging value when your window is closing, buy at a thin position when you're contending, turn surplus into a starter, or grab a hot waiver add. Each one comes with real, fair offers from the trade calculator. Tap Load into proposal to open it on the Trade Desk.",
-    "📰 Research → News shows recent articles on your players, refreshed every morning and Sunday at noon. Player cards show the latest news too.",
-    "🤖 Research → Ask copies your team's full data and opens Claude on your own Claude account. Paste and ask anything. Free accounts work, and it costs the league nothing."
+    "💬 New Activity tab: every trade (with its grade), add, drop, weekly final and newsletter in one feed, newest first. Filter by Chat, Trades, Moves, Scores or News.",
+    "🗣️ League chat lives at the top of Activity. Pick your team, talk your trash, delete your own messages.",
+    "🔥 React to anything: trades, moves, finals, matchups, the newsletter, player cards and chat. Tap a reaction to add yours, hold it to see who reacted.",
+    "🤡 Make league reactions: a word like FLEECED or a picture, shared with everyone. Inside jokes welcome. Delete your own anytime; the commish can delete any."
   ]
 }
