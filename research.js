@@ -254,10 +254,11 @@ function rsSeasonCard(team, m) {
       ${rsStat('Points for', team.pf.toFixed(0), `${ResearchEngine.ordinal(rank('pf'))} of ${n}`)}
       ${rsStat('Points against', team.pa.toFixed(0), `${ResearchEngine.ordinal(rank('pa'))} most`)}
       ${odds ? rsStat('Playoff odds', rsPct(odds.playoffPct), `proj. ${odds.avgWins.toFixed(1)} wins`, oddsTone) : ''}
+      ${odds ? rsStat('Title odds', rsPct(odds.titlePct), `${rsPct(odds.finalPct)} to reach the final`, odds.titlePct >= 0.15 ? 'good' : '') : ''}
       ${luck ? rsStat('Luck', `${rsSigned(luck.luck)} W`, `all-play ${luck.expWins.toFixed(1)} exp. wins`, luckTone) : ''}
       ${last3 != null ? rsStat('Last 3 avg', last3.toFixed(1), seasonAvg != null ? `season ${seasonAvg.toFixed(1)}` : '', last3 >= (seasonAvg || 0) + 8 ? 'good' : last3 <= (seasonAvg || 0) - 8 ? 'bad' : '') : ''}
     </div>
-    ${odds ? `<p class="tv-note">Odds from ${RS_SIMS.toLocaleString()} simulated finishes of the regular season. Each team's weekly score blends its results so far with its healthy lineup's rest-of-season projection.</p>` : ''}`;
+    ${odds ? `<p class="tv-note">Odds from ${RS_SIMS.toLocaleString()} simulated finishes of the regular season and playoff bracket. Each team's weekly score blends its results so far with its healthy lineup's rest-of-season projection.</p>` : ''}`;
   return rsCard('📈 Season So Far', body);
 }
 
@@ -438,8 +439,9 @@ function rsMoveInput(team, m) {
   };
 }
 
-// Best offers across the league for one player I'm selling.
-function rsSellDeals(team, playerId, myWindow) {
+// Best offers across the league for one player I'm selling. prefer: team ids
+// (e.g. contenders thin at the position) whose offers come first.
+function rsSellDeals(team, playerId, myWindow, prefer = []) {
   const give = [tcPlayerAsset(findPlayerAnywhere(playerId))];
   let offers = [];
   state.teams.filter((t) => t.id !== team.id).forEach((partner) => {
@@ -448,7 +450,8 @@ function rsSellDeals(team, playerId, myWindow) {
     TradeEngine.shopOffers({ give, theirs: tcTeamAssets(partner), myWindow, theirWindow, limit: 1, maxEdge: RS_MOVE_EDGE }, TC.ctx)
       .forEach((o) => offers.push({ ...o, partner }));
   });
-  offers.sort((x, y) => (y.theyWant - x.theyWant) || (y.iWant - x.iWant) || Math.abs(x.edge) - Math.abs(y.edge));
+  const preferred = (o) => (prefer.includes(o.partner.id) ? 1 : 0);
+  offers.sort((x, y) => (preferred(y) - preferred(x)) || (y.theyWant - x.theyWant) || (y.iWant - x.iWant) || Math.abs(x.edge) - Math.abs(y.edge));
   return offers.slice(0, 2);
 }
 
@@ -524,10 +527,16 @@ function rsRenderMoves() {
       mv.dealStart = deals.length;
       deals.push(...(mv.deals || []));
     });
+    const plan = rsBuildPaths(team, m, myWindow, deals);
     RS.deals = deals;
+    // The Plan's "Hold and tweak" already shows its waiver add.
+    const planAdd = rsPathsFor(team, m).paths.flatMap((p) => p.steps).find((st) => st.kind === 'waiver')?.playerId;
+    const more = list.filter((mv) => !(mv.kind === 'waiver' && mv.add === planAdd));
     el.innerHTML = `
+      ${plan}
+      <h3 class="rs-more-head">More moves</h3>
       <p class="tv-note rs-moves-intro">Based on your approach (<b>${escapeHtml(rsApproach(m).label)}</b>), playoff odds, position rooms and injuries. Offers come from the trade calculator and are never fleeces.</p>
-      ${list.map((mv) => rsMoveHTML(mv, team, myWindow, mv.dealStart)).join('')}`;
+      ${more.map((mv) => rsMoveHTML(mv, team, myWindow, mv.dealStart)).join('')}`;
     el.onclick = rsMovesClick;
   }, 30));
 }
@@ -639,6 +648,14 @@ function rsEnhanceProfile(playerId) {
     const html = rsUnderHoodHTML(playerId);
     if (anchor) anchor.insertAdjacentHTML('afterend', html);
     else body.insertAdjacentHTML('afterbegin', html);
+    const uth = body.querySelector('.rs-uth');
+    if (uth) uth.onclick = (e) => {
+      const build = e.target.closest('[data-rs-build]');
+      if (build) { rsBuildTrade(playerId, uth.querySelector('[data-rs-build-out]')); return; }
+      if (e.target.closest('[data-finder-load]')) { $('#player-profile-modal').hidden = true; rsMovesClick(e); return; }
+      const chip = e.target.closest('.tv-asset-chip[data-player-id]');
+      if (chip) openPlayerProfile(Number(chip.dataset.playerId));
+    };
   });
   rsLoadNews().then((news) => {
     const body = live();
@@ -798,13 +815,29 @@ const RS_STARTERS = [
   'Rank my waiver options and tell me who I should drop for them.',
 ];
 
-function rsPlayerPack(p) {
+// full: my roster gets every under-the-hood number; other players a short version.
+function rsPlayerPack(p, full = true) {
   const v = tcPlayer(p.id);
   const log = weeklyActualLog(p).filter((w) => w.points > 0);
   return {
     name: p.name, pos: p.pos, age: v?.a ?? null, dynastyValue: v?.dv ?? null, career: v?.w || null,
     ppg: r1(ppgFor(p)), last3: r1(rsAvg(log.slice(-3).map((w) => w.points))),
     status: p.injuryStatus && p.injuryStatus !== 'ACTIVE' ? p.injuryStatus : 'healthy', slot: p.slot,
+    underTheHood: rsAdvPack(p.id, full),
+  };
+}
+
+// Compact advanced numbers for the Ask Claude pack.
+function rsAdvPack(id, full = true) {
+  const a = rsAdv(id);
+  if (!a) return null;
+  if (!full) return { expectedPtsPerGame: a.s.xfp, actualPtsPerGame: a.s.fp, restOfSeasonPpg: a.ros.ppg, read: a.v?.tag };
+  return {
+    expectedPtsPerGame: a.s.xfp, actualPtsPerGame: a.s.fp, tds: a.s.td, expectedTds: a.s.xtd,
+    snapPct: a.s.snap, targetShare: a.s.tgtSh, rushShare: a.s.rushSh, redZoneShare: a.s.rzSh,
+    last3Trend: a.tr ? { expectedPts: a.tr.xfp, targetShare: a.tr.tgtSh, snapPct: a.tr.snap } : null,
+    restOfSeason: { ppg: a.ros.ppg, floor: a.ros.floor, ceiling: a.ros.ceil, schedule: a.ros.sosLabel, playoffMatchups: a.ros.playoffs },
+    read: a.v?.tag, workload: a.wl?.level,
   };
 }
 
@@ -831,23 +864,33 @@ function rsTeamPack(team) {
       valueNextThreeYears: mine?.projection || null,
       injuries: { starterGamesLost: m.injuries[team.id].games, pointsLost: Math.round(m.injuries[team.id].points), rank: `${m.injuries[team.id].rank} of ${n}` },
       positionRooms: roomsOf(team.id),
-      roster: team.roster.filter((p) => ResearchEngine.POS.includes(p.pos)).map(rsPlayerPack),
+      roster: team.roster.filter((p) => ResearchEngine.POS.includes(p.pos)).map((p) => rsPlayerPack(p)),
       draftPicks: ownedPicksFor(team.id).map((p) => `${p.year} round ${p.round}${p.origOwner && !sameTeamName(p.origOwner, team.name) ? ` (via ${p.origOwner})` : ''}`),
       upcoming: m.remaining.filter((g) => g.home === team.id || g.away === team.id).slice(0, RS_UPCOMING).map((g) => {
         const opp = teamById(g.home === team.id ? g.away : g.home);
         return { week: g.week, opponent: opp?.name, opponentRecord: opp ? recordOf(opp) : null };
       }),
       appSuggestions: moves,
+      titleOdds: m.odds[team.id] ? `${Math.round(m.odds[team.id].titlePct * 100)}%` : null,
+      identity: m.identity[team.id] ? { dataSays: m.identity[team.id].label, winNowScore: m.identity[team.id].now, futureScore: m.identity[team.id].future } : null,
+      myChosenApproach: rsApproach(m).label,
+      strategyPaths: TC.ctx ? rsPathsFor(team, m).paths.map((p) => ({ path: p.title, recommended: !!p.recommended, story: p.story })) : [],
+      market: TC.ctx ? {
+        buyLowTargets: rsMarketList(m, 'buy', (id) => !team.roster.some((p) => p.id === id), 6),
+        sellHighOnMyRoster: rsMarketList(m, 'sell', (id) => team.roster.some((p) => p.id === id), 6),
+      } : null,
     },
     otherTeams: state.teams.filter((t) => t.id !== team.id).map((t) => ({
-      name: t.name, record: recordOf(t), window: TC.ctx ? tcWindowFor(t.id).label : null,
+      name: t.name, record: recordOf(t), approach: m.teamCtx?.[t.id]?.approach || null,
+      playoffOdds: m.odds[t.id] ? `${Math.round(m.odds[t.id].playoffPct * 100)}%` : null,
+      needs: m.teamCtx?.[t.id]?.weakPos || [],
       rosterValueRank: val(t.id) ? `${val(t.id).rank} of ${n}` : null,
       positionRooms: Object.fromEntries(ResearchEngine.POS.map((pos) => [pos, m.rooms[t.id][pos].grade])),
       topPlayers: t.roster.filter((p) => ResearchEngine.POS.includes(p.pos))
-        .sort((a, b) => (tcPlayer(b.id)?.dv || 0) - (tcPlayer(a.id)?.dv || 0)).slice(0, 8).map(rsPlayerPack),
+        .sort((a, b) => (tcPlayer(b.id)?.dv || 0) - (tcPlayer(a.id)?.dv || 0)).slice(0, 8).map((p) => rsPlayerPack(p, false)),
     })),
     topWaivers: [...state.freeAgents.values()].filter((p) => !rostered.has(p.id))
-      .sort((a, b) => (tcPlayer(b.id)?.dv || 0) - (tcPlayer(a.id)?.dv || 0)).slice(0, 12).map(rsPlayerPack),
+      .sort((a, b) => (tcPlayer(b.id)?.dv || 0) - (tcPlayer(a.id)?.dv || 0)).slice(0, 12).map((p) => rsPlayerPack(p, false)),
   };
 }
 
@@ -1141,7 +1184,134 @@ function rsContextHTML(playerId) {
       .filter(([id, c]) => Number(id) !== owner?.id && c.weakPos.includes(p.pos))
       .sort((a, b) => (b[1].playoffPct || 0) - (a[1].playoffPct || 0))
       .slice(0, 4);
+    if (owner && state.myTeamId) {
+      lines.push(`<button type="button" class="btn-ghost btn-sm rs-build-btn" data-rs-build="${playerId}">${owner.id === state.myTeamId ? '🛒 Shop this player' : '🤝 Build a trade for this player'}</button><div class="rs-fits" data-rs-build-out></div>`);
+    }
     if (need.length) lines.push(`<p class="rs-uth-line">Teams thin at ${p.pos}: ${need.map(([id, c]) => `<b>${escapeHtml(c.name)}</b> (${escapeHtml(c.record)}, ${escapeHtml(c.approach)})`).join(', ')}</p>`);
   }
   return `<h5>League context</h5>${lines.join('')}`;
+}
+
+/* ----------------------- Plan: strategy paths ----------------------- *
+ * ResearchEngine.paths() writes 2-3 named plans from the numbers; each step
+ * gets real offers from the trade engine.
+ */
+
+function rsMarketList(m, kind, filter, limit) {
+  return Object.entries(m.market)
+    .filter(([id, e]) => e[kind] && filter(Number(id)))
+    .sort((a, b) => b[1][kind].score - a[1][kind].score)
+    .slice(0, limit)
+    .map(([id, e]) => {
+      const p = findPlayerAnywhere(Number(id));
+      const owner = ownerTeamOf(Number(id));
+      return { name: p?.name, pos: p?.pos, owner: owner?.name?.trim(), score: e[kind].score, why: e[kind].reasons };
+    });
+}
+
+function rsPathsFor(team, m) {
+  const R = ResearchEngine;
+  const n = state.teams.length;
+  const mine = new Set(team.roster.map((p) => p.id));
+  const ctx = m.teamCtx;
+  const myRooms = m.rooms[team.id];
+  const weakPos = R.POS.filter((pos) => myRooms[pos].rank > n / 2).sort((a, b) => myRooms[b].rank - myRooms[a].rank);
+  const entries = (kind) => Object.entries(m.market).filter(([, e]) => e[kind]).sort((a, b) => b[1][kind].score - a[1][kind].score);
+  const buyTargets = entries('buy').filter(([id]) => !mine.has(Number(id))).map(([id, e]) => {
+    const p = findPlayerAnywhere(Number(id));
+    const o = ownerTeamOf(Number(id));
+    return { id: Number(id), name: p.name, pos: p.pos, score: e.buy.score, reason: `${e.buy.reasons[0]}.`, owner: { name: ctx[o.id].name, record: ctx[o.id].record, approach: ctx[o.id].approach } };
+  });
+  const sellMine = entries('sell').filter(([id]) => mine.has(Number(id))).map(([id, e]) => {
+    const p = findPlayerAnywhere(Number(id));
+    return { id: Number(id), name: p.name, pos: p.pos, value: tcPlayer(id)?.dv || 0, score: e.sell.score, reason: `${e.sell.reasons[0]}.`,
+      buyers: e.sell.buyers.map((b) => ({ name: ctx[b].name, record: ctx[b].record, approach: ctx[b].approach })) };
+  });
+  const rostered = new Set(state.teams.flatMap((t) => t.roster.map((p) => p.id)));
+  const waiverAdds = [...state.freeAgents.values()]
+    .filter((p) => !rostered.has(p.id) && rsAvailable(p) && weakPos.includes(p.pos))
+    .map((p) => ({ id: p.id, name: p.name, pos: p.pos, last3: waiverStats(p).last3 }))
+    .filter((p) => p.last3 != null && p.last3 >= 8)
+    .sort((a, b) => b.last3 - a.last3);
+  const odds = m.odds[team.id] || {};
+  return R.paths({
+    me: {
+      record: recordOf(team), standing: state.teams.findIndex((t) => t.id === team.id) + 1, teams: n,
+      playoffPct: odds.playoffPct, titlePct: odds.titlePct, identity: m.identity[team.id]?.label,
+      approach: rsApproach(m).label, injuryRank: m.injuries[team.id]?.rank, injuryGames: m.injuries[team.id]?.games,
+    },
+    weakPos, buyTargets, sellMine, waiverAdds,
+  });
+}
+
+// Offers for buying one player. Starters stay home; only All-in spends next year's 1st.
+function rsTargetDeals(team, m, playerId, myWindow) {
+  const owner = ownerTeamOf(playerId);
+  if (!owner || owner.id === team.id) return [];
+  const starters = new Set(ResearchEngine.POS.flatMap((p) => m.rooms[team.id][p].starters));
+  const allIn = rsApproach(m).label === 'All-in';
+  const mine = tcTeamAssets(team).filter((a) => (a.type === 'pick'
+    ? allIn || !(a.year === CONFIG.DRAFT_YEARS[0] && a.round === 1)
+    : !starters.has(a.id)));
+  const theirs = tcTeamAssets(owner);
+  const target = theirs.find((a) => a.type === 'player' && a.id === playerId);
+  if (!target) return [];
+  return TradeEngine.findTrades({
+    mine, theirs, target, myWindow, theirWindow: ResearchEngine.APPROACH_WINDOW[m.teamCtx[owner.id].approach],
+    maxEdge: RS_MOVE_EDGE, requireMutual: false, limit: 2,
+  }, TC.ctx).map((r) => ({ ...r, partner: owner }));
+}
+
+function rsBuildPaths(team, m, myWindow, deals) {
+  const { intro, paths } = rsPathsFor(team, m);
+  const cards = paths.map((p) => {
+    let found = [];
+    let extra = '';
+    p.steps.forEach((st) => {
+      if (st.kind === 'buy') {
+        found = (st.playerId ? rsTargetDeals(team, m, st.playerId, myWindow) : []);
+        if (!found.length) found = rsBuyDeals(team, m, st.pos, null, myWindow);
+      } else if (st.kind === 'sell') {
+        found = rsSellDeals(team, st.playerId, myWindow, m.market[st.playerId]?.sell?.buyers || []);
+      } else if (st.kind === 'waiver') {
+        const pl = findPlayerAnywhere(st.playerId);
+        if (pl) extra = `<div class="rs-move-player">${renderPlayerRow(pl, null, 'waiver')}</div><a class="rs-link" href="${ESPN_ADD_URL}" target="_blank" rel="noopener">Claim on ESPN ↗</a>`;
+      }
+    });
+    const start = deals.length;
+    deals.push(...found);
+    const offers = found.length
+      ? `<div class="rs-move-deals">${found.map((d, i) => tcFinderItemHTML(d, start + i, team, myWindow)).join('')}</div>`
+      : p.steps.some((st) => st.kind !== 'waiver') ? '<p class="tv-note">No fair offer right now. Try the Trade Finder with looser filters.</p>' : '';
+    return `
+      <div class="rs-move rs-path rs-path-${p.key}${p.recommended ? ' rec' : ''}">
+        <span class="rs-move-kind">${p.recommended ? '★ Recommended · ' : ''}${escapeHtml(p.title)}</span>
+        <p class="rs-path-story">${escapeHtml(p.story)}</p>
+        ${extra}${offers}
+      </div>`;
+  }).join('');
+  return `
+    <div class="rs-plan-intro">
+      <h3>🗺️ Your Plan</h3>
+      <p>${escapeHtml(intro)} Your approach: <b>${escapeHtml(rsApproach(m).label)}</b>${rsApproach(m).overridden ? ` (the data says ${escapeHtml(rsApproach(m).auto)})` : ''}.</p>
+    </div>
+    ${cards}`;
+}
+
+// "Build a trade" on the player card: buy them, or shop them if they're yours.
+function rsBuildTrade(playerId, host) {
+  const team = myTeam();
+  if (!team || !host) return;
+  host.innerHTML = loading('Asking around the league...');
+  setTimeout(() => {
+    const m = rsModel();
+    const myWindow = rsApproach(m).window;
+    const owner = ownerTeamOf(playerId);
+    const found = owner?.id === team.id ? rsSellDeals(team, playerId, myWindow).concat() : rsTargetDeals(team, m, playerId, myWindow);
+    const start = (RS.deals || []).length;
+    RS.deals = (RS.deals || []).concat(found);
+    host.innerHTML = found.length
+      ? found.map((r, i) => tcFinderItemHTML(r, start + i, team, myWindow)).join('')
+      : '<p class="tv-note">No fair deal right now.</p>';
+  }, 30);
 }

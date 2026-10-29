@@ -158,3 +158,46 @@ test('market: unlucky player on a losing team is a buy-low; lucky vet with buyer
   assert.deepEqual(m[11].sell.buyers, [2]);
   assert.equal(m[12], undefined, 'nothing to say about a steady player');
 });
+
+test('simulate plays out the bracket: title odds sum to 1, top seeds favored', () => {
+  const teams = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, wins: 7 - Math.floor(i / 2), losses: Math.floor(i / 2), ties: 0, pf: 900 - i * 10 }));
+  const mean = Object.fromEntries(teams.map((t) => [t.id, 130 - t.id * 2]));
+  const o = R.simulate({ teams, remaining: [], mean, playoffSpots: 6, sims: 2000, seed: 3 });
+  const title = Object.values(o).reduce((s, x) => s + x.titlePct, 0);
+  const finals = Object.values(o).reduce((s, x) => s + x.finalPct, 0);
+  assert.ok(Math.abs(title - 1) < 1e-9);
+  assert.ok(Math.abs(finals - 2) < 1e-9);
+  assert.equal(o[7].titlePct, 0, 'missed the playoffs');
+  assert.ok(o[1].titlePct > o[6].titlePct);
+});
+
+const pathInput = (approach, odds, extra = {}) => ({
+  me: { record: '2-5', standing: 11, teams: 12, playoffPct: odds, titlePct: 0.02, identity: 'On the fence', approach, injuryRank: 2, injuryGames: 6 },
+  weakPos: ['RB'],
+  buyTargets: [{ id: 1, name: 'X', pos: 'RB', score: 5, reason: 'Scoring 4 below usage.', owner: { name: 'Bad Team', record: '1-6', approach: 'Rebuild' } }],
+  sellMine: [{ id: 2, name: 'Y', pos: 'WR', value: 4200, score: 4.5, reason: 'Age 30: value only drops from here.', buyers: [{ name: 'Good Team', record: '5-2' }] }],
+  waiverAdds: [{ id: 3, name: 'Z', pos: 'RB', last3: 12.3 }],
+  ...extra,
+});
+
+test('paths: the 2-5 scenario offers push and sell with a story', () => {
+  const p = R.paths(pathInput('On the fence', 0.18));
+  assert.match(p.intro, /2-5 \(11th of 12\).*18% playoff odds.*2nd most injury-hit/);
+  const push = p.paths.find((x) => x.key === 'push');
+  const sell = p.paths.find((x) => x.key === 'sell');
+  assert.match(push.story, /Buy X from Bad Team \(1-6, Rebuild\)/);
+  assert.match(sell.story, /Y is worth 4,200.*Good Team \(5-2\)/);
+  // A contender's player is never the buy target
+  const noContender = R.paths(pathInput('Contend', 0.6, { buyTargets: [{ id: 9, name: 'Q', pos: 'RB', score: 5, reason: 'r.', owner: { name: 'Champs', record: '7-0', approach: 'All-in' } }] }));
+  assert.doesNotMatch(noContender.paths.find((x) => x.key === 'push').story, /Champs/);
+  assert.equal(p.paths[0].key, 'sell', 'low odds on the fence: selling is recommended');
+  assert.ok(p.paths[0].recommended);
+});
+
+test('paths follow the chosen approach', () => {
+  assert.equal(R.paths(pathInput('All-in', 0.18)).paths[0].key, 'push');
+  const rebuild = R.paths(pathInput('Rebuild', 0.5));
+  assert.equal(rebuild.paths[0].key, 'sell');
+  assert.ok(!rebuild.paths.some((x) => x.key === 'push'), 'rebuilders do not buy win-now help');
+  assert.ok(R.paths(pathInput('Contend', 0.7, { sellMine: [] })).paths.every((x) => x.key !== 'sell'));
+});

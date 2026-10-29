@@ -5561,3 +5561,16 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .rs-fits { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .rs-ctx-line { margin-bottom: 4px; }
 .rs-uth .rs-verdict-box + .rs-verdict-box { margin-top: 8px; }
+
+/* ---------- Research: Plan paths (Beta 1.32) ---------- */
+.rs-plan-intro { margin: 0 4px 12px; }
+.rs-plan-intro h3 { margin: 0 0 6px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
+.rs-plan-intro p { margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.rs-path-story { font-size: 14px; line-height: 1.5; margin: 4px 0 10px; color: var(--text); }
+.rs-path-push { border-left-color: #ffa500; }
+.rs-path-sell { border-left-color: #4cc9f0; }
+.rs-path-hold { border-left-color: var(--text-mute); }
+.rs-path.rec { box-shadow: 0 0 0 1px var(--tab-accent), var(--shadow); }
+.rs-path.rec .rs-move-kind { color: var(--tab-accent); }
+.rs-more-head { margin: 22px 4px 4px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
+.rs-build-btn { margin: 8px 0 4px; }

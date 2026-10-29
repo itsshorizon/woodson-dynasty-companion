@@ -160,7 +160,10 @@
    *   teams: [{ id, wins, losses, ties, pf }], remaining: [{ week, home, away }],
    *   mean: { [teamId]: expected weekly points }, playoffSpots, sims (2000), sd, seed
    * }
-   * Seeds by wins, then points for. Returns { [teamId]: { playoffPct, avgWins, avgSeed, firstPct } }.
+   * Seeds by wins, then points for, then plays out the bracket (top seeds get
+   * byes when the field isn't a power of two; best remaining seed plays the
+   * worst each round).
+   * Returns { [teamId]: { playoffPct, avgWins, avgSeed, firstPct, finalPct, titlePct } }.
    */
   function simulate(opts) {
     const sims = opts.sims || 2000;
@@ -168,7 +171,8 @@
     const rng = mulberry32(opts.seed || 1);
     const spots = opts.playoffSpots || 6;
     const ids = opts.teams.map((t) => t.id);
-    const tally = Object.fromEntries(ids.map((id) => [id, { playoffs: 0, wins: 0, seed: 0, first: 0 }]));
+    const tally = Object.fromEntries(ids.map((id) => [id, { playoffs: 0, wins: 0, seed: 0, first: 0, final: 0, title: 0 }]));
+    const game = (a, b) => ((opts.mean[a] || 0) + sd * normal(rng) > (opts.mean[b] || 0) + sd * normal(rng) ? a : b);
     for (let s = 0; s < sims; s++) {
       const w = {}, pf = {};
       opts.teams.forEach((t) => { w[t.id] = t.wins + 0.5 * (t.ties || 0); pf[t.id] = t.pf; });
@@ -185,11 +189,28 @@
         if (i < spots) tally[id].playoffs += 1;
         if (i === 0) tally[id].first += 1;
       });
+      // Playoffs
+      let alive = order.slice(0, spots);
+      const size = 2 ** Math.ceil(Math.log2(Math.max(2, alive.length)));
+      let byes = alive.slice(0, size - alive.length);
+      let field = alive.slice(size - alive.length);
+      while (byes.length + field.length > 1) {
+        const winners = [];
+        for (let i = 0; i < field.length / 2; i++) winners.push(game(field[i], field[field.length - 1 - i]));
+        alive = byes.concat(winners).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+        byes = [];
+        field = alive;
+        if (field.length === 2) {
+          tally[field[0]].final += 1; tally[field[1]].final += 1;
+          tally[game(field[0], field[1])].title += 1;
+          break;
+        }
+      }
     }
     const out = {};
     ids.forEach((id) => {
       const t = tally[id];
-      out[id] = { playoffPct: t.playoffs / sims, avgWins: t.wins / sims, avgSeed: t.seed / sims, firstPct: t.first / sims };
+      out[id] = { playoffPct: t.playoffs / sims, avgWins: t.wins / sims, avgSeed: t.seed / sims, firstPct: t.first / sims, finalPct: t.final / sims, titlePct: t.title / sims };
     });
     return out;
   }
@@ -393,8 +414,75 @@
     return out;
   }
 
+  /* ---------------- strategy paths ---------------- */
+
+  /**
+   * Two or three named plans, written as a story from the numbers. No trades
+   * are built here; research.js attaches real offers to each step.
+   * input: {
+   *   me: { record, standing, teams, playoffPct, titlePct, identity, approach, injuryRank, injuryGames },
+   *   weakPos: [pos] (my thinnest rooms, worst first),
+   *   buyTargets: [{ id, name, pos, score, reason, owner: { name, record, approach } }]  (best first)
+   *   sellMine:   [{ id, name, pos, value, score, reason, buyers: [{ name, record, approach }] }]  (best first)
+   *   waiverAdds: [{ id, name, pos, last3 }]
+   * }
+   * Returns [{ key: 'push'|'sell'|'hold', title, story, steps: [...], recommended }]
+   *   steps: { kind: 'buy', pos, playerId?, ownerName? } | { kind: 'sell', playerId } | { kind: 'waiver', playerId }
+   */
+  function paths(input) {
+    const me = input.me;
+    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+    const odds = me.playoffPct || 0;
+    const out = [];
+    const intro = `You're ${me.record} (${ordinal(me.standing)} of ${me.teams}) with ${pct(odds)} playoff odds and ${pct(me.titlePct)} title odds`
+      + (me.injuryRank && me.injuryRank <= 3 && me.injuryGames >= 3 ? `, and the ${ordinal(me.injuryRank)} most injury-hit roster.` : '.');
+
+    // Push now: buy a starter at the thinnest spot.
+    const pushOk = !['Rebuild'].includes(me.approach) && odds >= 0.1;
+    if (pushOk && input.weakPos && input.weakPos.length) {
+      const pos = input.weakPos[0];
+      // Contenders don't sell starters: look to sellers first, then fence-sitters.
+      const at = (input.buyTargets || []).filter((t) => t.pos === pos);
+      const target = at.find((t) => SELLERS.includes(t.owner.approach)) || at.find((t) => !BUYERS.includes(t.owner.approach));
+      const urgency = odds < 0.5 ? 'You need wins now or the playoffs slip away.'
+        : odds < 0.75 ? "You're in the hunt, and one more starter could decide it." : "You're in. The title is the target.";
+      const story = target
+        ? `${urgency} Your ${pos} room is the weak link. Buy ${target.name} from ${target.owner.name} (${target.owner.record}, ${target.owner.approach}). ${target.reason} Pay with picks and bench depth, not starters.`
+        : `${urgency} Your ${pos} room is the weak link. Add a starting ${pos} with picks and bench depth.`;
+      out.push({ key: 'push', title: 'Push now', story, steps: [{ kind: 'buy', pos, playerId: target ? target.id : null, ownerName: target ? target.owner.name : null }] });
+    }
+
+    // Sell high: cash in an overperformer or an aging asset with a buyer waiting.
+    const sell = (input.sellMine || [])[0];
+    const sellOk = sell && (['Retool', 'Rebuild', 'On the fence'].includes(me.approach) || odds < 0.35 || sell.score >= 4);
+    if (sellOk) {
+      const buyer = sell.buyers && sell.buyers[0];
+      const story = `${odds < 0.35 ? 'The odds say this season is slipping. ' : ''}${sell.name} is worth ${sell.value.toLocaleString()} today. ${sell.reason}`
+        + (buyer ? ` ${buyer.name} (${buyer.record}${buyer.approach ? `, ${buyer.approach}` : ''}) is thin at ${sell.pos} and trying to win now: sell to them for young players and picks.` : ' Shop to the contenders for young players and picks.');
+      out.push({ key: 'sell', title: 'Sell high, reload', story, steps: [{ kind: 'sell', playerId: sell.id }] });
+    }
+
+    // Hold and tweak: always available.
+    const add = (input.waiverAdds || [])[0];
+    out.push({
+      key: 'hold', title: 'Hold and tweak',
+      story: add
+        ? `Keep the core together. Grab ${add.name} (${add.pos}) off waivers: ${add.last3.toFixed(1)} PPG over the last 3 weeks.`
+        : 'Keep the core together and let the season play out. Nothing on waivers moves the needle right now.',
+      steps: add ? [{ kind: 'waiver', playerId: add.id }] : [],
+    });
+
+    const pick = ['All-in', 'Contend'].includes(me.approach) ? 'push'
+      : ['Retool', 'Rebuild'].includes(me.approach) ? 'sell'
+        : odds >= 0.4 ? 'push' : 'sell';
+    const rec = out.find((p) => p.key === pick) || out[0];
+    rec.recommended = true;
+    out.sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
+    return { intro, paths: out };
+  }
+
   return {
     POS, DEFAULT_SLOTS, WEEKLY_SD, APPROACHES, APPROACH_WINDOW, WINDOW_APPROACH,
-    mulberry32, lineup, ordinal, rooms, injuries, strengths, simulate, moves, identity, market,
+    mulberry32, lineup, ordinal, rooms, injuries, strengths, simulate, moves, identity, market, paths,
   };
 });
