@@ -1,6 +1,11 @@
 // Firestore rules for league chat + reactions (social.js).
 //
-// One-time setup (free Spark plan is plenty for one league):
+// Live in Firebase project woodson-clan-bf598b (owner wood6on@gmail.com).
+// Editing this file does NOT deploy it: after a change, paste it into
+// Firebase console → Firestore → Rules → Publish.
+//
+// Setup, already done for this league (kept for a fresh project; the free
+// Spark plan is plenty for one league):
 //   1. console.firebase.google.com → Add project (Analytics off is fine).
 //   2. Build → Authentication → Get started → Sign-in method → Anonymous → Enable.
 //   3. Build → Firestore Database → Create database (production mode, any US region).
