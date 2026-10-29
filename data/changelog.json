@@ -1,6 +1,30 @@
 {
  "entries": [
   {
+   "version": "1.30.0",
+   "title": "🔬 Under the Hood",
+   "date": "2026-10-29T14:33:52Z",
+   "notes": [
+    "🔬 Every player card now has an Under the Hood section: expected points vs. actual points in our league's scoring, TDs vs. expected TDs, catch rate over expected and aDOT.",
+    "📈 Usage trends: snap %, target share, rush share and expected points, season vs. the last 3 games, with weekly sparklines and red-zone share.",
+    "🎯 A verdict on every player: Buy low, Sell high, Ride it or Hold, with the reasons.",
+    "🗓️ Rest-of-season projection with a floor and ceiling, schedule strength, bye week and fantasy-playoff matchups.",
+    "⚠️ Workload watch: Low, Medium or High from usage, age and injury history.",
+    "📋 Tap Week by week for the full game log."
+   ]
+  },
+  {
+   "version": "1.29.0",
+   "title": "💬 Activity, Chat and Reactions",
+   "date": "2026-10-29T12:54:01Z",
+   "notes": [
+    "💬 New Activity tab: every trade (with its grade), add, drop, weekly final and newsletter in one feed, newest first. Filter by Chat, Trades, Moves, Scores or News.",
+    "🗣️ League chat lives at the top of Activity. Pick your team, talk your trash, delete your own messages.",
+    "🔥 React to anything: trades, moves, finals, matchups, the newsletter, player cards and chat. Tap a reaction to add yours, hold it to see who reacted.",
+    "🤡 Make league reactions: a word like FLEECED or a picture, shared with everyone. Inside jokes welcome. Delete your own anytime; the commish can delete any."
+   ]
+  },
+  {
    "version": "1.28.0",
    "title": "🧠 Moves, News and Ask Claude",
    "date": "2026-10-21T02:09:14Z",

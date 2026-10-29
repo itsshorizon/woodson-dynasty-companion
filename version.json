@@ -1,10 +1,11 @@
 {
-  "version": "1.29.0",
-  "title": "💬 Activity, Chat and Reactions",
+  "version": "1.32.0",
+  "title": "🗺️ Your Plan",
   "notes": [
-    "💬 New Activity tab: every trade (with its grade), add, drop, weekly final and newsletter in one feed, newest first. Filter by Chat, Trades, Moves, Scores or News.",
-    "🗣️ League chat lives at the top of Activity. Pick your team, talk your trash, delete your own messages.",
-    "🔥 React to anything: trades, moves, finals, matchups, the newsletter, player cards and chat. Tap a reaction to add yours, hold it to see who reacted.",
-    "🤡 Make league reactions: a word like FLEECED or a picture, shared with everyone. Inside jokes welcome. Delete your own anytime; the commish can delete any."
+    "🗺️ Research → Plan (was Moves) opens with your strategy paths: Push now, Sell high and reload, or Hold and tweak. Each one is written from your real numbers, recommends one based on your approach, and comes with fair offers you can load into the Trade Desk.",
+    "🛒 Buy targets come from teams likely to sell, and sell-high offers go first to contenders thin at that position.",
+    "🏆 Title odds: the simulation now plays out the playoff bracket, so Outlook shows your chances to reach the final and win it.",
+    "🤝 Player cards have a Build a trade button. For other teams' players it finds fair offers to get them. For yours it shops them around the league.",
+    "🤖 Ask Claude now sends your team identity, chosen approach, strategy paths, buy-low and sell-high lists, and the under-the-hood numbers for your roster."
   ]
 }
