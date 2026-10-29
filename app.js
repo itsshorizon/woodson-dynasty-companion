@@ -12,14 +12,14 @@ const CONFIG = {
   DRAFT_ROUNDS: 4,
   // Historical data is served as a static, pre-scraped JSON file (see scrape-history.js)
   HISTORY_PATH: './history.json',
-  // League chat + reactions (social.js). Paste the web app config from
-  // Firebase console → Project settings → Your apps. Empty = features off.
-  // Setup steps are at the top of firestore.rules.
+  // League chat + reactions (social.js): Firebase project woodson-clan-bf598b.
+  // The web apiKey is public by design; firestore.rules protects the data.
+  // Blank these out to turn chat and reactions off.
   FIREBASE: {
-    apiKey: '',
-    authDomain: '',
-    projectId: '',
-    appId: '',
+    apiKey: 'AIzaSyDCmlF1XwF0CYnm4tpqVpJ6u4lBWCIu1gw',
+    authDomain: 'woodson-clan-bf598b.firebaseapp.com',
+    projectId: 'woodson-clan-bf598b',
+    appId: '1:304723851532:web:83e44cb003aca577c07129',
   },
 };
 
