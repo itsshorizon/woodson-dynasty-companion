@@ -1,6 +1,31 @@
 {
  "entries": [
   {
+   "version": "1.32.0",
+   "title": "🗺️ Your Plan",
+   "date": "2026-10-29T14:43:45Z",
+   "notes": [
+    "🗺️ Research → Plan (was Moves) opens with your strategy paths: Push now, Sell high and reload, or Hold and tweak. Each one is written from your real numbers, recommends one based on your approach, and comes with fair offers you can load into the Trade Desk.",
+    "🛒 Buy targets come from teams likely to sell, and sell-high offers go first to contenders thin at that position.",
+    "🏆 Title odds: the simulation now plays out the playoff bracket, so Outlook shows your chances to reach the final and win it.",
+    "🤝 Player cards have a Build a trade button. For other teams' players it finds fair offers to get them. For yours it shops them around the league.",
+    "🤖 Ask Claude now sends your team identity, chosen approach, strategy paths, buy-low and sell-high lists, and the under-the-hood numbers for your roster."
+   ]
+  },
+  {
+   "version": "1.31.0",
+   "title": "🧭 Identity, Market and the League Map",
+   "date": "2026-10-29T14:39:04Z",
+   "notes": [
+    "🧭 Research → Outlook opens with your Team Identity: a Win now score and a Future score, and what the data says you are (All-in, Contend, On the fence, Retool or Rebuild).",
+    "🎚️ Pick your own approach. It steers Moves, Market and the Trade Finder, and it's saved on your device only.",
+    "📉 Research → Market: buy-low targets across the league, sell-high candidates on your roster, and a fade list. Each one comes with reasons: TD luck, usage trends, age, value moves and whether the owner is likely to sell.",
+    "🌌 Research → League: a map of every team (win now vs. future) plus each team's needs, strengths and picks. Tap Find trades for fair deals with any team.",
+    "🃏 Player cards now show league context: who owns the player, whether they're a likely seller, buy-low or sell-high scores, and which teams are thin at that position.",
+    "📊 Playoff odds now use each lineup's rest-of-season projection."
+   ]
+  },
+  {
    "version": "1.30.0",
    "title": "🔬 Under the Hood",
    "date": "2026-10-29T14:33:52Z",
