@@ -5045,7 +5045,10 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .wv-more { width: 100%; margin-top: 4px; }
 
 /* ---------- Research tab (research.js, Beta 1.27) ---------- */
-.research-subnav .seg-btn { font-size: 10px; padding: 9px 4px; letter-spacing: 0.03em; }
+/* Seven views: scroll sideways on phones, like the Vault subnav */
+.research-subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
+.research-subnav::-webkit-scrollbar { display: none; }
+.research-subnav .seg-btn { flex: 0 0 auto; font-size: 10px; padding: 9px 12px; letter-spacing: 0.03em; white-space: nowrap; scroll-snap-align: start; }
 .research-pane { animation: fade .2s ease; }
 .rs-card {
   background: var(--bg-elev);
@@ -5523,3 +5526,38 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .rs-weekly summary { cursor: pointer; font-weight: 800; color: var(--tab-accent); }
 .rs-table-wrap { overflow-x: auto; margin-top: 6px; }
 .rs-table-wrap table { min-width: 340px; }
+
+/* ---------- Research: identity, market, league (Beta 1.31) ---------- */
+.rs-id-says { font-size: 14px; margin: 0 0 8px; }
+.rs-id-says b { font-size: 17px; }
+.rs-id-all-in { color: #ff4d6d; } .rs-id-contend { color: #ffa500; } .rs-id-on-the-fence { color: #f1c40f; }
+.rs-id-retool { color: #4cc9f0; } .rs-id-rebuild { color: #a78bfa; }
+.rs-axis { display: grid; grid-template-columns: 64px minmax(0, 1fr) 28px; gap: 8px; align-items: center; margin: 4px 0; }
+.rs-axis-track { height: 8px; border-radius: 999px; background: var(--bg-elev-2); overflow: hidden; }
+.rs-axis-track span { display: block; height: 100%; background: var(--tab-accent); border-radius: 999px; }
+.rs-axis b { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.rs-approach { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.rs-team-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.rs-mkt-row {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.rs-mkt-row:last-child { border-bottom: 0; }
+.rs-mkt-name { font-size: 14px; font-weight: 900; display: flex; justify-content: space-between; gap: 8px; }
+.rs-mkt-score { font-size: 11px; font-weight: 900; color: var(--tab-accent); border: 1px solid var(--tab-accent); border-radius: 999px; padding: 1px 7px; height: fit-content; }
+.rs-mkt-row .rs-why { margin: 4px 0 0; }
+.rs-map-wrap { position: relative; height: 320px; }
+.rs-map-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text-dim); margin: 8px 0 0; }
+.rs-map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.rs-league-list { display: flex; flex-direction: column; gap: 6px; }
+.rs-league-row { background: var(--bg-elev-2); border-radius: 10px; padding: 8px 10px; }
+.rs-league-row.mine { outline: 2px solid var(--tab-accent); }
+.rs-league-row summary { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; cursor: pointer; list-style: none; }
+.rs-league-row summary::-webkit-details-marker { display: none; }
+.rs-lr-grades { display: flex; gap: 3px; }
+.rs-grade.rs-grade-sm { width: 22px; height: 22px; font-size: 9px; border-radius: 5px; }
+.rs-lr-detail { padding-top: 10px; }
+.rs-lr-detail .btn-sm { margin-top: 6px; }
+.rs-fits { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.rs-ctx-line { margin-bottom: 4px; }
+.rs-uth .rs-verdict-box + .rs-verdict-box { margin-top: 8px; }

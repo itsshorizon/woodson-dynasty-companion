@@ -288,5 +288,113 @@
     return out.sort((a, b) => a.priority - b.priority);
   }
 
-  return { POS, DEFAULT_SLOTS, WEEKLY_SD, mulberry32, lineup, ordinal, rooms, injuries, strengths, simulate, moves };
+  /* ---------------- team identity + approach ---------------- */
+
+  const APPROACHES = ['All-in', 'Contend', 'On the fence', 'Retool', 'Rebuild'];
+  // What the trade engine calls each approach (its team modes).
+  const APPROACH_WINDOW = { 'All-in': 'Contender', Contend: 'Contender', 'On the fence': 'Middle', Retool: 'Rebuilder', Rebuild: 'Rebuilder' };
+  const WINDOW_APPROACH = { Contender: 'Contend', Middle: 'On the fence', Rebuilder: 'Rebuild' };
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+  /**
+   * Where each team sits, on two 0-100 axes.
+   * teams: [{ id, playoffPct, rosRank, pfRank, valueRank (3-yr projection), ageDelta (vs league), pickDelta (vs a full set) }]
+   *   Now    = playoff odds 40% + rest-of-season lineup rank 35% + points-for rank 25%
+   *   Future = 3-year value rank 60% + youth 25% + extra picks 15%
+   * Returns { [id]: { now, future, label, reasons:[...] } }
+   */
+  function identity(teams) {
+    const n = teams.length;
+    const top = (rank) => (n > 1 ? 1 - (rank - 1) / (n - 1) : 1);
+    const out = {};
+    teams.forEach((t) => {
+      const now = 100 * (0.4 * (t.playoffPct || 0) + 0.35 * top(t.rosRank) + 0.25 * top(t.pfRank));
+      const future = 100 * (0.6 * top(t.valueRank) + 0.25 * clamp01(0.5 - (t.ageDelta || 0) / 4) + 0.15 * clamp01(0.5 + (t.pickDelta || 0) / 8));
+      const label = now >= 75 ? 'All-in' : now >= 55 ? 'Contend' : now >= 38 ? 'On the fence' : future >= 50 ? 'Retool' : 'Rebuild';
+      const reasons = [
+        `${Math.round((t.playoffPct || 0) * 100)}% playoff odds`,
+        `${ordinal(t.rosRank)} of ${n} in rest-of-season lineup strength`,
+        `${ordinal(t.valueRank)} of ${n} in dynasty value three years out`,
+      ];
+      if (Math.abs(t.ageDelta || 0) >= 0.75) reasons.push(`Roster is ${Math.abs(t.ageDelta).toFixed(1)} yrs ${t.ageDelta > 0 ? 'older' : 'younger'} than the league average`);
+      if (Math.abs(t.pickDelta || 0) >= 2) reasons.push(`${Math.abs(t.pickDelta)} ${t.pickDelta > 0 ? 'extra' : 'fewer'} draft picks than a full set`);
+      out[t.id] = { now: Math.round(now), future: Math.round(future), label, reasons };
+    });
+    return out;
+  }
+
+  /* ---------------- buy low / sell high ---------------- */
+
+  const SELLERS = ['Retool', 'Rebuild'];
+  const BUYERS = ['All-in', 'Contend'];
+  const MARKET_MIN = 2.5;
+
+  /**
+   * Score every player as a buy-low or sell-high candidate, with league context.
+   * input: {
+   *   players: [{ id, name, pos, age, value, career, trend30, ownerId,
+   *               adv: { fpoe, tdd, td, xtd, xfp, fp, trXfp, xfpRank } | null }],
+   *   teams: { [id]: { name, record, playoffPct, approach, weakPos:[pos] } },
+   *   rankCut: { QB, RB, WR, TE }  (xFP rank that counts as a real role)
+   * }
+   * Returns { [playerId]: { buy?: { score, reasons }, sell?: { score, reasons, buyers:[teamId] } } }
+   */
+  function market(input) {
+    const out = {};
+    const teams = input.teams || {};
+    const cut = input.rankCut || { QB: 15, RB: 30, WR: 40, TE: 15 };
+    const pct = (x) => `${Math.round(x * 100)}%`;
+    for (const p of input.players || []) {
+      const a = p.adv;
+      const owner = teams[p.ownerId];
+      const moved = p.trend30 != null && p.value > 0 ? p.trend30 / p.value : 0;
+      const entry = {};
+
+      // Buy low: production below usage, a real role, a dip, and a seller.
+      if (a && p.ownerId != null) {
+        let score = 0;
+        const reasons = [];
+        if (a.fpoe <= -1.5) { score += Math.min(3, -a.fpoe / 1.5); reasons.push(`Scoring ${(-a.fpoe).toFixed(1)} pts/game below usage (${a.xfp.toFixed(1)} expected)`); }
+        if (a.tdd <= -1) { score += Math.min(2, -a.tdd); reasons.push(`${a.td} TDs on ${a.xtd.toFixed(1)} expected: due for more`); }
+        if (a.trXfp != null && a.trXfp >= 1.5) { score += 1; reasons.push(`Role growing: +${a.trXfp.toFixed(1)} expected pts/game over the last 3`); }
+        if (moved <= -0.05) { score += 1; reasons.push(`Dynasty value down ${pct(-moved)} in 30 days`); }
+        const winNowAsset = p.career === 'Prime' || p.career === 'Declining' || p.career === 'Cliff';
+        if (owner && winNowAsset && (SELLERS.includes(owner.approach) || (owner.playoffPct != null && owner.playoffPct < 0.25))) {
+          score += 1.5;
+          reasons.push(`${owner.name} is ${owner.record} with ${pct(owner.playoffPct || 0)} playoff odds (${owner.approach}): a likely seller`);
+        }
+        const realRole = a.xfpRank != null && a.xfpRank <= (cut[p.pos] || 30);
+        if (score >= MARKET_MIN && (realRole || p.value >= 1500)) entry.buy = { score: Math.round(score * 10) / 10, reasons };
+      }
+
+      // Sell high: production above usage, past peak, slipping role, buyers waiting.
+      if (p.value >= 800) {
+        let score = 0;
+        const reasons = [];
+        if (a && a.fpoe >= 1.5) { score += Math.min(3, a.fpoe / 1.5); reasons.push(`Scoring ${a.fpoe.toFixed(1)} pts/game above usage`); }
+        if (a && a.tdd >= 1) { score += Math.min(2, a.tdd); reasons.push(`${a.td} TDs on ${a.xtd.toFixed(1)} expected: likely to cool`); }
+        if (a && a.trXfp != null && a.trXfp <= -1.5) { score += 1; reasons.push(`Role shrinking: ${a.trXfp.toFixed(1)} expected pts/game over the last 3`); }
+        if ((p.career === 'Declining' || p.career === 'Cliff') && p.value >= 1500) {
+          score += 1.5;
+          reasons.push(`Age ${p.age != null ? p.age.toFixed(0) : '?'} at ${p.pos}: worth ${p.value.toLocaleString()} now, and value only drops from here`);
+        }
+        if (moved >= 0.08) { score += 0.5; reasons.push(`Value up ${pct(moved)} in 30 days: near peak price`); }
+        const buyers = Object.entries(teams)
+          .filter(([id, t]) => Number(id) !== Number(p.ownerId) && BUYERS.includes(t.approach) && (t.weakPos || []).includes(p.pos))
+          .map(([id]) => Number(id));
+        if (buyers.length) {
+          score += 1;
+          reasons.push(`${buyers.length} contender${buyers.length > 1 ? 's' : ''} need${buyers.length > 1 ? '' : 's'} a ${p.pos}: ${buyers.map((id) => teams[id].name).join(', ')}`);
+        }
+        if (score >= MARKET_MIN) entry.sell = { score: Math.round(score * 10) / 10, reasons, buyers };
+      }
+      if (entry.buy || entry.sell) out[p.id] = entry;
+    }
+    return out;
+  }
+
+  return {
+    POS, DEFAULT_SLOTS, WEEKLY_SD, APPROACHES, APPROACH_WINDOW, WINDOW_APPROACH,
+    mulberry32, lineup, ordinal, rooms, injuries, strengths, simulate, moves, identity, market,
+  };
 });

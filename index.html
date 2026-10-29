@@ -16,8 +16,8 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.30.0" />
-  <link rel="stylesheet" href="compact.css?v=1.30.0" />
+  <link rel="stylesheet" href="styles.css?v=1.31.0" />
+  <link rel="stylesheet" href="compact.css?v=1.31.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -199,12 +199,16 @@
         <button data-rs="overview" class="seg-btn active" type="button">Overview</button>
         <button data-rs="outlook" class="seg-btn" type="button">Outlook</button>
         <button data-rs="moves" class="seg-btn" type="button">Moves</button>
+        <button data-rs="market" class="seg-btn" type="button">Market</button>
+        <button data-rs="league" class="seg-btn" type="button">League</button>
         <button data-rs="news" class="seg-btn" type="button">News</button>
         <button data-rs="ask" class="seg-btn" type="button">Ask</button>
       </div>
       <div class="research-pane" data-pane="overview"><div id="myteam-content"></div></div>
       <div class="research-pane" data-pane="outlook" hidden><div id="research-outlook"></div></div>
       <div class="research-pane" data-pane="moves" hidden><div id="research-moves"></div></div>
+      <div class="research-pane" data-pane="market" hidden><div id="research-market"></div></div>
+      <div class="research-pane" data-pane="league" hidden><div id="research-league"></div></div>
       <div class="research-pane" data-pane="news" hidden><div id="research-news"></div></div>
       <div class="research-pane" data-pane="ask" hidden><div id="research-ask"></div></div>
     </section>
@@ -587,13 +591,13 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.30.0"></script>
-  <script src="app.js?v=1.30.0"></script>
-  <script src="trade-engine.js?v=1.30.0"></script>
-  <script src="trade-calc.js?v=1.30.0"></script>
-  <script src="research-engine.js?v=1.30.0"></script>
-  <script src="research.js?v=1.30.0"></script>
-  <script src="activity-engine.js?v=1.30.0"></script>
-  <script src="social.js?v=1.30.0"></script>
+  <script src="select.js?v=1.31.0"></script>
+  <script src="app.js?v=1.31.0"></script>
+  <script src="trade-engine.js?v=1.31.0"></script>
+  <script src="trade-calc.js?v=1.31.0"></script>
+  <script src="research-engine.js?v=1.31.0"></script>
+  <script src="research.js?v=1.31.0"></script>
+  <script src="activity-engine.js?v=1.31.0"></script>
+  <script src="social.js?v=1.31.0"></script>
 </body>
 </html>

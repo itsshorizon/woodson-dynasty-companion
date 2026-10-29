@@ -45,6 +45,8 @@ function rsShow() {
   $$('#view-myteam .research-pane').forEach((p) => { p.hidden = p.dataset.pane !== RS.sub; });
   if (RS.sub === 'outlook') rsRenderOutlook();
   if (RS.sub === 'moves') rsRenderMoves();
+  if (RS.sub === 'market') rsRenderMarket();
+  if (RS.sub === 'league') rsRenderLeague();
   if (RS.sub === 'news') rsRenderNews();
   if (RS.sub === 'ask') rsRenderAsk();
 }
@@ -108,10 +110,17 @@ function buildResearchModel() {
   }));
   const rooms = R.rooms(rows, slots);
   const injuries = R.injuries(rows, slots);
+  // Rest-of-season PPG (data/advanced.json) when we have it: usage-weighted and
+  // schedule-adjusted, so it beats raw PPG for "how good is this lineup now".
+  const rosPpg = (p) => rsAdv(p.id)?.ros?.ppg ?? p.ppg;
+  const rosLineup = {};
+  rows.forEach((r) => {
+    rosLineup[r.id] = R.lineup(r.players.filter((p) => p.available).map((p) => ({ id: p.id, pos: p.pos, pts: rosPpg(p) })), slots).total;
+  });
   const mean = R.strengths(rows.map((r) => ({
     id: r.id,
     seasonAvg: rsAvg(results[r.id].map((g) => g.pts)),
-    lineupPpg: R.lineup(r.players.filter((p) => p.available).map((p) => ({ id: p.id, pos: p.pos, pts: p.ppg })), slots).total,
+    lineupPpg: rosLineup[r.id],
   })));
   const odds = R.simulate({
     teams: state.teams.map((t) => ({ id: t.id, wins: t.wins, losses: t.losses, ties: t.ties, pf: t.pf })),
@@ -119,13 +128,89 @@ function buildResearchModel() {
   });
   const luck = computeSeasonLuck(state.schedule);
   const values = typeof tcLeagueTeamValues === 'function' && TC.ctx ? tcLeagueTeamValues() : [];
-  return { results, remaining, rooms, injuries, mean, odds, luck, values };
+
+  // Team identity: where each team sits on Now vs Future.
+  const n = state.teams.length;
+  const rankOf = (get) => {
+    const order = state.teams.map((t) => t.id).sort((a, b) => get(b) - get(a));
+    return (id) => order.indexOf(id) + 1;
+  };
+  const rosRank = rankOf((id) => rosLineup[id] || 0);
+  const pfRank = rankOf((id) => teamById(id)?.pf || 0);
+  const valOf = (id) => values.find((v) => v.teamId === id);
+  const leagueAge = rsAvg(values.map((v) => v.avgAge).filter((x) => x != null)) || 26;
+  const identity = R.identity(state.teams.map((t) => ({
+    id: t.id, playoffPct: odds[t.id]?.playoffPct || 0, rosRank: rosRank(t.id), pfRank: pfRank(t.id),
+    valueRank: valOf(t.id)?.futureRank || Math.ceil(n / 2),
+    ageDelta: valOf(t.id)?.avgAge != null ? valOf(t.id).avgAge - leagueAge : 0,
+    pickDelta: valOf(t.id)?.extraPicks || 0,
+  })));
+  const weakCut = Math.ceil((2 * n) / 3);
+  const teamCtx = {};
+  state.teams.forEach((t) => {
+    teamCtx[t.id] = {
+      name: t.name.trim(), record: recordOf(t), playoffPct: odds[t.id]?.playoffPct ?? null,
+      approach: t.id === state.myTeamId ? rsApproachLabel(identity) : identity[t.id].label,
+      weakPos: R.POS.filter((pos) => rooms[t.id][pos].rank >= weakCut),
+      strongPos: R.POS.filter((pos) => rooms[t.id][pos].rank <= Math.ceil(n / 4)),
+    };
+  });
+  const market = TC.ctx ? R.market({
+    teams: teamCtx,
+    players: state.teams.flatMap((t) => t.roster.filter((p) => R.POS.includes(p.pos)).map((p) => {
+      const v = tcPlayer(p.id);
+      const a = rsAdv(p.id);
+      return {
+        id: p.id, name: p.name, pos: p.pos, age: v?.a ?? null, value: v?.dv ?? 0, career: v?.w || null, trend30: v?.tr ?? null, ownerId: t.id,
+        adv: a && a.s.g >= 3 ? { fpoe: a.s.fpoe, tdd: a.s.tdd, td: a.s.td, xtd: a.s.xtd, xfp: a.s.xfp, fp: a.s.fp, trXfp: a.tr?.xfp ?? null, xfpRank: a.r?.xfp ?? null } : null,
+      };
+    })),
+  }) : {};
+  return { results, remaining, rooms, injuries, mean, odds, luck, values, rosLineup, identity, teamCtx, market };
+}
+
+/* ----------------------- Approach (5 steps) ----------------------- *
+ * The data suggests one (identity); the viewer can pick their own. It's saved
+ * per viewer and also sets the trade engine's team mode, so the Trade Finder
+ * and Moves follow it.
+ */
+
+const RS_APPROACH_KEY = 'researchApproach';
+
+function rsStoredApproach() {
+  try { return localStorage.getItem(RS_APPROACH_KEY); } catch (e) { return null; }
+}
+
+// identity: ResearchEngine.identity() output (passed while the model is being built)
+function rsApproachLabel(identity) {
+  const R = ResearchEngine;
+  const auto = identity?.[state.myTeamId]?.label || 'On the fence';
+  const stored = rsStoredApproach();
+  const win = TC.ctx ? tcWindowFor(state.myTeamId) : { overridden: false };
+  // A team mode picked on the Trade Desk wins if it disagrees with the saved approach.
+  if (win.overridden && (!stored || stored === 'auto' || R.APPROACH_WINDOW[stored] !== win.label)) return R.WINDOW_APPROACH[win.label] || auto;
+  return stored && stored !== 'auto' && R.APPROACH_WINDOW[stored] ? stored : auto;
+}
+
+function rsApproach(m) {
+  const auto = m.identity[state.myTeamId]?.label || 'On the fence';
+  const label = rsApproachLabel(m.identity);
+  return { label, auto, overridden: label !== auto, window: ResearchEngine.APPROACH_WINDOW[label] };
+}
+
+function rsSetApproach(label) {
+  try {
+    localStorage.setItem(RS_APPROACH_KEY, label);
+    localStorage.setItem(TC_WINDOW_KEY, label === 'auto' ? 'auto' : ResearchEngine.APPROACH_WINDOW[label]);
+  } catch (e) { /* storage blocked */ }
+  RS.model = null;
+  rsShow();
 }
 
 // Rebuild only when the inputs change (roster moves, new scores, details loaded).
 function rsModel() {
   const key = [
-    state.lastFullLoad, state.currentWeek, state.draftPicks.length, !!TC.details, !!TC.ctx,
+    state.lastFullLoad, state.currentWeek, state.draftPicks.length, !!TC.details, !!TC.ctx, !!RS.adv, rsStoredApproach(),
     state.teams.map((t) => `${t.id}:${t.wins}-${t.losses}:${t.roster.map((p) => p.id + p.injuryStatus).join(',')}`).join('|'),
   ].join('#');
   if (!RS.model || RS.modelKey !== key) {
@@ -172,7 +257,7 @@ function rsSeasonCard(team, m) {
       ${luck ? rsStat('Luck', `${rsSigned(luck.luck)} W`, `all-play ${luck.expWins.toFixed(1)} exp. wins`, luckTone) : ''}
       ${last3 != null ? rsStat('Last 3 avg', last3.toFixed(1), seasonAvg != null ? `season ${seasonAvg.toFixed(1)}` : '', last3 >= (seasonAvg || 0) + 8 ? 'good' : last3 <= (seasonAvg || 0) - 8 ? 'bad' : '') : ''}
     </div>
-    ${odds ? `<p class="tv-note">Odds from ${RS_SIMS.toLocaleString()} simulated finishes of the regular season. Each team's weekly score blends its results so far with its current healthy lineup.</p>` : ''}`;
+    ${odds ? `<p class="tv-note">Odds from ${RS_SIMS.toLocaleString()} simulated finishes of the regular season. Each team's weekly score blends its results so far with its healthy lineup's rest-of-season projection.</p>` : ''}`;
   return rsCard('📈 Season So Far', body);
 }
 
@@ -286,8 +371,10 @@ function rsRenderOutlook() {
   // Injury history lives in player-details.json; draw now, redraw when it lands.
   if (!TC.details && typeof tcLoadDetails === 'function') tcLoadDetails().then(() => { if (RS.sub === 'outlook') rsRenderOutlook(); });
   if (!TC.ctx && typeof tcLoad === 'function') tcLoad().then((ok) => { if (ok && RS.sub === 'outlook') rsRenderOutlook(); });
+  if (!RS.adv) rsLoadAdvanced().then(() => { if (RS.sub === 'outlook') rsRenderOutlook(); });
   const m = rsModel();
   el.innerHTML = [
+    rsIdentityCard(team, m),
     rsSeasonCard(team, m),
     rsScheduleCard(team, m),
     rsRoomsCard(team, m),
@@ -295,10 +382,31 @@ function rsRenderOutlook() {
     rsDynastyCard(team, m),
   ].join('');
   el.onclick = (e) => {
+    const ap = e.target.closest('[data-approach]');
+    if (ap) { rsSetApproach(ap.dataset.approach); return; }
     const row = e.target.closest('[data-player-id]');
     if (row) openPlayerProfile(parseInt(row.dataset.playerId, 10));
   };
 }
+
+function rsIdentityCard(team, m) {
+  const id = m.identity[team.id];
+  if (!id) return '';
+  const ap = rsApproach(m);
+  const bar = (label, v) => `<div class="rs-axis"><span class="rs-stat-label">${label}</span><div class="rs-axis-track"><span style="width:${v}%"></span></div><b>${v}</b></div>`;
+  const chip = (val, label) => `<button type="button" class="tv-filter ${val === (ap.overridden ? ap.label : 'auto') ? 'on' : ''}" data-approach="${escapeHtml(val)}">${escapeHtml(label)}</button>`;
+  const body = `
+    <p class="rs-id-says">The data says: <b class="rs-id-${rsSlug(id.label)}">${escapeHtml(id.label)}</b></p>
+    ${bar('Win now', id.now)}
+    ${bar('Future', id.future)}
+    <ul class="rs-why">${id.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+    <div class="rs-stat-label">Your approach</div>
+    <div class="rs-approach">${chip('auto', `Auto (${id.label})`)}${ResearchEngine.APPROACHES.map((a) => chip(a, a)).join('')}</div>
+    <p class="tv-note">Your approach steers Moves, Market and the Trade Finder. It's saved on this device only.</p>`;
+  return rsCard('🧭 Team Identity', body, ap.overridden ? `You: ${escapeHtml(ap.label)}` : '');
+}
+
+const rsSlug = (s) => String(s).toLowerCase().replace(/[^a-z]+/g, '-');
 
 /* ----------------------- Moves ----------------------- *
  * ResearchEngine.moves() decides what to do (rules over the Outlook numbers);
@@ -313,7 +421,7 @@ function rsMoveInput(team, m) {
   const proj = m.values.find((r) => r.teamId === team.id)?.projection;
   const rostered = new Set(state.teams.flatMap((t) => t.roster.map((p) => p.id)));
   return {
-    window: tcWindowFor(team.id).label,
+    window: rsApproach(m).window,
     playoffPct: m.odds[team.id]?.playoffPct ?? null,
     valueTrend: proj && proj[0] ? (proj[2] - proj[0]) / proj[0] : null,
     rooms: m.rooms[team.id],
@@ -401,11 +509,12 @@ function rsRenderMoves() {
     typeof tcLoad === 'function' ? tcLoad() : null,
     typeof tcLoadDetails === 'function' ? tcLoadDetails() : null,
     loadWaivers().catch(() => null),
+    rsLoadAdvanced(),
   ]).then(() => setTimeout(() => {
     if (RS.sub !== 'moves') return;
     if (!TC.ctx) { el.innerHTML = empty('Trade values unavailable right now.'); return; }
     const m = rsModel();
-    const myWindow = tcWindowFor(team.id).label;
+    const myWindow = rsApproach(m).window;
     const list = ResearchEngine.moves(rsMoveInput(team, m));
     const deals = [];
     list.forEach((mv) => {
@@ -417,7 +526,7 @@ function rsRenderMoves() {
     });
     RS.deals = deals;
     el.innerHTML = `
-      <p class="tv-note rs-moves-intro">Based on your window (<b>${escapeHtml(myWindow)}</b>), playoff odds, position rooms and injuries. Offers come from the trade calculator and are never fleeces.</p>
+      <p class="tv-note rs-moves-intro">Based on your approach (<b>${escapeHtml(rsApproach(m).label)}</b>), playoff odds, position rooms and injuries. Offers come from the trade calculator and are never fleeces.</p>
       ${list.map((mv) => rsMoveHTML(mv, team, myWindow, mv.dealStart)).join('')}`;
     el.onclick = rsMovesClick;
   }, 30));
@@ -522,7 +631,7 @@ function rsRenderNews() {
 function rsEnhanceProfile(playerId) {
   RS.profileId = playerId;
   const live = () => RS.profileId === playerId && !$('#player-profile-modal').hidden && $('#player-profile-body');
-  rsLoadAdvanced().then(() => {
+  Promise.all([rsLoadAdvanced(), typeof tcLoad === 'function' ? tcLoad() : null]).then(() => {
     const body = live();
     if (!body) return;
     body.querySelector('.rs-uth')?.remove();
@@ -595,7 +704,7 @@ function rsUnderHoodHTML(playerId) {
   const a = rsAdv(playerId);
   const head = `<h4>🔬 Under the Hood${RS.adv?.throughWeek ? ` <span class="rs-uth-sub">through week ${RS.adv.throughWeek}</span>` : ''}</h4>`;
   if (!a) {
-    return `<div class="rs-uth">${head}<p class="tv-note">No NFL snaps tracked for this player this season yet.</p></div>`;
+    return `<div class="rs-uth">${head}<p class="tv-note">No NFL snaps tracked for this player this season yet.</p>${rsContextHTML(playerId)}</div>`;
   }
   const s = a.s, r = a.r || {}, tr = a.tr, ros = a.ros, pos = a.pos;
   const v = RS_VERDICT[a.v?.tag] || RS_VERDICT.hold;
@@ -665,6 +774,7 @@ function rsUnderHoodHTML(playerId) {
         <span class="rs-v-tag">${v.label}</span>
         <ul>${(a.v?.reasons || []).map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
       </div>
+      ${rsContextHTML(playerId)}
       <h5>Efficiency</h5>${eff}
       <h5>Usage</h5>${usage}
       <h5>Rest of season</h5>${proj}
@@ -793,4 +903,245 @@ function rsAskGo() {
   } else {
     fallback();
   }
+}
+
+/* ----------------------- Market: buy low / sell high ----------------------- *
+ * ResearchEngine.market() scores every rostered player using expected points
+ * (TD luck, usage), age, 30-day value moves and the owner's situation.
+ */
+
+const RS_MARKET_ROWS = 12;
+
+function rsTeamChip(teamId, m) {
+  const t = teamById(teamId);
+  const c = m.teamCtx[teamId];
+  if (!t || !c) return '';
+  return `<span class="rs-team-chip">${teamLogoHTML(t, 16)}${escapeHtml(c.name)} · ${escapeHtml(c.record)} · <span class="rs-id-${rsSlug(c.approach)}">${escapeHtml(c.approach)}</span></span>`;
+}
+
+function rsMarketRow(id, entry, m) {
+  const p = findPlayerAnywhere(id);
+  if (!p) return '';
+  const owner = ownerTeamOf(id);
+  const a = rsAdv(id);
+  const v = tcPlayer(id);
+  const stats = [
+    a ? `xFP ${a.s.xfp.toFixed(1)} · FP ${a.s.fp.toFixed(1)}` : null,
+    a ? `TD ${a.s.td}/${a.s.xtd.toFixed(1)}` : null,
+    a?.ros ? `ROS ${a.ros.ppg.toFixed(1)}` : null,
+    v ? `Value ${tcFmt(v.dv)}${v.tr ? ` (${v.tr > 0 ? '▲' : '▼'}${tcFmt(Math.abs(v.tr))})` : ''}` : null,
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="rs-mkt-row" data-player-id="${id}">
+      ${playerPhotoHTML(p)}
+      <div class="rs-mkt-main">
+        <div class="rs-mkt-name">${escapeHtml(p.name)} <span class="rs-mkt-score">${entry.score.toFixed(1)}</span></div>
+        ${owner ? `<div>${rsTeamChip(owner.id, m)}</div>` : ''}
+        <div class="rs-room-sub">${escapeHtml(stats)}</div>
+        <ul class="rs-why">${entry.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+      </div>
+    </div>`;
+}
+
+function rsRenderMarket() {
+  const el = $('#research-market');
+  if (!el) return;
+  const team = myTeam();
+  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  el.innerHTML = loading('Scanning every roster...');
+  Promise.all([tcLoad(), tcLoadDetails(), rsLoadAdvanced()]).then(() => {
+    if (RS.sub !== 'market') return;
+    if (!TC.ctx) { el.innerHTML = empty('Trade values unavailable right now.'); return; }
+    const m = rsModel();
+    const mine = new Set(team.roster.map((p) => p.id));
+    const list = (kind, filter) => Object.entries(m.market)
+      .filter(([id, e]) => e[kind] && filter(Number(id)))
+      .sort((x, y) => y[1][kind].score - x[1][kind].score)
+      .slice(0, RS_MARKET_ROWS)
+      .map(([id, e]) => rsMarketRow(Number(id), e[kind], m)).join('');
+    const buy = list('buy', (id) => !mine.has(id));
+    const sellMine = list('sell', (id) => mine.has(id));
+    const sellOther = list('sell', (id) => !mine.has(id));
+    el.innerHTML = `
+      <p class="tv-note rs-moves-intro">Scores add up: production vs. usage (TD luck), role trend, age, 30-day value moves, and whether the owner is likely to sell or a contender needs the position. Your approach: <b>${escapeHtml(rsApproach(m).label)}</b>.</p>
+      ${rsCard('📉 Buy Low', buy || empty('No clear buy-low targets right now.'), 'other teams')}
+      ${rsCard('📈 Sell High', sellMine || empty('Nobody on your roster is clearly overperforming.'), 'your roster')}
+      ${rsCard('👀 Fade List', sellOther ? `<p class="tv-note">Sell-high candidates on other rosters. Think twice before buying these.</p>${sellOther}` : empty('Nothing to fade.'), 'other teams')}
+      <p class="tv-note">Expected points come from play-by-play (where each target and carry happened), in our scoring. Through week ${RS.adv?.throughWeek || '?'}.</p>`;
+    el.onclick = (e) => {
+      const row = e.target.closest('[data-player-id]');
+      if (row) openPlayerProfile(Number(row.dataset.playerId));
+    };
+  });
+}
+
+/* ----------------------- League: everyone's place ----------------------- */
+
+let _rsLeagueChart = null;
+const RS_ID_COLORS = { 'All-in': '#ff4d6d', Contend: '#ffa500', 'On the fence': '#f1c40f', Retool: '#4cc9f0', Rebuild: '#a78bfa' };
+
+function rsRenderLeague() {
+  const el = $('#research-league');
+  if (!el) return;
+  if (!state.teams.length) { el.innerHTML = empty('League data still loading.'); return; }
+  el.innerHTML = loading('Placing every team...');
+  Promise.all([tcLoad(), tcLoadDetails(), rsLoadAdvanced()]).then(() => {
+    if (RS.sub !== 'league') return;
+    if (!TC.ctx) { el.innerHTML = empty('Trade values unavailable right now.'); return; }
+    const m = rsModel();
+    const n = state.teams.length;
+    const rows = state.teams.map((t) => {
+      const id = m.identity[t.id], c = m.teamCtx[t.id], v = m.values.find((x) => x.teamId === t.id);
+      return { t, id, c, v, odds: m.odds[t.id]?.playoffPct ?? 0 };
+    }).sort((a, b) => b.id.now - a.id.now);
+    const gradeOf = (teamId, pos) => m.rooms[teamId][pos].grade;
+    el.innerHTML = `
+      ${rsCard('🌌 League Map', `
+        <div class="rs-map-wrap"><canvas id="rs-league-map"></canvas></div>
+        <div class="rs-map-legend">${ResearchEngine.APPROACHES.map((a) => `<span><i style="background:${RS_ID_COLORS[a]}"></i>${a}</span>`).join('')}</div>
+        <p class="tv-note">Right = stronger now (odds, rest-of-season lineup, points). Up = stronger future (value 3 years out, youth, picks). Bigger bubble = better playoff odds.</p>`)}
+      ${rsCard('📋 Every Team', `<div class="rs-league-list">${rows.map(({ t, id, c, v, odds }) => `
+        <details class="rs-league-row${t.id === state.myTeamId ? ' mine' : ''}" data-team-id="${t.id}">
+          <summary>
+            ${teamLogoHTML(t, 26)}
+            <div class="rs-lr-main">
+              <div class="rs-game-name">${escapeHtml(t.name)}</div>
+              <div class="rs-room-sub">${recordOf(t)} · ${rsPct(odds)} odds · <span class="rs-id-${rsSlug(id.label)}">${escapeHtml(c.approach)}</span></div>
+            </div>
+            <div class="rs-lr-grades">${ResearchEngine.POS.map((pos) => `<span class="rs-grade rs-grade-sm rs-grade-${gradeOf(t.id, pos)}" title="${pos}">${pos}</span>`).join('')}</div>
+          </summary>
+          <div class="rs-lr-detail">
+            <div class="rs-stats rs-stats-2">
+              ${rsStat('Win now', id.now, `${ResearchEngine.ordinal(state.teams.slice().sort((a, b) => (m.rosLineup[b.id] || 0) - (m.rosLineup[a.id] || 0)).findIndex((x) => x.id === t.id) + 1)} ROS lineup`)}
+              ${rsStat('Future', id.future, v ? `${ResearchEngine.ordinal(v.futureRank)} value in 3 yrs` : '')}
+              ${v ? rsStat('Avg age', v.avgAge != null ? v.avgAge.toFixed(1) : '—') : ''}
+              ${v ? rsStat('Draft picks', v.pickCount ?? '—', v.extraPicks ? `${v.extraPicks > 0 ? '+' : ''}${v.extraPicks} vs full set` : 'full set') : ''}
+            </div>
+            <p class="rs-uth-line">Needs: <b>${c.weakPos.length ? c.weakPos.join(', ') : 'nothing glaring'}</b> · Strength: <b>${c.strongPos.length ? c.strongPos.join(', ') : 'balanced'}</b></p>
+            <ul class="rs-why">${id.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+            ${t.id !== state.myTeamId && state.myTeamId ? `<button type="button" class="btn-ghost btn-sm" data-fits="${t.id}">Find trades with ${escapeHtml(t.name.trim())}</button><div class="rs-fits" data-fits-out="${t.id}"></div>` : ''}
+          </div>
+        </details>`).join('')}</div>`, `${n} teams`)}`;
+    rsDrawLeagueMap(rows);
+    el.onclick = (e) => {
+      const fit = e.target.closest('[data-fits]');
+      if (fit) { rsShowFits(Number(fit.dataset.fits)); return; }
+      const load = e.target.closest('[data-finder-load]');
+      if (load) { rsMovesClick(e); return; }
+      const chip = e.target.closest('.tv-asset-chip[data-player-id]');
+      if (chip) openPlayerProfile(Number(chip.dataset.playerId));
+    };
+  });
+}
+
+function rsDrawLeagueMap(rows) {
+  const canvas = $('#rs-league-map');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (_rsLeagueChart) { _rsLeagueChart.destroy(); _rsLeagueChart = null; }
+  const css = getComputedStyle(document.body);
+  const text = css.getPropertyValue('--text-dim').trim() || '#c8dccf';
+  const grid = css.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.1)';
+  const labels = {
+    id: 'rsLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      ctx.save();
+      ctx.font = '700 10px Inter, sans-serif';
+      ctx.fillStyle = text;
+      ctx.textAlign = 'center';
+      chart.getDatasetMeta(0).data.forEach((pt, i) => {
+        const r = rows[i];
+        ctx.fillText((r.t.abbrev || r.t.name).slice(0, 4), pt.x, pt.y - pt.options.radius - 4);
+      });
+      ctx.restore();
+    },
+  };
+  const mid = {
+    id: 'rsMid',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: a, scales: { x, y } } = chart;
+      ctx.save();
+      ctx.strokeStyle = grid;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x.getPixelForValue(50), a.top); ctx.lineTo(x.getPixelForValue(50), a.bottom);
+      ctx.moveTo(a.left, y.getPixelForValue(50)); ctx.lineTo(a.right, y.getPixelForValue(50));
+      ctx.stroke();
+      ctx.restore();
+    },
+  };
+  _rsLeagueChart = new Chart(canvas, {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        data: rows.map((r) => ({ x: r.id.now, y: r.id.future, r: 5 + r.odds * 12 })),
+        backgroundColor: rows.map((r) => RS_ID_COLORS[r.c.approach] + 'cc'),
+        borderColor: rows.map((r) => (r.t.id === state.myTeamId ? '#ffffff' : RS_ID_COLORS[r.c.approach])),
+        borderWidth: rows.map((r) => (r.t.id === state.myTeamId ? 3 : 1)),
+        clip: 24,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      layout: { padding: { top: 20, right: 20, left: 4 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => { const r = rows[c.dataIndex]; return `${r.t.name.trim()} (${recordOf(r.t)}): ${r.c.approach}, now ${r.id.now}, future ${r.id.future}`; } } },
+      },
+      scales: {
+        x: { min: 0, max: 100, title: { display: true, text: 'Win now →', color: text }, ticks: { color: text, stepSize: 25 }, grid: { color: grid } },
+        y: { min: 0, max: 100, title: { display: true, text: 'Future →', color: text }, ticks: { color: text, stepSize: 25 }, grid: { color: grid } },
+      },
+    },
+    plugins: [mid, labels],
+  });
+}
+
+// Best fair trades between me and one team (League view).
+function rsShowFits(partnerId) {
+  const host = $(`[data-fits-out="${partnerId}"]`);
+  const my = myTeam(), partner = teamById(partnerId);
+  if (!host || !my || !partner) return;
+  host.innerHTML = loading('Looking for fair trades...');
+  setTimeout(() => {
+    const m = rsModel();
+    const myWindow = rsApproach(m).window;
+    const found = TradeEngine.findTrades({
+      mine: tcTeamAssets(my), theirs: tcTeamAssets(partner), myWindow, theirWindow: ResearchEngine.APPROACH_WINDOW[m.teamCtx[partnerId].approach],
+      maxEdge: RS_MOVE_EDGE, requireMutual: true, limit: 2,
+    }, TC.ctx).map((r) => ({ ...r, partner }));
+    const start = (RS.deals || []).length;
+    RS.deals = (RS.deals || []).concat(found);
+    host.innerHTML = found.length
+      ? found.map((r, i) => tcFinderItemHTML(r, start + i, my, myWindow)).join('')
+      : '<p class="tv-note">No fair deal that helps both teams right now.</p>';
+  }, 30);
+}
+
+// League context for the player card: owner, market status, who needs the position.
+function rsContextHTML(playerId) {
+  if (!TC.ctx || !state.teams.length || typeof ResearchEngine === 'undefined') return '';
+  const m = rsModel();
+  const owner = ownerTeamOf(playerId);
+  const p = findPlayerAnywhere(playerId);
+  const entry = m.market[playerId] || {};
+  const lines = [];
+  if (owner) {
+    const c = m.teamCtx[owner.id];
+    const motivated = ['Retool', 'Rebuild'].includes(c.approach) || (c.playoffPct != null && c.playoffPct < 0.25);
+    lines.push(`<div class="rs-ctx-line">${rsTeamChip(owner.id, m)}</div>`);
+    lines.push(`<p class="rs-uth-line">${c.playoffPct != null ? `${rsPct(c.playoffPct)} playoff odds. ` : ''}${owner.id === state.myTeamId ? 'Your player.' : motivated ? 'Owner looks like a seller.' : ['All-in', 'Contend'].includes(c.approach) ? 'Owner is contending: expect a premium price.' : 'Owner is on the fence.'}</p>`);
+  } else {
+    lines.push('<p class="rs-uth-line">Free agent. Claim on ESPN.</p>');
+  }
+  if (entry.buy) lines.push(`<div class="rs-verdict-box rs-v-buy"><span class="rs-v-tag">Buy-low score ${entry.buy.score.toFixed(1)}</span><ul>${entry.buy.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>`);
+  if (entry.sell) lines.push(`<div class="rs-verdict-box rs-v-sell"><span class="rs-v-tag">Sell-high score ${entry.sell.score.toFixed(1)}</span><ul>${entry.sell.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul></div>`);
+  if (p && ResearchEngine.POS.includes(p.pos)) {
+    const need = Object.entries(m.teamCtx)
+      .filter(([id, c]) => Number(id) !== owner?.id && c.weakPos.includes(p.pos))
+      .sort((a, b) => (b[1].playoffPct || 0) - (a[1].playoffPct || 0))
+      .slice(0, 4);
+    if (need.length) lines.push(`<p class="rs-uth-line">Teams thin at ${p.pos}: ${need.map(([id, c]) => `<b>${escapeHtml(c.name)}</b> (${escapeHtml(c.record)}, ${escapeHtml(c.approach)})`).join(', ')}</p>`);
+  }
+  return `<h5>League context</h5>${lines.join('')}`;
 }

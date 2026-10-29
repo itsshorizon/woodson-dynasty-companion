@@ -113,3 +113,48 @@ test('moves never comes back empty', () => {
   assert.equal(m.length, 1);
   assert.equal(m[0].kind, 'hold');
 });
+
+test('identity: odds + lineup decide Now, value + youth + picks decide Future', () => {
+  const teams = [
+    { id: 1, playoffPct: 0.95, rosRank: 1, pfRank: 1, valueRank: 4, ageDelta: 0, pickDelta: 0 },
+    { id: 2, playoffPct: 0.6, rosRank: 4, pfRank: 5, valueRank: 6, ageDelta: 0, pickDelta: 0 },
+    { id: 3, playoffPct: 0.3, rosRank: 7, pfRank: 6, valueRank: 7, ageDelta: 0, pickDelta: 0 },
+    { id: 4, playoffPct: 0.05, rosRank: 10, pfRank: 11, valueRank: 1, ageDelta: -2, pickDelta: 3 },
+    { id: 5, playoffPct: 0.02, rosRank: 12, pfRank: 12, valueRank: 12, ageDelta: 2, pickDelta: -3 },
+  ];
+  while (teams.length < 12) teams.push({ id: teams.length + 1, playoffPct: 0.5, rosRank: 6, pfRank: 6, valueRank: 6, ageDelta: 0, pickDelta: 0 });
+  const id = R.identity(teams);
+  assert.equal(id[1].label, 'All-in');
+  assert.equal(id[2].label, 'Contend');
+  assert.equal(id[3].label, 'On the fence');
+  assert.equal(id[4].label, 'Retool');
+  assert.equal(id[5].label, 'Rebuild');
+  assert.ok(id[4].future > id[5].future);
+  assert.ok(id[4].reasons.some((r) => r.includes('younger')));
+  // Every approach maps to a trade-engine team mode and back
+  R.APPROACHES.forEach((a) => assert.ok(R.APPROACH_WINDOW[a]));
+});
+
+test('market: unlucky player on a losing team is a buy-low; lucky vet with buyers is a sell-high', () => {
+  const teams = {
+    1: { name: 'Sellers', record: '1-6', playoffPct: 0.03, approach: 'Rebuild', weakPos: [] },
+    2: { name: 'Buyers', record: '6-1', playoffPct: 0.9, approach: 'All-in', weakPos: ['WR'] },
+    3: { name: 'Me', record: '4-3', playoffPct: 0.5, approach: 'On the fence', weakPos: [] },
+  };
+  const m = R.market({
+    teams,
+    players: [
+      { id: 10, name: 'Unlucky WR', pos: 'WR', age: 26, value: 3000, career: 'Prime', trend30: -300, ownerId: 1,
+        adv: { fpoe: -4, tdd: -2, td: 1, xtd: 3, xfp: 17, fp: 13, trXfp: 0, xfpRank: 12 } },
+      { id: 11, name: 'Lucky Vet WR', pos: 'WR', age: 30, value: 2500, career: 'Declining', trend30: 300, ownerId: 3,
+        adv: { fpoe: 5, tdd: 3, td: 7, xtd: 4, xfp: 12, fp: 17, trXfp: -2, xfpRank: 30 } },
+      { id: 12, name: 'Steady WR', pos: 'WR', age: 25, value: 4000, career: 'Prime', trend30: 0, ownerId: 2,
+        adv: { fpoe: 0.3, tdd: 0.2, td: 3, xtd: 2.8, xfp: 15, fp: 15.3, trXfp: 0, xfpRank: 15 } },
+    ],
+  });
+  assert.ok(m[10].buy.score >= 2.5);
+  assert.ok(m[10].buy.reasons.some((r) => r.includes('likely seller')));
+  assert.ok(m[11].sell.score >= 2.5);
+  assert.deepEqual(m[11].sell.buyers, [2]);
+  assert.equal(m[12], undefined, 'nothing to say about a steady player');
+});
