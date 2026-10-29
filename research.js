@@ -517,12 +517,23 @@ function rsRenderNews() {
   });
 }
 
-// "Latest news" block on the player card (called from openPlayerProfile).
+// Player card additions (called from openPlayerProfile): Under the Hood
+// near the top, Latest News above the career arc.
 function rsEnhanceProfile(playerId) {
   RS.profileId = playerId;
+  const live = () => RS.profileId === playerId && !$('#player-profile-modal').hidden && $('#player-profile-body');
+  rsLoadAdvanced().then(() => {
+    const body = live();
+    if (!body) return;
+    body.querySelector('.rs-uth')?.remove();
+    const anchor = body.querySelector('.weekly-legend') || body.querySelector('.profile-stats + .empty') || body.querySelector('.profile-stats');
+    const html = rsUnderHoodHTML(playerId);
+    if (anchor) anchor.insertAdjacentHTML('afterend', html);
+    else body.insertAdjacentHTML('afterbegin', html);
+  });
   rsLoadNews().then((news) => {
-    const body = $('#player-profile-body');
-    if (!body || RS.profileId !== playerId || $('#player-profile-modal').hidden) return;
+    const body = live();
+    if (!body) return;
     body.querySelector('.rs-profile-news')?.remove();
     const list = (news.players[playerId] || []).slice(0, 3);
     const html = `
@@ -535,6 +546,132 @@ function rsEnhanceProfile(playerId) {
     if (arc) arc.insertAdjacentHTML('beforebegin', html);
     else body.insertAdjacentHTML('beforeend', html);
   });
+}
+
+/* ----------------------- Under the Hood ----------------------- *
+ * data/advanced.json (pipeline/advanced.js): expected points in league
+ * scoring, TD luck, usage trends, red zone, schedule, ROS projection and
+ * workload. Every number a Research view uses also shows here.
+ */
+
+const RS_VERDICT = {
+  buy: { label: 'Buy low', cls: 'buy' },
+  sell: { label: 'Sell high', cls: 'sell' },
+  ride: { label: 'Ride it', cls: 'ride' },
+  hold: { label: 'Hold', cls: 'hold' },
+};
+const RS_GRADE_LABEL = { great: 'Great', good: 'Good', tough: 'Tough', bad: 'Bad' };
+
+function rsLoadAdvanced() {
+  if (RS.adv) return Promise.resolve(RS.adv);
+  return fetchJSON('./data/advanced.json')
+    .catch(() => null)
+    .then((d) => { RS.adv = d && d.players ? d : { players: {}, defense: {} }; return RS.adv; });
+}
+
+const rsAdv = (id) => RS.adv?.players?.[String(id)] || null;
+const rsPctTxt = (x, d = 0) => (x == null ? '—' : `${(x * 100).toFixed(d)}%`);
+const rsDelta = (x, pct = false) => {
+  if (x == null || Math.abs(x) < (pct ? 0.01 : 0.3)) return '<span class="rs-flat">→</span>';
+  const txt = pct ? `${Math.abs(x * 100).toFixed(0)}` : Math.abs(x).toFixed(1);
+  return x > 0 ? `<span class="tv-up">▲${txt}</span>` : `<span class="tv-down">▼${txt}</span>`;
+};
+
+// Tiny inline sparkline; values may contain nulls.
+function rsSpark(values, max) {
+  const pts = values.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (pts.length < 2) return '';
+  const top = max ?? Math.max(...pts.map(([, v]) => v), 0.0001);
+  const w = 100, h = 26, n = values.length - 1 || 1;
+  const xy = pts.map(([i, v]) => `${((i / n) * w).toFixed(1)},${(h - (v / top) * (h - 3) - 1.5).toFixed(1)}`).join(' ');
+  return `<svg class="rs-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${xy}" /></svg>`;
+}
+
+function rsUsageRow(label, seasonTxt, delta, spark) {
+  return `<div class="rs-use-row"><span class="rs-use-lbl">${label}</span><span class="rs-use-val">${seasonTxt}</span><span class="rs-use-d">${delta}</span><span class="rs-use-spark">${spark}</span></div>`;
+}
+
+function rsUnderHoodHTML(playerId) {
+  const a = rsAdv(playerId);
+  const head = `<h4>🔬 Under the Hood${RS.adv?.throughWeek ? ` <span class="rs-uth-sub">through week ${RS.adv.throughWeek}</span>` : ''}</h4>`;
+  if (!a) {
+    return `<div class="rs-uth">${head}<p class="tv-note">No NFL snaps tracked for this player this season yet.</p></div>`;
+  }
+  const s = a.s, r = a.r || {}, tr = a.tr, ros = a.ros, pos = a.pos;
+  const v = RS_VERDICT[a.v?.tag] || RS_VERDICT.hold;
+  const rank = (k) => (r[k] ? `${pos}${r[k]}` : '');
+  const w = a.w || [];
+  const col = (i) => w.map((x) => x[i]);
+  const isRec = pos !== 'QB';
+  const tdTxt = s.tdd >= 0.5 ? `+${s.tdd.toFixed(1)} over` : s.tdd <= -0.5 ? `${Math.abs(s.tdd).toFixed(1)} under` : 'right on';
+
+  const eff = `
+    <div class="rs-stats">
+      ${rsStat('xFP / game', s.xfp.toFixed(1), rank('xfp') ? `${rank('xfp')} by usage` : 'expected points')}
+      ${rsStat('Actual / game', s.fp.toFixed(1), rank('fp') ? `${rank('fp')} by results` : '')}
+      ${rsStat('Over expected', `${s.fpoe > 0 ? '+' : ''}${s.fpoe.toFixed(1)}`, 'per game', s.fpoe >= 2 ? 'good' : s.fpoe <= -2 ? 'bad' : '')}
+      ${rsStat('TDs vs expected', `${s.td} / ${s.xtd.toFixed(1)}`, tdTxt, s.tdd >= 1.5 ? 'good' : s.tdd <= -1.5 ? 'bad' : '')}
+      ${isRec && s.cro != null ? rsStat('Catch rate vs exp', `${s.cro > 0 ? '+' : ''}${(s.cro * 100).toFixed(0)}%`, 'per target') : ''}
+      ${isRec && s.adot != null && pos !== 'RB' ? rsStat('aDOT', s.adot.toFixed(1), 'air yards / target') : ''}
+    </div>`;
+
+  const usage = `
+    <div class="rs-use">
+      <div class="rs-use-row rs-use-head"><span></span><span>Season</span><span>Last 3</span><span>Weekly</span></div>
+      ${s.snap != null ? rsUsageRow('Snap %', rsPctTxt(s.snap), rsDelta(tr?.snap, true), rsSpark(col(2), 1)) : ''}
+      ${isRec ? rsUsageRow('Target share', rsPctTxt(s.tgtSh), rsDelta(tr?.tgtSh, true), rsSpark(col(3))) : ''}
+      ${pos === 'RB' || pos === 'QB' ? rsUsageRow('Rush share', rsPctTxt(s.rushSh), rsDelta(tr?.rushSh, true), rsSpark(col(4))) : ''}
+      ${rsUsageRow('xFP', s.xfp.toFixed(1), rsDelta(tr?.xfp), rsSpark(col(6)))}
+    </div>
+    <p class="rs-uth-line">Red zone: <b>${s.rz}</b> looks (${rsPctTxt(s.rzSh)} of team) · ${pos === 'QB' ? `${(s.car / s.g).toFixed(1)} rushes` : `${s.touches.toFixed(1)} touches`}/game · ${s.g} games</p>`;
+
+  const span = Math.max(ros.ceil, 1);
+  const proj = `
+    <div class="rs-proj-line">
+      <div><span class="rs-big">${ros.ppg.toFixed(1)}</span> <span class="rs-stat-label">ROS PPG${rank('ros') ? ` · ${rank('ros')}` : ''}</span></div>
+      <div class="rs-range"><span class="rs-range-bar" style="left:${(ros.floor / span) * 100}%;right:0%"></span><span class="rs-range-dot" style="left:${(ros.ppg / span) * 100}%"></span></div>
+      <div class="rs-range-lbl"><span>Floor ${ros.floor.toFixed(1)}</span><span>Ceiling ${ros.ceil.toFixed(1)}</span></div>
+      <p class="tv-note">${ros.games} games left${ros.total ? ` · ~${ros.total} pts` : ''}. Usage-weighted (60% expected, 40% actual), adjusted for schedule. Floor and ceiling are a typical bad and good week.</p>
+    </div>`;
+
+  const sched = `
+    <div class="rs-sched-chips">
+      <span class="rs-chip rs-sos-${ros.sosLabel}">${ros.sosLabel === 'easy' ? 'Easy' : ros.sosLabel === 'hard' ? 'Hard' : 'Average'} schedule (${Math.round((ros.sos - 1) * 100) >= 0 ? '+' : ''}${Math.round((ros.sos - 1) * 100)}%)</span>
+      ${ros.bye ? `<span class="rs-chip">Bye wk ${ros.bye}${ros.bye <= (RS.adv.throughWeek || 0) ? ' (done)' : ''}</span>` : ''}
+    </div>
+    ${ros.playoffs?.length ? `<div class="rs-playoffs"><span class="rs-stat-label">Fantasy playoffs</span>${ros.playoffs.map(([wk, opp, g]) => `<span class="rs-chip rs-grade-chip-${g || 'none'}">Wk ${wk} ${escapeHtml(opp === 'BYE' ? 'BYE' : 'vs ' + opp)}${g ? ` · ${RS_GRADE_LABEL[g]}` : ''}</span>`).join('')}</div>` : ''}`;
+
+  const wl = a.wl || { level: 'Low', factors: [] };
+  const workload = `
+    <div class="rs-wl rs-wl-${wl.level.toLowerCase()}">
+      <b>Workload watch: ${wl.level}</b>
+      ${wl.factors.length ? `<ul>${wl.factors.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : '<span> No usage, age or injury flags.</span>'}
+      <span class="tv-note">A risk factor, not a prediction.</span>
+    </div>`;
+
+  const table = `
+    <details class="rs-weekly">
+      <summary>Week by week</summary>
+      <div class="rs-table-wrap"><table class="career-arc-table">
+        <thead><tr><th>Wk</th><th>Opp</th><th class="num">Snap</th><th class="num">${isRec ? 'Tgt' : 'Att'}</th><th class="num">Car</th><th class="num">RZ</th><th class="num">xFP</th><th class="num">FP</th><th class="num">TD/xTD</th></tr></thead>
+        <tbody>${w.map((x) => `<tr><td>${x[0]}</td><td>${escapeHtml(x[1] || '')}</td><td class="num">${x[2] != null ? Math.round(x[2] * 100) + '%' : '—'}</td><td class="num">${x[10]}</td><td class="num">${x[11]}</td><td class="num">${x[5]}</td><td class="num">${x[6].toFixed(1)}</td><td class="num"><b>${x[7].toFixed(1)}</b></td><td class="num">${x[8]}/${x[9].toFixed(1)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </details>`;
+
+  return `
+    <div class="rs-uth" data-player-id="${playerId}">
+      ${head}
+      <div class="rs-verdict-box rs-v-${v.cls}">
+        <span class="rs-v-tag">${v.label}</span>
+        <ul>${(a.v?.reasons || []).map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+      </div>
+      <h5>Efficiency</h5>${eff}
+      <h5>Usage</h5>${usage}
+      <h5>Rest of season</h5>${proj}
+      <h5>Schedule</h5>${sched}
+      ${workload}
+      ${table}
+    </div>`;
 }
 
 /* ----------------------- Ask Claude ----------------------- *

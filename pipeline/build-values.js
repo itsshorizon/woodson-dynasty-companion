@@ -9,6 +9,7 @@
  *   data/values.json             small, loaded with the Trades tab
  *   data/player-details.json     lazy-loaded when a player profile opens
  *   data/waivers.json            unrostered players (status, % rostered) for the Waivers pane
+ *   data/advanced.json           expected points, TD luck, usage trends, schedule, projections (advanced.js)
  *   data/history/YYYY-MM-DD.json compact daily snapshot (trend lines + audit)
  *
  * Run:
@@ -19,6 +20,7 @@
  */
 
 const fs = require('fs');
+const { buildAdvanced } = require('./advanced');
 const path = require('path');
 const zlib = require('zlib');
 
@@ -30,6 +32,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const LEAGUE_ID = '196674771';
 const SEASON = Number(process.env.SEASON || 2026);
 const NFLVERSE = 'https://github.com/nflverse/nflverse-data/releases/download';
+const FFOPP = 'https://github.com/ffverse/ffopportunity/releases/download/latest-data';
 const DP = 'https://raw.githubusercontent.com/dynastyprocess/data/master/files';
 const ESPN = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${SEASON}/segments/0/leagues/${LEAGUE_ID}`;
 
@@ -88,12 +91,12 @@ function parseCSV(text) {
   return rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] === 'NA' ? '' : r[i]])));
 }
 
-async function readParquet(url) {
+async function readParquet(url, columns) {
   const { parquetReadObjects } = await import('hyparquet');
   const { compressors } = await import('hyparquet-compressors');
   const buf = await fetchRaw(url);
   const file = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-  return parquetReadObjects({ file, compressors });
+  return parquetReadObjects({ file, compressors, ...(columns ? { columns } : {}) });
 }
 
 const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? 0 : Number(v));
@@ -122,10 +125,17 @@ async function loadSources() {
     optional(fetchCSV(`${NFLVERSE}/snap_counts/snap_counts_${SEASON}.csv.gz`), `${SEASON} snaps`),
     optional(readParquet(`${NFLVERSE}/contracts/historical_contracts.parquet`), 'contracts'),
   ]);
+  // Advanced-stat sources (advanced.js). Optional: values publish without them.
+  const [ep, pbp, games] = await Promise.all([
+    optional(fetchCSV(`${FFOPP}/ep_weekly_${SEASON}.csv`), `${SEASON} expected points`),
+    optional(readParquet(`${NFLVERSE}/pbp/play_by_play_${SEASON}.parquet`,
+      ['week', 'season_type', 'posteam', 'play_type', 'yardline_100', 'receiver_player_id', 'rusher_player_id', 'two_point_attempt']), `${SEASON} play-by-play`),
+    optional(fetchCSV(`${NFLVERSE}/schedules/games.csv.gz`), 'NFL schedule'),
+  ]);
   return { fc, dpPlayers, dpPicks, dpIds, nflPlayers, sleeper, league,
     stats: { [SEASON]: stats2026, [SEASON - 1]: stats2025, [SEASON - 2]: stats2024 },
     injuries: { [SEASON]: inj2026, [SEASON - 1]: inj2025, [SEASON - 2]: inj2024 },
-    snaps2026, contracts };
+    snaps2026, contracts, ep, pbp, games };
 }
 
 /* ---------------- weekly fantasy points (ESPN, our scoring) ---------------- */
@@ -635,6 +645,7 @@ async function main() {
   const snaps = buildSnaps(src.snaps2026, ids.pfrToGsis);
 
   const valuesOut = {}, detailsOut = {}, historyOut = {};
+  const ages = new Map(); // espn → age, for advanced.js workload
   const universe = new Set([...players.keys(), ...[...rostered.entries()].filter(([, r]) => POSITIONS.includes(r.pos)).map(([id]) => id)]);
 
   for (const espn of universe) {
@@ -644,6 +655,7 @@ async function main() {
     const age = p && p.age ? round(p.age, 1) : (sl && sl.birth_date ? round((Date.now() - Date.parse(sl.birth_date)) / 31557600000, 1) : null);
     const pos = (p && p.pos) || (rostered.get(espn) || {}).pos;
     const contract = gsis ? contracts.get(gsis) : null;
+    if (age != null) ages.set(espn, age);
 
     if (p) {
       const dv = Math.round(p.adjusted * k);
@@ -689,6 +701,30 @@ async function main() {
       snaps: gsis && snaps.get(gsis) ? snaps.get(gsis) : null,
       stats: Object.keys(yrStats).length ? yrStats : null,
     };
+  }
+
+  // Under-the-hood numbers. A failure here never blocks trade values.
+  let advanced = null;
+  if (src.ep) {
+    try {
+      const sch = settings.scheduleSettings || {};
+      const regWeeks = sch.matchupPeriodCount || 14;
+      const rounds = Math.ceil(Math.log2(Math.max(2, sch.playoffTeamCount || 6)));
+      const roundLen = sch.playoffMatchupPeriodLength || 1;
+      const lastWeek = regWeeks + rounds * roundLen;
+      advanced = buildAdvanced({
+        season: SEASON, ep: src.ep, stats: src.stats[SEASON], snaps: src.snaps2026, pbp: src.pbp, games: src.games,
+        scoring: leagueScore, scoreRow, gsisToEspn: ids.gsisToEspn, pfrToGsis: ids.pfrToGsis, ages,
+        ageCurves: CONFIG.ageCurves, injuries, lastWeek,
+        playoffWeeks: Array.from({ length: lastWeek - regWeeks }, (_, i) => regWeeks + 1 + i),
+      });
+      advanced.generatedAt = new Date().toISOString();
+      advanced.regularSeasonWeeks = regWeeks;
+      advanced.playoffWeeks = Array.from({ length: lastWeek - regWeeks }, (_, i) => regWeeks + 1 + i);
+      console.log(`\nAdvanced stats: ${Object.keys(advanced.players).length} players through week ${advanced.throughWeek}`);
+    } catch (err) {
+      console.warn(`  ! advanced stats skipped: ${err.message}`);
+    }
   }
 
   const pickValues = {};
@@ -763,6 +799,7 @@ async function main() {
     fs.writeFileSync(path.join(DATA_DIR, 'values.json'), JSON.stringify(values));
     fs.writeFileSync(path.join(DATA_DIR, 'player-details.json'), JSON.stringify({ generatedAt, season: SEASON, players: detailsOut }));
     if (weekly) fs.writeFileSync(path.join(DATA_DIR, 'weekly.json'), JSON.stringify({ generatedAt, season: SEASON, throughWeek: currentWeek, players: weekly }));
+    if (advanced) fs.writeFileSync(path.join(DATA_DIR, 'advanced.json'), JSON.stringify(advanced));
     if (waivers) fs.writeFileSync(path.join(DATA_DIR, 'waivers.json'), JSON.stringify({ generatedAt, season: SEASON, week: currentWeek, players: waivers }));
     const day = generatedAt.slice(0, 10);
     fs.writeFileSync(path.join(DATA_DIR, 'history', `${day}.json`), JSON.stringify({ d: day, p: historyOut, k: pickValues }));
