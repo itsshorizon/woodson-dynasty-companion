@@ -1,11 +1,11 @@
 {
-  "version": "1.32.0",
-  "title": "🗺️ Your Plan",
+  "version": "1.33.0",
+  "title": "📈 Game Flow",
   "notes": [
-    "🗺️ Research → Plan (was Moves) opens with your strategy paths: Push now, Sell high and reload, or Hold and tweak. Each one is written from your real numbers, recommends one based on your approach, and comes with fair offers you can load into the Trade Desk.",
-    "🛒 Buy targets come from teams likely to sell, and sell-high offers go first to contenders thin at that position.",
-    "🏆 Title odds: the simulation now plays out the playoff bracket, so Outlook shows your chances to reach the final and win it.",
-    "🤝 Player cards have a Build a trade button. For other teams' players it finds fair offers to get them. For yours it shops them around the league.",
-    "🤖 Ask Claude now sends your team identity, chosen approach, strategy paths, buy-low and sell-high lists, and the under-the-hood numbers for your roster."
+    "📈 Full-screen matchups have a new Game Flow chart: both teams' scores over the week, lead changes, a dashed line to each projected finish, and a win % strip underneath. Drag across it to see the score and the plays at any moment.",
+    "🔥 Scoring plays: every score for either team shows up in a feed as it happens (big plays are highlighted). Points scored while the app was closed show up as \"away\". Tap a play to see how it scored.",
+    "📊 New mini charts: points by position for both lineups, and a Path to Win card that shows what each side still needs.",
+    "🟩 Each player's row now has a thin bar showing how close they are to their projection.",
+    "🏈 Psst… when ESPN is down there's something to do while you wait. (Or tap the week title in full screen five times.)"
   ]
 }

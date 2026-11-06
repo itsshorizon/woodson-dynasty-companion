@@ -1,6 +1,6 @@
 /* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
  * and every ?v= in index.html to the same version. */
-const CACHE_NAME = 'wcc-v1.32.0';
+const CACHE_NAME = 'wcc-v1.33.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,16 @@ const CORE_ASSETS = [
   './research.js',
   './activity-engine.js',
   './social.js',
+  './minigame.js',
+  './assets/minigame/run.png',
+  './assets/minigame/jump.png',
+  './assets/minigame/hurt.png',
+  './assets/minigame/slide.png',
+  './assets/minigame/lineman.png',
+  './assets/minigame/diver.png',
+  './assets/minigame/football.png',
+  './assets/minigame/turf.png',
+  './assets/minigame/stadium.jpg',
   './manifest.json',
   './history.json'
 ];

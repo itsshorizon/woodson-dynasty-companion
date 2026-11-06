@@ -903,31 +903,88 @@ function noteChanges() {
   state.bumped = bumped;
   clearTimeout(flashTimer);
   if (bumped.size) flashTimer = setTimeout(() => { state.bumped = new Set(); }, 2000);
+  recordPlays();
 }
 const bumpCls = (key) => (state.bumped?.has(key) ? 'bump' : '');
 
-/* Win-probability history, kept per device so the full-screen view can show
- * how a matchup swung. Stored as [time, home win %] points per matchup. */
+const readStore = (key, fallback) => {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
+};
+const writeStore = (key, val) => {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* storage full or blocked */ }
+};
+
+/* Matchup history, kept per device so the full-screen view can show how a
+ * matchup played out. Each point is [time, home win %, home score, away score];
+ * points from before Beta 1.33 only have the first two. */
 const wpStoreKey = (week) => `wcc-wp-${CONFIG.SEASON}-${week}`;
-function wpHistory(week) {
-  try { return JSON.parse(localStorage.getItem(wpStoreKey(week)) || '{}') || {}; } catch { return {}; }
-}
+const wpHistory = (week) => readStore(wpStoreKey(week), {});
 function recordWinProbs() {
   const week = state.matchups[0]?.week;
   if (!week) return;
   const store = wpHistory(week);
   let changed = false;
   state.matchups.forEach((m) => {
-    if (m.winProbEst || m.home.winProb == null) return;
+    if (m.home.winProb == null) return;
     const v = Math.round(m.home.winProb * 100);
+    const hs = Math.round(m.home.score * 100) / 100, as = Math.round(m.away.score * 100) / 100;
     const list = store[matchupKey(m)] || (store[matchupKey(m)] = []);
-    if (list.length && list[list.length - 1][1] === v) return;
-    list.push([Date.now(), v]);
-    if (list.length > 400) list.splice(0, list.length - 400);
+    const last = list[list.length - 1];
+    if (last && last[1] === v && last[2] === hs && last[3] === as) return;
+    // Pregame estimates only matter once: skip them after the first reading.
+    if (m.winProbEst && last && !hs && !as) return;
+    list.push([Date.now(), v, hs, as]);
+    if (list.length > 600) list.splice(0, list.length - 600);
     changed = true;
   });
-  if (!changed) return;
-  try { localStorage.setItem(wpStoreKey(week), JSON.stringify(store)); } catch { /* storage full or blocked */ }
+  if (changed) writeStore(wpStoreKey(week), store);
+}
+
+/* Scoring plays. Each poll compares every starter's points (and stat counts)
+ * with the last reading, and logs any jump of a point or more as a play:
+ * { t, id, team, name, d (points), tags ("Rec TD", "34 Rec Yds"), away }.
+ * The last readings are saved too, so points scored while the app was
+ * closed show up as "while you were away" plays on the next open. */
+const playsKey = (week) => `wcc-plays-${CONFIG.SEASON}-${week}`;
+const playsSeenKey = (week) => `wcc-plays-seen-${CONFIG.SEASON}-${week}`;
+const playsFor = (week) => readStore(playsKey(week), []);
+let playsSeen = null; // { week, map: { [playerId]: { p: pts, s: { statId: count } } } }
+function recordPlays() {
+  const week = state.currentWeek;
+  const box = state.boxscores[week];
+  if (!box?.live) return;
+  if (playsSeen?.week !== week) playsSeen = { week, map: readStore(playsSeenKey(week), {}), fresh: true };
+  const seen = playsSeen.map;
+  const fresh = playsSeen.fresh;
+  playsSeen.fresh = false;
+  const plays = playsFor(week);
+  const now = Date.now();
+  let added = false;
+  Object.entries(box.byTeam).forEach(([teamId, list]) => {
+    list.forEach((p) => {
+      if (p.pts == null) return;
+      const counts = Object.fromEntries((p.breakdown || []).map((b) => [b.id, b.count ?? 0]));
+      const prev = seen[p.id];
+      seen[p.id] = { p: p.pts, s: counts };
+      if (!prev || p.slot === 'BE' || p.slot === 'IR') return;
+      const d = p.pts - prev.p;
+      if (Math.abs(d) < 1) { seen[p.id] = prev; return; } // let small gains add up
+      const tags = (p.breakdown || [])
+        .map((b) => ({ b, n: (b.count ?? 0) - (prev.s[b.id] ?? 0) }))
+        .filter(({ n }) => n > 0)
+        .sort((x, y) => (/TD/.test(STAT_LABELS[y.b.id]) - /TD/.test(STAT_LABELS[x.b.id])) || Math.abs(y.b.pts) - Math.abs(x.b.pts))
+        .slice(0, 3)
+        .map(({ b, n }) => {
+          const label = STAT_LABELS[b.id] || 'Stat';
+          return /TD|2-Pt|INT|Fumble/.test(label) && n === 1 ? label : `${Math.round(n)} ${label}`;
+        });
+      plays.push({ t: now, id: p.id, team: Number(teamId), name: shortName(p.name), d: Math.round(d * 100) / 100, tags, away: fresh || undefined });
+      added = true;
+    });
+  });
+  if (plays.length > 500) plays.splice(0, plays.length - 500);
+  if (added) writeStore(playsKey(week), plays);
+  writeStore(playsSeenKey(week), seen);
 }
 
 const pct = (p) => Math.round(p * 100);
@@ -964,31 +1021,326 @@ function winProbBar(m, big = false) {
     </div>`;
 }
 
-// The chart's top edge is the first side winning outright.
-function wpSparkline(m, topName, bottomName) {
-  const flip = sidesOf(m)[0] === 'home';
-  const pts = wpHistory(m.week)[matchupKey(m)] || [];
-  if (pts.length < 2) return '';
-  const W = 300, H = 56;
-  const t0 = pts[0][0], span = (pts[pts.length - 1][0] - t0) || 1;
-  // Step line: a win % holds until the next reading.
-  let d = '';
-  pts.forEach(([t, v], i) => {
-    const x = ((t - t0) / span * W).toFixed(1), y = ((flip ? 100 - v : v) / 100 * H).toFixed(1);
-    d += i ? ` H${x} V${y}` : `M${x},${y}`;
+/* ----------------------- Game flow chart -----------------------
+ * Both teams' scores over the week, with the projected finish dashed on the
+ * right and a win % strip underneath. Time is "compressed": a gap longer than
+ * 40 minutes (overnight, between game windows) collapses, so Thursday,
+ * Sunday and Monday sit side by side instead of the chart being mostly empty.
+ * Drag across it to scrub.
+ * -------------------------------------------------------------- */
+const GF_GAP = 40 * 60 * 1000;
+let gfLast = null; // series behind the chart on screen, for scrubbing
+
+// [{ t, a, b, wp }] with a/b/wp from the first side's point of view.
+function gameFlowSeries(m) {
+  const [first, second] = sidesOf(m);
+  const homeFirst = first === 'home';
+  const rows = (wpHistory(m.week)[matchupKey(m)] || []).filter((e) => e.length >= 4);
+  const pts = rows.map(([t, wp, hs, as]) => ({ t, a: homeFirst ? hs : as, b: homeFirst ? as : hs, wp: homeFirst ? wp : 100 - wp }));
+  const wpNow = m[first].winProb != null ? Math.round(m[first].winProb * 100)
+    : m.winner === winnerCode(first) ? 100 : m.winner === winnerCode(second) ? 0 : 50;
+  const now = { t: Date.now(), a: m[first].score, b: m[second].score, wp: wpNow };
+  const last = pts[pts.length - 1];
+  if (!last || Math.abs(last.a - now.a) > 0.005 || Math.abs(last.b - now.b) > 0.005) {
+    // A past week: the reading is the final, so it lands right after the last one.
+    if (m.week !== state.currentWeek) now.t = (last?.t ?? now.t) + 1;
+    pts.push(now);
+  }
+  // Start from kickoff (0–0) even when the first reading came mid-game.
+  if (pts[0].a > 0 || pts[0].b > 0) pts.unshift({ t: pts[0].t - GF_GAP, a: 0, b: 0, wp: pts[0].wp, origin: true });
+  return pts;
+}
+
+// Monotone cubic through the points, so the line never overshoots a score.
+function smoothPath(xy) {
+  if (xy.length < 2) return '';
+  const n = xy.length;
+  const dx = [], s = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = xy[i + 1][0] - xy[i][0] || 1e-6;
+    s[i] = (xy[i + 1][1] - xy[i][1]) / dx[i];
+  }
+  const tan = [s[0]];
+  for (let i = 1; i < n - 1; i++) tan[i] = s[i - 1] * s[i] <= 0 ? 0 : (3 * (dx[i - 1] + dx[i])) / ((2 * dx[i] + dx[i - 1]) / s[i - 1] + (dx[i] + 2 * dx[i - 1]) / s[i]);
+  tan[n - 1] = s[n - 2];
+  let d = `M${xy[0][0].toFixed(1)},${xy[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3;
+    d += ` C${(xy[i][0] + h).toFixed(1)},${(xy[i][1] + tan[i] * h).toFixed(1)} ${(xy[i + 1][0] - h).toFixed(1)},${(xy[i + 1][1] - tan[i + 1] * h).toFixed(1)} ${xy[i + 1][0].toFixed(1)},${xy[i + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+
+const teamTag = (t) => escapeHtml(t.abbrev || (t.name || '').slice(0, 4).toUpperCase());
+
+function gameFlowHTML(m) {
+  const [first, second] = sidesOf(m);
+  const ta = teamById(m[first].teamId) || BYE_TEAM, tb = teamById(m[second].teamId) || BYE_TEAM;
+  const pts = gameFlowSeries(m);
+  const undecided = m.winner === 'UNDECIDED';
+  const projA = undecided ? m[first].proj : null, projB = undecided ? m[second].proj : null;
+  const showProj = projA != null && projB != null && m.week === state.currentWeek;
+
+  // Compressed time → x units, with a day label wherever a long gap was cut.
+  let u = 0;
+  const breaks = [];
+  pts.forEach((p, i) => {
+    if (i) {
+      const gap = p.t - pts[i - 1].t;
+      u += Math.min(gap, GF_GAP);
+      if (gap > 3 * 3600 * 1000 && !pts[i - 1].origin) breaks.push(u);
+    }
+    p.u = u;
   });
+  const span = u || 1;
+  const projU = showProj ? span * 0.22 : 0;
+  const W = 600, H = 170, SH = 44, PAD = 8;
+  const X = (uu) => (uu / (span + projU)) * W;
+  const top = Math.max(10, ...pts.map((p) => Math.max(p.a, p.b)), showProj ? Math.max(projA, projB) : 0) * 1.08;
+  const Y = (v) => H - PAD - (v / top) * (H - PAD * 2);
+  const xyA = pts.map((p) => [X(p.u), Y(p.a)]), xyB = pts.map((p) => [X(p.u), Y(p.b)]);
+  const lineA = smoothPath(xyA), lineB = smoothPath(xyB);
+  const area = (line, xy) => `${line} L${xy[xy.length - 1][0].toFixed(1)},${H} L${xy[0][0].toFixed(1)},${H} Z`;
+  const end = pts[pts.length - 1];
+  const ex = X(end.u);
+
+  // Grid: a few round score lines.
+  const step = [10, 20, 25, 50].find((s) => top / s <= 5) || 50;
+  const grid = [];
+  for (let v = step; v < top; v += step) grid.push(`<line x1="0" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gf-grid" />`);
+
+  // Win % strip: the first side's share above the middle, the other's below.
+  const wpXY = pts.map((p) => [X(p.u), SH - (p.wp / 100) * SH]);
+  const wpLine = smoothPath(wpXY);
+  const wpArea = `${wpLine} L${wpXY[wpXY.length - 1][0].toFixed(1)},${SH / 2} L${wpXY[0][0].toFixed(1)},${SH / 2} Z`;
+
+  // Headline numbers.
+  let changes = 0, leader = 0, bigA = 0, bigB = 0;
+  pts.forEach((p) => {
+    const lead = Math.sign(Math.round((p.a - p.b) * 100));
+    if (lead && leader && lead !== leader) changes++;
+    if (lead) leader = lead;
+    bigA = Math.max(bigA, p.a - p.b);
+    bigB = Math.max(bigB, p.b - p.a);
+  });
+  const facts = [
+    `${changes} lead change${changes === 1 ? '' : 's'}`,
+    bigA >= 0.05 ? `${teamTag(ta)} led by ${bigA.toFixed(1)}` : '',
+    bigB >= 0.05 ? `${teamTag(tb)} led by ${bigB.toFixed(1)}` : '',
+  ].filter(Boolean).join(' · ');
+
+  const pctX = (x) => `${(x / W * 100).toFixed(2)}%`;
+  const pctY = (y) => `${(y / H * 100).toFixed(2)}%`;
+  gfLast = { key: matchupKey(m), pts, xs: pts.map((p) => X(p.u) / W), ya: pts.map((p) => Y(p.a) / H), yb: pts.map((p) => Y(p.b) / H), week: m.week, ta, tb, teamA: m[first].teamId, teamB: m[second].teamId };
+  const thin = pts.length <= 2;
+
   return `
-    <div class="wp-spark">
-      <div class="wp-spark-h">Win % swing <span>since you started watching</span></div>
-      <div class="wp-spark-plot">
-        <span class="wp-spark-lbl top">${escapeHtml(topName)}</span>
-        <span class="wp-spark-lbl bot">${escapeHtml(bottomName)}</span>
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-          <line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" class="mid" />
-          <path d="${d}" />
-        </svg>
+    <section class="gf" aria-label="Game flow">
+      <div class="gf-h">
+        <span class="gf-title">Game flow</span>
+        <span class="gf-key"><i class="ka"></i>${teamTag(ta)} <i class="kb"></i>${teamTag(tb)}${showProj ? ' <i class="kp"></i>Proj' : ''}</span>
       </div>
-    </div>`;
+      <div class="gf-plot" data-gf="${matchupKey(m)}">
+        <svg class="gf-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="gf-ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gf-ga0" /><stop offset="1" class="gf-ga1" /></linearGradient>
+            <linearGradient id="gf-gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gf-gb0" /><stop offset="1" class="gf-gb1" /></linearGradient>
+          </defs>
+          ${grid.join('')}
+          ${breaks.map((b) => `<line x1="${X(b).toFixed(1)}" x2="${X(b).toFixed(1)}" y1="0" y2="${H}" class="gf-break" />`).join('')}
+          ${showProj ? `<rect x="${ex.toFixed(1)}" y="0" width="${(W - ex).toFixed(1)}" height="${H}" class="gf-future" />` : ''}
+          <path d="${area(lineB, xyB)}" fill="url(#gf-gb)" />
+          <path d="${area(lineA, xyA)}" fill="url(#gf-ga)" />
+          ${showProj ? `
+            <line x1="${ex.toFixed(1)}" y1="${Y(end.b).toFixed(1)}" x2="${W}" y2="${Y(projB).toFixed(1)}" class="gf-proj b" />
+            <line x1="${ex.toFixed(1)}" y1="${Y(end.a).toFixed(1)}" x2="${W}" y2="${Y(projA).toFixed(1)}" class="gf-proj a" />` : ''}
+          <path d="${lineB}" class="gf-line b" />
+          <path d="${lineA}" class="gf-line a" />
+        </svg>
+        ${grid.length ? `<span class="gf-ylbl" style="top:${pctY(Y(step))}">${step}</span>` : ''}
+        ${breaks.map((b) => {
+          const p = pts.find((q) => q.u === b);
+          return `<span class="gf-day" style="left:${pctX(X(b))}">${p ? new Date(p.t).toLocaleDateString([], { weekday: 'short' }) : ''}</span>`;
+        }).join('')}
+        <i class="gf-dot b ${bumpCls(`t${m[second].teamId}`)}" style="left:${pctX(ex)};top:${pctY(Y(end.b))}"></i>
+        <i class="gf-dot a ${bumpCls(`t${m[first].teamId}`)}" style="left:${pctX(ex)};top:${pctY(Y(end.a))}"></i>
+        ${showProj ? `
+          <span class="gf-plbl a" style="top:${pctY(Y(projA))}">${projA.toFixed(1)}</span>
+          <span class="gf-plbl b" style="top:${pctY(Y(projB))}">${projB.toFixed(1)}</span>` : ''}
+        ${thin ? `<span class="gf-empty">${m.week === state.currentWeek ? 'Fills in as scores change while the app is open' : 'Final score'}</span>` : ''}
+        <div class="gf-scrub" hidden><i class="gf-cursor"></i><i class="gf-sdot b"></i><i class="gf-sdot a"></i><div class="gf-tip"></div></div>
+      </div>
+      <div class="gf-wp">
+        <svg viewBox="0 0 ${W} ${SH}" preserveAspectRatio="none" aria-hidden="true">
+          <clipPath id="gf-top"><rect x="0" y="0" width="${W}" height="${SH / 2}" /></clipPath>
+          <clipPath id="gf-bot"><rect x="0" y="${SH / 2}" width="${W}" height="${SH / 2}" /></clipPath>
+          <path d="${wpArea}" class="gf-wp-a" clip-path="url(#gf-top)" />
+          <path d="${wpArea}" class="gf-wp-b" clip-path="url(#gf-bot)" />
+          <line x1="0" x2="${W}" y1="${SH / 2}" y2="${SH / 2}" class="gf-mid" />
+          <path d="${wpLine}" class="gf-wp-line" />
+        </svg>
+        <span class="gf-wp-lbl t">${teamTag(ta)} ${end.wp}%</span>
+        <span class="gf-wp-lbl b">${teamTag(tb)} ${100 - end.wp}%</span>
+      </div>
+      <div class="gf-facts">${facts}<span>Drag to scrub</span></div>
+    </section>`;
+}
+
+// Scrub: find the reading under the finger and show what changed there.
+function gfScrub(plot, clientX) {
+  if (!gfLast || plot.dataset.gf !== gfLast.key) return;
+  const r = plot.getBoundingClientRect();
+  const fx = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  let i = 0;
+  gfLast.xs.forEach((x, j) => { if (Math.abs(x - fx) < Math.abs(gfLast.xs[i] - fx)) i = j; });
+  const p = gfLast.pts[i], prev = gfLast.pts[i - 1];
+  const plays = prev ? playsFor(gfLast.week)
+    .filter((q) => q.t > prev.t && q.t <= p.t && (q.team === gfLast.teamA || q.team === gfLast.teamB))
+    .sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 3) : [];
+  const when = p.origin ? 'Kickoff' : new Date(p.t).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const scrub = plot.querySelector('.gf-scrub');
+  const tip = scrub.querySelector('.gf-tip');
+  scrub.hidden = false;
+  scrub.style.setProperty('--x', `${(gfLast.xs[i] * 100).toFixed(2)}%`);
+  scrub.classList.toggle('flip', gfLast.xs[i] > 0.6);
+  scrub.querySelector('.gf-sdot.a').style.top = `${(gfLast.ya[i] * 100).toFixed(2)}%`;
+  scrub.querySelector('.gf-sdot.b').style.top = `${(gfLast.yb[i] * 100).toFixed(2)}%`;
+  tip.innerHTML = `
+    <div class="gf-tip-when">${escapeHtml(when)}</div>
+    <div class="gf-tip-score"><b class="a">${teamTag(gfLast.ta)} ${p.a.toFixed(1)}</b><b class="b">${teamTag(gfLast.tb)} ${p.b.toFixed(1)}</b></div>
+    <div class="gf-tip-wp">${teamTag(gfLast.ta)} win ${p.wp}%</div>
+    ${plays.map((q) => `<div class="gf-tip-play ${q.team === gfLast.teamA ? 'a' : 'b'}">${escapeHtml(q.name)} <b>${q.d > 0 ? '+' : ''}${q.d.toFixed(1)}</b></div>`).join('')}`;
+}
+
+function wireGameFlow(root) {
+  let hideTimer = null;
+  const hide = () => { $$('.gf-scrub', root).forEach((s) => { s.hidden = true; }); };
+  root.addEventListener('pointerdown', (e) => {
+    const plot = e.target.closest('.gf-plot');
+    if (!plot) return;
+    clearTimeout(hideTimer);
+    gfScrub(plot, e.clientX);
+  });
+  root.addEventListener('pointermove', (e) => {
+    const plot = e.target.closest('.gf-plot');
+    if (!plot) return;
+    if (e.pointerType === 'mouse' || e.buttons || e.pressure) { clearTimeout(hideTimer); gfScrub(plot, e.clientX); }
+  });
+  root.addEventListener('pointerup', (e) => {
+    if (e.target.closest('.gf-plot') && e.pointerType !== 'mouse') hideTimer = setTimeout(hide, 2500);
+  });
+  root.addEventListener('pointerout', (e) => {
+    const plot = e.target.closest('.gf-plot');
+    if (plot && e.pointerType === 'mouse' && !plot.contains(e.relatedTarget)) hide();
+  });
+}
+
+const agoText = (t) => {
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return new Date(t).toLocaleDateString([], { weekday: 'short' });
+};
+
+// Scoring plays for the two teams in this matchup, newest first.
+function playsFeedHTML(m) {
+  const [first, second] = sidesOf(m);
+  const a = m[first].teamId, b = m[second].teamId;
+  const plays = playsFor(m.week).filter((q) => q.team === a || q.team === b).reverse();
+  if (!plays.length) {
+    if (m.week !== state.currentWeek || m.winner !== 'UNDECIDED') return '';
+    return `
+      <section class="plays">
+        <div class="plays-h"><span>Scoring plays</span></div>
+        <div class="plays-empty">Every score for either team lands here while the app is open.</div>
+      </section>`;
+  }
+  const all = state.playsAll;
+  const shown = all ? plays : plays.slice(0, 6);
+  const latest = plays[0];
+  return `
+    <section class="plays">
+      <div class="plays-h"><span>Scoring plays</span><small>${plays.length} logged</small></div>
+      <ol class="plays-list">
+        ${shown.map((q) => `
+          <li class="play ${q.team === a ? 'a' : 'b'} ${Math.abs(q.d) >= 6 ? 'big' : ''} ${q.d < 0 ? 'neg' : ''} ${q === latest && Date.now() - q.t < 90000 ? 'fresh' : ''}">
+            <button type="button" data-breakdown="${q.id}" data-week="${m.week}" aria-label="How ${escapeHtml(q.name)} scored">
+              <span class="play-when">${q.away ? 'away' : agoText(q.t)}</span>
+              <span class="play-who"><b>${escapeHtml(q.name)}</b><small>${escapeHtml(q.tags?.join(' · ') || '')}</small></span>
+              <span class="play-pts">${q.d > 0 ? '+' : ''}${q.d.toFixed(1)}</span>
+            </button>
+          </li>`).join('')}
+      </ol>
+      ${plays.length > 6 ? `<button type="button" class="plays-more" data-plays-all>${all ? 'Show fewer' : `Show all ${plays.length}`}</button>` : ''}
+    </section>`;
+}
+
+/* Mini charts under the game flow: where each lineup's points come from,
+ * and what each side still needs. */
+const GROUPS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'OP', 'K', 'DST'];
+function positionBarsHTML(m) {
+  const box = state.boxscores[m.week];
+  if (!box) return '';
+  const [first, second] = sidesOf(m);
+  const sum = (teamId) => {
+    const out = {};
+    (box.byTeam[teamId] || []).forEach((p) => {
+      if (p.slot === 'BE' || p.slot === 'IR') return;
+      out[p.slot] = (out[p.slot] || 0) + (p.pts || 0);
+    });
+    return out;
+  };
+  const A = sum(m[first].teamId), B = sum(m[second].teamId);
+  const groups = GROUPS.filter((g) => g in A || g in B);
+  if (!groups.length) return '';
+  const max = Math.max(1, ...groups.map((g) => Math.max(A[g] || 0, B[g] || 0)));
+  return `
+    <section class="mini-card pos-bars" aria-label="Points by position">
+      <div class="mini-h">By position</div>
+      ${groups.map((g) => {
+        const a = A[g] || 0, b = B[g] || 0;
+        return `
+          <div class="pb-row">
+            <span class="pb-val ${a > b ? 'lead' : ''}">${a.toFixed(1)}</span>
+            <span class="pb-bar a"><i style="width:${(a / max * 100).toFixed(1)}%"></i></span>
+            <span class="pb-lbl">${g}</span>
+            <span class="pb-bar b"><i style="width:${(b / max * 100).toFixed(1)}%"></i></span>
+            <span class="pb-val ${b > a ? 'lead' : ''}">${b.toFixed(1)}</span>
+          </div>`;
+      }).join('')}
+    </section>`;
+}
+
+function pathToWinHTML(m) {
+  if (m.winner !== 'UNDECIDED' || m.week !== state.currentWeek) return '';
+  const [first, second] = sidesOf(m);
+  const sa = m[first].score, sb = m[second].score;
+  const pa = m[first].proj, pb = m[second].proj;
+  if (pa == null || pb == null) return '';
+  const max = Math.max(sa, sb, pa, pb, 1) * 1.04;
+  const w = (v) => `${(Math.max(0, v) / max * 100).toFixed(1)}%`;
+  const ta = teamById(m[first].teamId) || BYE_TEAM, tb = teamById(m[second].teamId) || BYE_TEAM;
+  const row = (t, s, p, oppP, cls, teamId) => {
+    const left = Math.max(0, p - s), need = Math.max(0, oppP - s);
+    const st = lineupStatus(teamId, m.week);
+    const who = st ? `${st.playing + st.toGo} still to score` : '';
+    return `
+      <div class="ptw-row ${cls}">
+        <div class="ptw-top"><b>${teamTag(t)}</b><span>${left.toFixed(1)} proj left${who ? ' · ' + who : ''}</span></div>
+        <div class="ptw-bar">
+          <i class="done" style="width:${w(s)}"></i><i class="left" style="left:${w(s)};width:${w(left)}"></i>
+          <i class="mark" style="left:${w(oppP)}" title="Opponent's projection"></i>
+        </div>
+        <div class="ptw-note">${need > 0 ? `Needs <b>${need.toFixed(1)}</b> more to pass ${teamTag(t === ta ? tb : ta)}'s projection` : `Already past ${teamTag(t === ta ? tb : ta)}'s projection`}</div>
+      </div>`;
+  };
+  return `
+    <section class="mini-card ptw" aria-label="Path to win">
+      <div class="mini-h">Path to win <span class="ptw-key"><i class="done"></i>Scored <i class="left"></i>Proj left <i class="mark"></i>Opp proj</span></div>
+      ${row(ta, sa, pa, pb, 'a', m[first].teamId)}
+      ${row(tb, sb, pb, pa, 'b', m[second].teamId)}
+    </section>`;
 }
 
 // Re-pull box scores for any open card (and the full-screen view).
@@ -1018,8 +1370,12 @@ function boxPlayerCell(p, side, week) {
   ].join(' ');
   const line = gameLine(g, week);
   const fieldTitle = g?.hasBall ? ` title="${escapeHtml(g.redZone ? 'In the red zone' : 'On the field')}${g.down ? ': ' + escapeHtml(g.down) : ''}"` : '';
+  // Progress toward the pregame projection, once the player's game is on.
+  const ratio = !notStarted && p.projPre > 0 && p.pts != null ? p.pts / p.projPre : null;
+  const prog = ratio == null || p.slot === 'BE' || p.slot === 'IR' ? ''
+    : `<i class="box-prog ${ratio >= 1 ? 'over' : ''}" title="${Math.round(ratio * 100)}% of projection"><b style="width:${Math.min(100, Math.max(0, ratio * 100)).toFixed(0)}%"></b></i>`;
   return `
-    <div class="box-player ${side} ${cls}"${fieldTitle}>
+    <div class="box-player ${side} ${cls}"${fieldTitle}>${prog}
       <span class="box-photo" data-profile="${p.id}">${playerPhotoHTML(p)}</span>
       <span class="box-name"><button type="button" class="box-link" data-profile="${p.id}" title="${escapeHtml(p.name)}: player card">${escapeHtml(shortName(p.name))}</button><small>${g?.redZone ? '<b class="rz">RZ</b>' : ''}${p.pos}${line ? ' · ' + escapeHtml(line) : ''}</small></span>
       <button type="button" class="box-pts ${bumpCls(`p${p.id}`)}" data-breakdown="${p.id}" data-week="${week}" aria-label="How ${escapeHtml(p.name)} scored">${pts}${proj != null ? `<small>${proj.toFixed(1)}</small>` : ''}</button>
@@ -1060,7 +1416,7 @@ function renderMatchupDetail(m, { fullScreen = false } = {}) {
   return `
     <div class="matchup-detail">
       ${toolbar}
-      ${box.live ? '' : '<div class="box-note">Live scores unavailable. Showing last synced stats.</div>'}
+      ${box.live ? '' : `<div class="box-note">Live scores unavailable. Showing last synced stats.${fullScreen ? miniGameOffer('') : ''}</div>`}
       ${rowsFor(starterSlots)}
       ${bench ? `<div class="box-bench-h">Bench</div><div class="box-bench">${bench}</div>` : ''}
     </div>`;
@@ -1226,7 +1582,9 @@ function renderMatchupFs() {
   $('.mfs-body', el).innerHTML = `
     <div class="mfs-head">${side(left, first, 'away')}${side(right, second, 'home')}</div>
     ${winProbBar(m, true)}
-    ${wpSparkline(m, left.name, right.name)}
+    ${gameFlowHTML(m)}
+    ${playsFeedHTML(m)}
+    <div class="mini-grid">${pathToWinHTML(m)}${positionBarsHTML(m)}</div>
     ${renderMatchupDetail(m, { fullScreen: true })}`;
 }
 
@@ -1249,7 +1607,12 @@ async function openMatchupFs(key) {
       </div>
       <div class="mfs-body"></div>`;
     el.querySelector('.mfs-close').onclick = () => closeMatchupFs();
-    el.querySelector('.mfs-body').onclick = handleLineupClick;
+    el.querySelector('.mfs-body').onclick = (e) => {
+      if (e.target.closest('[data-plays-all]')) { state.playsAll = !state.playsAll; renderMatchupFs(); return; }
+      handleLineupClick(e);
+    };
+    wireGameFlow(el.querySelector('.mfs-body'));
+    wireEasterEgg(el.querySelector('.mfs-title'));
     document.body.appendChild(el);
   }
   document.documentElement.classList.add('mfs-open');
@@ -1275,6 +1638,45 @@ function closeMatchupFs(fromHistory = false) {
 }
 
 window.addEventListener('popstate', () => { if (state.fsKey) closeMatchupFs(true); });
+
+/* ----------------------- Easter egg -----------------------
+ * A little football runner (minigame.js, loaded on first use). Tap the
+ * full-screen title five times quickly, or take the offer that shows up
+ * when ESPN can't be reached.
+ * --------------------------------------------------------- */
+let miniGameLoad = null;
+function openMiniGame() {
+  if (!miniGameLoad) {
+    miniGameLoad = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `minigame.js?v=${BUILD_ID}`;
+      s.onload = resolve;
+      s.onerror = () => { miniGameLoad = null; reject(new Error('minigame.js failed to load')); };
+      document.head.appendChild(s);
+    });
+  }
+  miniGameLoad.then(() => window.wccMiniGame?.open()).catch(() => toast('Game failed to load', 'error'));
+}
+function wireEasterEgg(el) {
+  let taps = [];
+  el.addEventListener('click', () => {
+    const now = Date.now();
+    taps = taps.filter((t) => now - t < 2500).concat(now);
+    if (taps.length >= 5) { taps = []; openMiniGame(); }
+  });
+}
+const miniGameOffer = (msg = 'Scores are down.') => `
+  <div class="mg-offer"><span>${escapeHtml(msg)}</span><button type="button" data-minigame>🏈 Play while you wait</button></div>`;
+document.addEventListener('click', (e) => { if (e.target.closest('[data-minigame]')) openMiniGame(); });
+window.addEventListener('offline', () => {
+  if ($('#mg-offline')) return;
+  const bar = document.createElement('div');
+  bar.id = 'mg-offline';
+  bar.innerHTML = `${miniGameOffer("You're offline.")}<button type="button" class="mg-x" aria-label="Dismiss">✕</button>`;
+  bar.querySelector('.mg-x').onclick = () => bar.remove();
+  document.body.appendChild(bar);
+});
+window.addEventListener('online', () => $('#mg-offline')?.remove());
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   // Close the top layer only: breakdown, then any modal, then full screen.
@@ -4939,7 +5341,7 @@ async function boot() {
       livePollTick();
     });
   } else {
-    $('#standings-content').innerHTML = empty('ESPN data unavailable.');
+    $('#standings-content').innerHTML = empty('ESPN data unavailable.') + miniGameOffer("Can't reach ESPN right now.");
   }
 
   loadAllTrades();
@@ -6852,7 +7254,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.32.0';
+const BUILD_ID = '1.33.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
