@@ -16,8 +16,9 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.34.0" />
-  <link rel="stylesheet" href="compact.css?v=1.34.0" />
+  <link rel="stylesheet" href="styles.css?v=1.35.0" />
+  <link rel="stylesheet" href="compact.css?v=1.35.0" />
+  <link rel="stylesheet" href="simple.css?v=1.35.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -75,6 +76,9 @@
         </div>
       </div>
 
+      <!-- Simple layout only: an easy way back to the full app (opens the Display sheet) -->
+      <button type="button" class="simple-switch" id="simple-switch">Switch to the full app</button>
+
       <!-- Press Room secret unlock (commish only) -->
       <button class="press-room-trigger" id="press-room-trigger" aria-label="Commissioner Press Room">📰</button>
     </section>
@@ -114,20 +118,28 @@
 
     <!-- Trade Desk View -->
     <section class="view" id="view-trades">
-      <input type="text" id="trade-player-search" class="search-input" placeholder="🔍 Search player to trade for..." autocomplete="off" />
       <div class="trade-banner" id="trade-banner" hidden></div>
 
-      <!-- Trade Block (league-wide players on the block) -->
-      <div class="card" id="trade-block-card">
-        <h2>Trade Block</h2>
-        <div id="trade-block-list"></div>
+      <!-- Simple layout: offers + step-by-step trade flow (simple.js). Empty in Classic/Compact. -->
+      <div id="simple-trades"></div>
+
+      <!-- Trade Block: one-line bar, tap to expand (app.js renderTradeBlockSection) -->
+      <details class="card tb-bar" id="trade-block-card">
+        <summary class="tb-summary" id="trade-block-summary"><span class="tb-title">Trade Block</span><span class="tb-chev" aria-hidden="true">▸</span></summary>
+        <div class="tb-list" id="trade-block-list"></div>
+      </details>
+
+      <div class="card" id="pending-trades-card">
+        <h2>Pending Trades</h2>
+        <div id="pending-trades-list"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="trade-proposal-card">
         <h2>New Trade Proposal</h2>
+        <input type="text" id="trade-player-search" class="search-input" placeholder="🔍 Search player to trade for..." autocomplete="off" />
         <div class="trade-builder">
-          <div class="trade-side">
-            <label>Your Team</label>
+          <div class="trade-side trade-side-give">
+            <label class="trade-side-h">You give</label>
             <select id="team-a-select"></select>
             <div class="asset-section">
               <h4>Players</h4>
@@ -135,13 +147,12 @@
             </div>
             <div class="asset-section">
               <h4>Draft Picks</h4>
-              <div class="asset-list" id="team-a-picks"></div>
-              <button class="btn-ghost btn-sm" id="add-pick-a">+ Add Pick</button>
+              <div class="pick-chips" id="team-a-picks"></div>
             </div>
           </div>
           <div class="trade-divider"><span>⇄</span></div>
-          <div class="trade-side">
-            <label>Trade Partner</label>
+          <div class="trade-side trade-side-get">
+            <label class="trade-side-h">You get, from</label>
             <select id="team-b-select"></select>
             <div class="asset-section">
               <h4>Players</h4>
@@ -149,14 +160,20 @@
             </div>
             <div class="asset-section">
               <h4>Draft Picks</h4>
-              <div class="asset-list" id="team-b-picks"></div>
-              <button class="btn-ghost btn-sm" id="add-pick-b">+ Add Pick</button>
+              <div class="pick-chips" id="team-b-picks"></div>
             </div>
           </div>
         </div>
         <div id="trade-meter" aria-live="polite"></div>
-        <button class="btn-ghost" id="reset-trade" type="button">✕ Clear Trade</button>
-        <button class="btn-primary" id="submit-trade">Submit Trade</button>
+        <!-- Sticky while the builder is on screen, so Send is never buried -->
+        <div class="trade-sendbar" id="trade-sendbar">
+          <div class="sb-info">
+            <span class="sb-counts" id="sb-counts">Give 0 · Get 0</span>
+            <span class="sb-verdict" id="sb-verdict"></span>
+          </div>
+          <button class="btn-ghost sb-clear" id="reset-trade" type="button">Clear</button>
+          <button class="btn-primary sb-send" id="submit-trade" type="button">Send offer</button>
+        </div>
       </div>
 
       <div class="card" id="trade-finder-card" hidden>
@@ -182,11 +199,6 @@
           <button class="btn-primary tv-find-btn" id="shop-run" type="button">🛒 Find Offers</button>
         </div>
         <div id="finder-results"></div>
-      </div>
-
-      <div class="card">
-        <h2>Pending Trades</h2>
-        <div id="pending-trades-list"></div>
       </div>
 
       <div class="card" id="trade-feed-card">
@@ -592,6 +604,19 @@
     </div>
   </div>
 
+  <!-- Display sheet: layout (Classic / Compact / Simple), colors, your team.
+       Opens from the W logo; shown once on first launch (app.js initDensity). -->
+  <div class="modal-overlay" id="display-sheet" hidden>
+    <div class="modal display-modal" role="dialog" aria-modal="true" aria-labelledby="display-title">
+      <div class="modal-header">
+        <button class="modal-close" id="display-close" aria-label="Close">×</button>
+        <h2 id="display-title">Display</h2>
+        <p id="display-sub">Pick how the app looks on this device.</p>
+      </div>
+      <div class="modal-body" id="display-body"></div>
+    </div>
+  </div>
+
   <!-- Notifications sheet (push.js) -->
   <div class="modal-overlay" id="push-sheet" hidden>
     <div class="modal push-modal">
@@ -606,15 +631,16 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.34.0"></script>
-  <script src="app.js?v=1.34.0"></script>
-  <script src="trade-engine.js?v=1.34.0"></script>
-  <script src="trade-calc.js?v=1.34.0"></script>
-  <script src="research-engine.js?v=1.34.0"></script>
-  <script src="research.js?v=1.34.0"></script>
-  <script src="activity-engine.js?v=1.34.0"></script>
-  <script src="social.js?v=1.34.0"></script>
-  <script src="push-engine.js?v=1.34.0"></script>
-  <script src="push.js?v=1.34.0"></script>
+  <script src="select.js?v=1.35.0"></script>
+  <script src="app.js?v=1.35.0"></script>
+  <script src="trade-engine.js?v=1.35.0"></script>
+  <script src="trade-calc.js?v=1.35.0"></script>
+  <script src="research-engine.js?v=1.35.0"></script>
+  <script src="research.js?v=1.35.0"></script>
+  <script src="activity-engine.js?v=1.35.0"></script>
+  <script src="social.js?v=1.35.0"></script>
+  <script src="push-engine.js?v=1.35.0"></script>
+  <script src="push.js?v=1.35.0"></script>
+  <script src="simple.js?v=1.35.0"></script>
 </body>
 </html>

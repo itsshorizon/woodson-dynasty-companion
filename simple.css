@@ -1,0 +1,338 @@
+/* ===========================================================
+ * Simple layout (Beta 1.35)
+ * For readers who want the basics: bigger text, bigger buttons,
+ * three tabs (Standings, Rosters, Trades), a step-by-step trade flow.
+ * Every rule is scoped under html[data-density="simple"], so Classic
+ * and Compact are untouched. Trade-flow markup comes from simple.js.
+ * To remove: delete this file, simple.js, and their tags in index.html.
+ * =========================================================== */
+
+[data-density="simple"] {
+  --nav-h: 76px;
+  --shadow: none;
+}
+/* Brighter secondary text for contrast */
+:root[data-density="simple"]:not([data-theme="light"]) { --text-dim: #e1ede5; --text-mute: #b3c7bc; }
+:root[data-density="simple"][data-theme="light"] { --text-dim: #33473c; --text-mute: #55695d; }
+
+[data-density="simple"] body { font-size: 17px; line-height: 1.45; }
+
+/* Calm the decoration down */
+[data-density="simple"] .ambient-bar,
+[data-density="simple"] #particle-canvas { display: none; }
+[data-density="simple"] .card::before { display: none; }
+[data-density="simple"] .view { transition: none; }
+
+/* ---------- Header ---------- */
+[data-density="simple"] .app-header h1 { font-size: 20px; }
+/* The week pill crowds the tab title; Standings already shows the matchup. */
+[data-density="simple"] .header-meta { display: none; }
+[data-density="simple"] .theme-toggle { width: 40px; height: 40px; }
+
+/* ---------- Bottom nav: three big tabs ---------- */
+[data-density="simple"] .bottom-nav { grid-template-columns: repeat(3, 1fr); }
+[data-density="simple"] .nav-btn[data-view="activity"],
+[data-density="simple"] .nav-btn[data-view="myteam"],
+[data-density="simple"] .nav-btn[data-view="vault"] { display: none; }
+[data-density="simple"] .nav-btn { gap: 6px; }
+[data-density="simple"] .nav-btn svg { width: 26px; height: 26px; }
+[data-density="simple"] .nav-btn span { font-size: 13px; letter-spacing: 0.02em; }
+
+/* ---------- Standings ---------- */
+[data-density="simple"] .st-luck,
+[data-density="simple"] .power-rank,
+[data-density="simple"] .storyline-badges,
+[data-density="simple"] #press-room-trigger { display: none !important; }
+[data-density="simple"] .standings-row .team-name { font-size: 17px; }
+[data-density="simple"] .standings-row .team-owner { font-size: 14px; }
+[data-density="simple"] .standings-row .record { font-size: 20px; }
+[data-density="simple"] .split-h { font-size: 15px; }
+
+.simple-switch { display: none; }
+[data-density="simple"] .simple-switch {
+  display: block;
+  width: 100%;
+  margin: 20px 0 8px;
+  padding: 14px;
+  background: transparent;
+  border: 2px solid var(--border-strong);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---------- Rosters ---------- */
+[data-density="simple"] #roster-mode { display: none; }
+[data-density="simple"] .tv-row-val-line,
+[data-density="simple"] .tv-val,
+[data-density="simple"] .tv-team-total { display: none !important; }
+[data-density="simple"] .player-row .player-name,
+[data-density="simple"] .player-row .name { font-size: 17px; }
+[data-density="simple"] .player-action { padding: 10px 14px; font-size: 13px; min-height: 44px; }
+[data-density="simple"] .search-input { font-size: 17px; padding: 14px; }
+
+/* ---------- Trades: hide the power-user cards ---------- */
+[data-density="simple"] #pending-trades-card,
+[data-density="simple"] #trade-proposal-card,
+[data-density="simple"] #trade-finder-card,
+[data-density="simple"] #trade-feed-card { display: none !important; }
+
+/* Trade block bar, larger */
+[data-density="simple"] .tb-summary { min-height: 60px; }
+[data-density="simple"] .tb-title { font-size: 16px; letter-spacing: 0.04em; }
+[data-density="simple"] .tb-count { font-size: 14px; }
+[data-density="simple"] .tb-chev { font-size: 16px; }
+[data-density="simple"] .tb-row { grid-template-columns: 40px minmax(0, 1fr); padding: 12px 4px; }
+[data-density="simple"] .tb-row .player-photo-wrap,
+[data-density="simple"] .tb-row .player-photo,
+[data-density="simple"] .tb-row .player-photo-fallback { width: 40px; height: 40px; }
+[data-density="simple"] .tb-name { font-size: 17px; white-space: normal; }
+[data-density="simple"] .tb-sub { font-size: 14px; }
+[data-density="simple"] .tb-actions { grid-column: 1 / -1; justify-content: flex-end; }
+[data-density="simple"] .tb-actions .player-action { min-height: 44px; font-size: 14px; padding: 10px 16px; }
+[data-density="simple"] .tb-star { min-width: 48px; font-size: 20px; }
+
+/* ---------- Trades: offers + step-by-step flow (simple.js) ---------- */
+#simple-trades:empty { display: none; }
+.sm-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  margin-bottom: 16px;
+}
+.sm-h { margin: 0 0 12px; font-size: 20px; font-weight: 900; color: var(--text); }
+.sm-empty { margin: 4px 0; font-size: 16px; color: var(--text-mute); }
+.sm-help { margin: -4px 0 14px; font-size: 16px; color: var(--text-dim); }
+.sm-dim { color: var(--text-mute); font-weight: 600; }
+.sm-block { display: block; font-size: 14px; }
+
+.sm-big-btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--tab-accent);
+  color: var(--tab-fg);
+  font-family: var(--font);
+  font-size: 19px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 0 var(--blue);
+}
+.sm-big-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--blue); }
+.sm-big-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+/* Offer cards */
+.sm-offer {
+  border: 2px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg);
+}
+.sm-offer-h { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 10px; }
+.sm-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.sm-side { border-radius: 10px; padding: 10px 12px; background: var(--bg-elev-2); }
+.sm-side-h { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.sm-get .sm-side-h { color: var(--tv-fair); }
+.sm-give .sm-side-h { color: var(--tv-lopsided); }
+.sm-items { list-style: none; margin: 0; padding: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+.sm-items li + li { margin-top: 4px; }
+.sm-side p { margin: 0; font-size: 15px; }
+
+.sm-verdict {
+  --band: var(--text-mute);
+  border-left: 6px solid var(--band);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--bg-elev-2);
+}
+.sm-verdict[data-band="fair"] { --band: var(--tv-fair); }
+.sm-verdict[data-band="slight"] { --band: var(--tv-slight); }
+.sm-verdict[data-band="lopsided"] { --band: var(--tv-lopsided); }
+.sm-verdict[data-band="fleece"] { --band: var(--tv-fleece); }
+.sm-verdict-title { font-size: 21px; font-weight: 900; color: var(--band); line-height: 1.2; }
+.sm-verdict-sub { font-size: 16px; color: var(--text-dim); margin-top: 2px; }
+
+.sm-actions { display: flex; gap: 10px; }
+.sm-btn {
+  flex: 1;
+  min-height: 54px;
+  border-radius: 12px;
+  font-family: var(--font);
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.sm-btn-yes { background: var(--tv-fair); color: #fff; border: 0; }
+.sm-btn-no { background: transparent; color: var(--text); border: 2px solid var(--border-strong); }
+.sm-btn:disabled { opacity: 0.5; }
+
+/* Wizard */
+.sm-step-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sm-back {
+  min-height: 44px;
+  padding: 8px 14px 8px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sm-step-n { font-size: 15px; font-weight: 800; color: var(--text-mute); }
+.sm-step-title { margin: 0 0 12px; font-size: 23px; font-weight: 900; line-height: 1.2; color: var(--text); }
+.sm-sub-h { margin: 18px 0 8px; font-size: 16px; font-weight: 900; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+
+.sm-list { display: flex; flex-direction: column; gap: 8px; }
+.sm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 2px solid var(--border-strong);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.sm-row .player-photo-wrap,
+.sm-row .player-photo,
+.sm-row .player-photo-fallback { width: 42px; height: 42px; flex-shrink: 0; }
+.sm-row .pos-tag { display: none; }
+.sm-row .team-logo { flex-shrink: 0; }
+.sm-row-name { flex: 1; min-width: 0; font-size: 18px; font-weight: 800; }
+.sm-check {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+}
+.sm-team .sm-check { border: 0; font-size: 26px; color: var(--text-mute); }
+.sm-row.on { border-color: var(--tab-accent); background: var(--bg-elev-2); }
+.sm-row.on .sm-check { background: var(--tab-accent); border-color: var(--tab-accent); color: var(--tab-fg); }
+
+.sm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sm-chip {
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sm-chip small { font-weight: 600; color: var(--text-mute); }
+.sm-chip.on { background: var(--tab-accent); border-color: var(--tab-accent); color: var(--tab-fg); }
+.sm-chip.on small { color: inherit; opacity: 0.8; }
+
+.sm-foot { margin-top: 18px; }
+.sm-foot-sticky {
+  position: sticky;
+  bottom: calc(var(--nav-h) + var(--safe-b) + 8px);
+  z-index: 5;
+  margin: 18px -8px -8px;
+  padding: 10px 10px 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 -6px 18px rgba(0,0,0,0.3);
+}
+.sm-foot .sm-big-btn { margin-bottom: 8px; }
+.sm-hint { margin: 0 0 8px; text-align: center; font-size: 15px; color: var(--text-mute); }
+.sm-fix {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 14px;
+  border: 2px dashed var(--border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.sm-link {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  background: transparent;
+  border: 0;
+  color: var(--text-mute);
+  font-family: var(--font);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---------- Display sheet (all layouts; opened from the W logo) ---------- */
+.display-modal { max-width: 440px; }
+.display-modal .modal-body { gap: 8px; padding: 14px 16px 16px; }
+.ds-h {
+  margin: 8px 0 2px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.ds-h:first-child { margin-top: 0; }
+.ds-options { display: flex; flex-direction: column; gap: 8px; }
+.ds-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  background: var(--bg-elev-2);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.ds-opt.on { border-color: var(--green); }
+.ds-radio {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+.ds-opt.on .ds-radio { border: 7px solid var(--green); }
+.ds-opt-text { display: flex; flex-direction: column; }
+.ds-opt-title { font-size: 16px; font-weight: 900; }
+.ds-opt-sub { font-size: 13px; color: var(--text-dim); }
+.ds-opt-simple .ds-opt-title { font-size: 19px; }
+.ds-opt-simple .ds-opt-sub { font-size: 15px; }
+.ds-theme { margin: 0; }
+.ds-team { width: 100%; }
+.ds-done { margin-top: 10px; }
+
+/* Simple: bigger sheets and pickers */
+[data-density="simple"] .modal-header h2 { font-size: 24px; }
+[data-density="simple"] .modal-header p { font-size: 16px; }
+[data-density="simple"] .modal-team-btn { font-size: 17px; padding: 16px; }
+[data-density="simple"] .modal-team-btn .owner { font-size: 14px; }
+[data-density="simple"] .ds-opt-title { font-size: 19px; }
+[data-density="simple"] .ds-opt-sub { font-size: 15px; }

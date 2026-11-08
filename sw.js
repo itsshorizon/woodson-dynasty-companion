@@ -1,11 +1,12 @@
 /* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
  * and every ?v= in index.html to the same version. */
-const CACHE_NAME = 'wcc-v1.34.0';
+const CACHE_NAME = 'wcc-v1.35.0';
 const CORE_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './compact.css',
+  './simple.css',
   './select.js',
   './app.js',
   './trade-engine.js',
@@ -16,6 +17,7 @@ const CORE_ASSETS = [
   './social.js',
   './push-engine.js',
   './push.js',
+  './simple.js',
   './minigame.js',
   './assets/minigame/run.png',
   './assets/minigame/jump.png',

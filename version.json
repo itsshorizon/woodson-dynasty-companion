@@ -1,12 +1,12 @@
 {
-  "version": "1.34.0",
-  "title": "🔔 Notifications",
+  "version": "1.35.0",
+  "title": "🧭 Simple Mode + Cleaner Trades",
   "notes": [
-    "🔔 Push notifications are here. Tap the bell at the top to turn them on for this device (on iPhone, add the app to your Home Screen first).",
-    "🤝 Trades: get pinged when someone sends you an offer, when your offer is accepted, declined or countered, and when a trade goes through.",
-    "🏈 Game day: touchdowns and 5+ point plays by your players, a lineup warning before kickoff if a starter is out or on bye, close-game alerts and your final score.",
-    "💬 Chat: hear about every message, only when someone @s you (the default), or nothing at all.",
-    "📊 A Tuesday-morning Front Office digest with your value risers and fallers, plus a sell-high and a buy-low idea.",
-    "🤫 Every alert has its own switch, plus quiet hours, a 24-hour pause and a daily cap, so your phone won't get blown up."
+    "🧭 New Simple layout: bigger text, bigger buttons, and just three tabs (Standings, Rosters, Trades). Tap the W at the top to pick Classic, Compact or Simple.",
+    "🤝 In Simple, making a trade is step by step: pick a team, tap what you want, tap what you'll give, then see in plain words whether it's fair before you send it.",
+    "📋 The Trade Block is now one small bar on the Trades tab. Tap it to see who's on the block.",
+    "↔️ The trade builder now says \"You give\" and \"You get\", draft picks are tap-to-pick buttons, and Send stays at the bottom of the screen while you build.",
+    "🔍 The trade meter shows the verdict up front; fit, sources and the math are under \"More detail\".",
+    "📬 Pending trades now sit near the top of the Trades tab so offers waiting on you are easy to find."
   ]
 }

@@ -282,6 +282,11 @@ function tcMeterHTML(opts) {
     badges.push(`<span class="tv-badge tv-badge-warn">Sources: ${escapeHtml(txt)}</span>`);
   }
 
+  // Beta 1.35: the builder puts me on the left, so say "You get" there.
+  const aGets = opts.meLeft ? 'You get' : `${escapeHtml(opts.names.a)} gets`;
+  const aEnd = opts.meLeft ? 'You' : escapeHtml(opts.names.a);
+  // Verdict, bar, totals and "to even it out" stay up front; the rest folds
+  // into one "More detail" so the meter isn't a wall of cards.
   return `
     <div class="tv-meter" data-band="${bandKey}">
       <div class="tv-verdict">
@@ -290,18 +295,22 @@ function tcMeterHTML(opts) {
       </div>
       ${r.empty ? '' : tcMeterSVG(r)}
       ${r.empty ? '' : `
-        <div class="tv-ends"><span>◀ ${escapeHtml(opts.names.a)}</span><span>${escapeHtml(opts.names.b)} ▶</span></div>
+        <div class="tv-ends"><span>◀ ${aEnd}</span><span>${escapeHtml(opts.names.b)} ▶</span></div>
         <div class="tv-totals">
-          <div><span class="lbl">${escapeHtml(opts.names.a)} gets</span><b>${tcFmt(r.totals.a)}</b></div>
+          <div><span class="lbl">${aGets}</span><b>${tcFmt(r.totals.a)}</b></div>
           <div><span class="lbl">${escapeHtml(opts.names.b)} gets</span><b>${tcFmt(r.totals.b)}</b></div>
         </div>
-        ${badges.length ? `<div class="tv-badges">${badges.join('')}</div>` : ''}
-        ${tcFitHTML(r, opts)}
         ${tcBalanceHTML(r, opts)}
-        ${tcBreakdownHTML(r, opts)}
-        ${opts.feedback ? tcFeedbackHTML() : ''}
+        <details class="tv-more">
+          <summary>More detail</summary>
+          ${badges.length ? `<div class="tv-badges">${badges.join('')}</div>` : ''}
+          ${tcFitHTML(r, opts)}
+          ${tcBreakdownHTML(r, opts)}
+          ${opts.feedback ? tcFeedbackHTML() : ''}
+          ${tcFooterHTML()}
+        </details>
       `}
-      ${tcFooterHTML()}
+      ${r.empty ? tcFooterHTML() : ''}
     </div>`;
 }
 
@@ -345,9 +354,13 @@ function tcBalanceHTML(r, opts) {
   const options = TradeEngine.suggestBalance(opts.trade, opts.candidates[adder] || [], TC.ctx, 3);
   if (!options.length) return '';
   const who = adder === 'a' ? opts.names.a : opts.names.b;
+  // In the builder, my side "adds" by sending more of my own stuff.
+  const title = adder === 'a' && opts.meLeft ? 'To even it out, you could also give:'
+    : adder === 'b' && opts.meLeft ? `To even it out, ask ${escapeHtml(who)} to add:`
+    : `To even it out, ${escapeHtml(who)} could add:`;
   return `
     <div class="tv-balance">
-      <div class="tv-balance-title">To even it out, ${escapeHtml(who)} could add:</div>
+      <div class="tv-balance-title">${title}</div>
       <div class="tv-balance-list">
         ${options.map((o, i) => `
           <button class="tv-balance-opt" data-balance-idx="${i}" data-band="${o.band.key}" type="button">
@@ -828,6 +841,7 @@ function tcRenderBuilderMeter() {
   const { a, b, trade } = tcBuilderTrade();
   if (!a.teamId || !b.teamId) {
     host.innerHTML = `<div class="tv-meter" data-band="empty"><div class="tv-verdict"><div class="tv-band">Trade meter</div><div class="tv-sub">Pick a trade partner to see how fair the deal is.</div></div></div>`;
+    tcUpdateSendBar(a, b, null);
     return;
   }
   // In the meter, "a" (left) is my team, which receives the partner's assets.
@@ -840,9 +854,25 @@ function tcRenderBuilderMeter() {
     // Left side (me) adds by sending more → my roster; right side adds → partner roster.
     candidates: { a: tcBuilderCandidates('a', a.teamId), b: tcBuilderCandidates('b', b.teamId) },
     feedback: true,
+    meLeft: true,
   };
+  const wasOpen = host.querySelector('.tv-more')?.open;
   host.innerHTML = tcMeterHTML(opts);
+  if (wasOpen) host.querySelector('.tv-more')?.setAttribute('open', '');
   host._tcOpts = opts;
+  tcUpdateSendBar(a, b, TradeEngine.evaluate(trade, TC.ctx));
+}
+
+// Sticky send bar under the builder: "Give 2 · Get 1" + the verdict chip.
+function tcUpdateSendBar(a, b, r) {
+  const counts = $('#sb-counts');
+  const verdict = $('#sb-verdict');
+  if (!counts || !verdict) return;
+  const n = (side) => side.raw.players.length + side.raw.picks.length;
+  counts.textContent = `Give ${n(a)} · Get ${n(b)}`;
+  if (!r || r.empty) { verdict.innerHTML = ''; verdict.removeAttribute('data-band'); return; }
+  verdict.dataset.band = r.band.key;
+  verdict.textContent = r.band.label;
 }
 
 // Clicking a balance suggestion ticks that player / adds that pick on the right side.
@@ -860,16 +890,7 @@ function tcApplyBalance(idx) {
     const cb = $(`#team-${sideKey}-players input[value="${asset.id}"]`);
     if (cb) cb.checked = true;
   } else {
-    addPickRow(sideKey);
-    const row = $(`#team-${sideKey}-picks`).lastElementChild;
-    const yearSel = row?.querySelector('.pick-year');
-    const roundSel = row?.querySelector('.pick-round');
-    if (yearSel) { yearSel.value = String(asset.year); yearSel.dispatchEvent(new Event('change')); }
-    if (roundSel) {
-      const opt = [...roundSel.options].find((o) => o.value === String(asset.round) && (o.dataset.origOwner || '') === asset.origOwner)
-        || [...roundSel.options].find((o) => o.value === String(asset.round));
-      if (opt) roundSel.value = opt.value;
-    }
+    checkPickChip(sideKey, asset);
   }
   tcRenderBuilderMeter();
   tcDecorateAssetLists();
