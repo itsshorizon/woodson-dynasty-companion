@@ -2287,6 +2287,7 @@ async function handlePlayerAction(btn) {
       // Re-render whatever view we're on
       if ($('#view-rosters').classList.contains('active')) renderRoster();
       if ($('#view-myteam').classList.contains('active')) renderMyTeam();
+      if ($('#view-trades').classList.contains('active')) renderTradeBlockSection();
     } else if (action === 'toggle-interest' || action === 'mark-interest') {
       // GUARDRAIL: Toggling interest only ever updates the interestedTeamIds array.
       // It NEVER deletes a row from the sheet — that's reserved for the owner clicking Unblock.
@@ -2376,8 +2377,6 @@ function populateTradeTeamSelects() {
   }
 
   bSel.onchange = () => renderTradeAssets('b');
-  $('#add-pick-a').onclick = () => addPickRow('a');
-  $('#add-pick-b').onclick = () => addPickRow('b');
   $('#submit-trade').onclick = submitTrade;
   $('#reset-trade').onclick = resetTradeBuilder;
 }
@@ -2408,32 +2407,82 @@ function applyTradePrefill() {
     const cb = $(`#team-b-players input[value="${pid}"]`);
     if (cb) cb.checked = true;
   });
-  // Rebuild pick rows: addPickRow reads live from the selected team's ownedPicksFor,
-  // so we spawn one blank row per pick then set its year/round to match the flip.
-  const seedPicks = (side, picks) => {
-    if (!picks || !picks.length) return;
-    picks.forEach((p) => {
-      addPickRow(side);
-      const container = $(`#team-${side}-picks`);
-      const row = container.lastElementChild;
-      if (!row) return;
-      const yearSel = row.querySelector('.pick-year');
-      const roundSel = row.querySelector('.pick-round');
-      if (yearSel) { yearSel.value = String(p.year); yearSel.dispatchEvent(new Event('change')); }
-      if (roundSel) roundSel.value = String(p.round);
-    });
-  };
-  seedPicks('a', aPicks);
-  seedPicks('b', bPicks);
+  // Pick chips are rendered by renderTradeAssets; tick the ones in the prefill.
+  (aPicks || []).forEach((p) => checkPickChip('a', p));
+  (bPicks || []).forEach((p) => checkPickChip('b', p));
   state.tradePrefill = null;
+  // Let the meter and send bar catch up with the ticked boxes.
+  $('.trade-builder')?.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /* ----------------------- Trade Block UI ----------------------- */
 
+// Beta 1.35: the block is a one-line bar (#trade-block-card is a <details>).
+// Summary = count + a few headshots; expanding shows slim one-line rows.
+// Stats and values live in the player profile (tap a row).
+function tradeBlockEntries() {
+  // Beta 1.3 secondary guard: re-sanitize before rendering in case any ghost rows
+  // slipped through. Beta 1.8: only 'tb_' rows are public; 'int_' rows stay hidden.
+  return sanitizeTradeBlockRows(state.tradeBlock)
+    .filter((e) => e.entryId && e.entryId.startsWith('tb_'));
+}
+
+function tradeBlockRowHTML(entry) {
+  const interested = safeParse(entry.interestedTeamIds) || [];
+  // Look up owner by ID first (reliable), fall back to name (handles legacy/typo'd rows)
+  const ownerTeam = teamById(parseInt(entry.ownerTeamId, 10))
+    || teamByName(entry.ownerTeamName || entry.ownterTeamName);
+  const isOwner = String(state.myTeamId) === String(entry.ownerTeamId);
+  const youInterested = interested.map(String).includes(String(state.myTeamId));
+  const ownerLabel = isOwner ? 'You'
+    : (ownerTeam && typeof tcManager === 'function' ? tcManager(ownerTeam.id) : null)
+      || ownerTeam?.name || entry.ownerTeamName || entry.ownterTeamName || '—';
+
+  // Prefer the live roster player (injury, photo); fall back to the sheet row if dropped.
+  const pid = parseInt(entry.playerId, 10);
+  const live = findPlayerAnywhere(pid);
+  const player = live || { id: pid, name: entry.playerName, pos: entry.playerPos };
+  const hurt = live?.injuryStatus && live.injuryStatus !== 'ACTIVE';
+  const sub = isOwner
+    ? `You · ${interested.length ? `<b class="tb-hot">${interested.length} interested</b>` : '0 interested'}`
+    : live ? escapeHtml(ownerLabel) : 'No longer rostered';
+
+  let actions = '';
+  if (isOwner) {
+    actions = `<button class="player-action tb-act" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}" title="Take off the block">Unblock</button>`;
+  } else if (ownerTeam && live) {
+    actions = `
+      <button class="player-action tb-star ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}"
+        title="${youInterested ? 'You marked interest' : 'Mark interest'}" aria-label="${youInterested ? 'Remove interest' : 'Mark interest'}" aria-pressed="${youInterested}">${youInterested ? '★' : '☆'}</button>
+      <button class="player-action tb-act" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}" title="Make an offer">Offer</button>`;
+  }
+  return `
+    <div class="block-entry tb-row ${live ? 'clickable' : ''}" ${live ? `data-player-id="${pid}"` : ''}>
+      ${playerPhotoHTML(player)}
+      <div class="tb-info">
+        <div class="tb-name">${escapeHtml(player.name)} <span class="block-pos pos-${escapeHtml(player.pos)}">${escapeHtml(player.pos)}</span>${hurt ? ` <span class="block-injury">${escapeHtml(live.injuryStatus === 'INJURY_RESERVE' ? 'IR' : live.injuryStatus)}</span>` : ''}</div>
+        <div class="tb-sub">${sub}</div>
+        ${isOwner && interested.length ? `<div class="block-interest-list">From: ${interested.map((id) => escapeHtml(teamName(parseInt(id, 10)))).join(', ')}</div>` : ''}
+      </div>
+      <div class="tb-actions">${actions}</div>
+    </div>`;
+}
+
 function renderTradeBlockSection() {
   const el = $('#trade-block-list');
+  const summary = $('#trade-block-summary');
   if (!el) return;
+  const setSummary = (count, extra = '', faces = '') => {
+    if (!summary) return;
+    summary.innerHTML = `
+      <span class="tb-title">Trade Block</span>
+      <span class="tb-count">${count}</span>
+      ${extra}
+      <span class="tb-faces">${faces}</span>
+      <span class="tb-chev" aria-hidden="true">▸</span>`;
+  };
   if (state.tradeBlockMissing) {
+    setSummary('—');
     el.innerHTML = `
       <div class="empty" style="text-align:left;font-size:12px;line-height:1.5;">
         <b style="color:var(--yellow);">Trade Block sheet not found.</b><br>
@@ -2443,57 +2492,26 @@ function renderTradeBlockSection() {
     `;
     return;
   }
-  // Beta 1.3 secondary guard: re-sanitize before rendering in case any ghost rows
-  // slipped through (e.g. a mid-request state mutation, or legacy in-memory noise).
-  // Beta 1.8: strictly filter to 'tb_'-prefixed entryIds. Interest-only 'int_' rows
-  // stay hidden from the public block even if a legacy row lacks the onBlock column.
-  const validEntries = sanitizeTradeBlockRows(state.tradeBlock)
-    .filter((e) => e.entryId && e.entryId.startsWith('tb_'));
-  if (!validEntries.length) {
-    el.innerHTML = empty('No players on the block. Put yours up from the Research tab.');
+  const entries = tradeBlockEntries();
+  // Mine first, then everyone else's.
+  const mine = entries.filter((e) => String(e.ownerTeamId) === String(state.myTeamId));
+  const others = entries.filter((e) => String(e.ownerTeamId) !== String(state.myTeamId));
+  const interestOnMine = mine.reduce((n, e) => n + (safeParse(e.interestedTeamIds) || []).length, 0);
+  const shown = others.concat(mine).slice(0, 4);
+  const faces = shown.map((e) => {
+    const pid = parseInt(e.playerId, 10);
+    const p = findPlayerAnywhere(pid) || { id: pid, name: e.playerName, pos: e.playerPos };
+    return `<span class="tb-face">${playerPhotoHTML(p)}</span>`;
+  }).join('') + (entries.length > 4 ? `<span class="tb-more">+${entries.length - 4}</span>` : '');
+  setSummary(entries.length,
+    interestOnMine ? `<span class="tb-hot-pill">${interestOnMine} interested in yours</span>` : '',
+    faces);
+
+  if (!entries.length) {
+    el.innerHTML = empty('No players on the block. Put yours up from your roster.');
     return;
   }
-
-  el.innerHTML = validEntries.map((entry) => {
-    const interested = safeParse(entry.interestedTeamIds) || [];
-    // Look up owner by ID first (reliable), fall back to name (handles legacy/typo'd rows)
-    const ownerTeam = teamById(parseInt(entry.ownerTeamId, 10))
-      || teamByName(entry.ownerTeamName || entry.ownterTeamName);
-    const ownerName = ownerTeam?.name || entry.ownerTeamName || entry.ownterTeamName || '—';
-    const isOwner = String(state.myTeamId) === String(entry.ownerTeamId);
-    const meId = state.myTeamId;
-    const youInterested = interested.map(String).includes(String(meId));
-
-    // Prefer the live roster player (stats, injury); fall back to the sheet row if dropped.
-    const pid = parseInt(entry.playerId, 10);
-    const live = findPlayerAnywhere(pid);
-    const player = live || { id: pid, name: entry.playerName, pos: entry.playerPos };
-    const injury = live?.injuryStatus && live.injuryStatus !== 'ACTIVE'
-      ? `<span class="block-injury">${escapeHtml(live.injuryStatus)}</span> • ` : '';
-    const stats = live ? playerStatsLineHTML(live) : '<span class="stat-lbl">No longer rostered</span>';
-    const value = live && typeof tcValueChipHTML === 'function' ? tcValueChipHTML(pid) : '';
-
-    return `
-      <div class="block-entry ${live ? 'clickable' : ''}" ${live ? `data-player-id="${pid}"` : ''}>
-        ${playerPhotoHTML(player)}
-        <div class="block-info">
-          <div class="block-player">${escapeHtml(player.name)} <span class="block-pos pos-${escapeHtml(player.pos)}">${escapeHtml(player.pos)}</span></div>
-          ${stats ? `<div class="player-meta block-stats">${injury}${stats}</div>` : ''}
-          ${value ? `<div class="player-meta tv-row-val-line">${value}</div>` : ''}
-          <div class="block-owner">Owned by ${escapeHtml(ownerName)}${isOwner ? ` • ${interested.length} interested` : ''}</div>
-          ${isOwner && interested.length ? `<div class="block-interest-list">From: ${interested.map((id) => escapeHtml(teamName(parseInt(id, 10)))).join(', ')}</div>` : ''}
-        </div>
-        <div class="block-actions">
-          ${isOwner
-            ? `<button class="player-action" data-action="toggle-block" data-player-id="${escapeHtml(entry.playerId)}" title="Take off the block">${actionLabel('★', 'Unblock')}</button>`
-            : ownerTeam && live ? `
-              <button class="player-action" data-action="trade-for" data-player-id="${escapeHtml(entry.playerId)}" data-owner-id="${ownerTeam.id}" title="Trade for">${actionLabel('↔', 'Trade For')}</button>
-              <button class="player-action ${youInterested ? 'on' : ''}" data-action="toggle-interest" data-entry-id="${escapeHtml(entry.entryId)}" title="${youInterested ? 'Interested' : 'Mark interest'}">${youInterested ? actionLabel('✓', 'Interested') : actionLabel('+', 'Interested')}</button>
-            ` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
+  el.innerHTML = mine.concat(others).map(tradeBlockRowHTML).join('');
   wirePlayerActions(el);
 }
 
@@ -2501,7 +2519,8 @@ function renderTradeAssets(side) {
   const teamId = parseInt($(`#team-${side}-select`).value, 10);
   const team = teamById(teamId);
   const list = $(`#team-${side}-players`);
-  if (!team) { list.innerHTML = ''; return; }
+  const picksEl = $(`#team-${side}-picks`);
+  if (!team) { list.innerHTML = ''; if (picksEl) picksEl.innerHTML = ''; return; }
   list.innerHTML = team.roster
     .filter((p) => p.slot !== 'IR')
     .map((p) => `
@@ -2512,6 +2531,7 @@ function renderTradeAssets(side) {
         <span class="meta">${p.pos}</span>
       </label>
     `).join('');
+  if (picksEl) picksEl.innerHTML = pickChipsHTML(teamId);
 }
 
 // Phantom Pick Protection: only allow selecting picks the proposing team CURRENTLY owns.
@@ -2524,60 +2544,40 @@ function ownedPicksFor(teamId) {
     .map((p) => ({ year: parseInt(p.Year, 10), round: parseInt(p.Round, 10), origOwner: p['Original Owner'] }));
 }
 
-function addPickRow(side) {
-  const container = $(`#team-${side}-picks`);
-  const teamId = parseInt($(`#team-${side}-select`).value, 10);
-  if (!teamId) { toast('Pick the team first', 'error'); return; }
-
-  const owned = ownedPicksFor(teamId);
-  // Already-selected picks in this side's other rows (avoid double-adding same pick)
-  const usedKeys = new Set(
-    $$(`#team-${side}-picks .pick-row`).map((r) =>
-      `${r.querySelector('.pick-year').value}|${r.querySelector('.pick-round').value}`
-    )
-  );
-  const available = owned.filter((p) => !usedKeys.has(`${p.year}|${p.round}`));
-
-  if (!available.length) {
-    toast('No more picks owned by this team', 'error');
-    return;
-  }
-
-  const row = document.createElement('div');
-  row.className = 'pick-row';
-  const yearOpts = [...new Set(available.map((p) => p.year))].sort()
-    .map((y) => `<option value="${y}">${y}</option>`).join('');
-
-  row.innerHTML = `
-    <select class="pick-year"></select>
-    <select class="pick-round"></select>
-    <button class="pick-remove" type="button" aria-label="Remove">×</button>
-  `;
-  const yearSel = row.querySelector('.pick-year');
-  const roundSel = row.querySelector('.pick-round');
-  yearSel.innerHTML = yearOpts;
-
-  const refreshRounds = () => {
-    const y = parseInt(yearSel.value, 10);
-    const roundsForYear = available
-      .filter((p) => p.year === y)
-      .map((p) => p.round)
-      .sort((a, b) => a - b);
-    roundSel.innerHTML = roundsForYear
-      .map((r) => {
-        const p = available.find((q) => q.year === y && q.round === r);
-        const orig = teamByName(p.origOwner);
-        const fromOther = orig ? orig.id !== teamId : !sameTeamName(p.origOwner, teamName(teamId));
-        const ownerNote = fromOther ? ` (from ${escapeHtml(orig ? orig.name.trim() : p.origOwner)})` : '';
-        // Beta 1.3: embed the row's true 'Original Owner' string so the trade payload
-        // preserves the exact sheet identity — no guessing at PUT-condition time.
-        return `<option value="${r}" data-orig-owner="${escapeHtml(p.origOwner)}">Round ${r}${ownerNote}</option>`;
-      }).join('');
+// Beta 1.35: every pick the team owns is a tap-to-select chip (replaces the
+// "+ Add Pick" year/round dropdown rows). Each chip carries the sheet's exact
+// 'Original Owner' string so the trade payload keeps the true pick identity.
+function pickLabel(p, teamId) {
+  const orig = teamByName(p.origOwner);
+  const fromOther = orig ? orig.id !== teamId : !sameTeamName(p.origOwner, teamName(teamId));
+  return {
+    main: `${p.year} Rd ${p.round}`,
+    via: fromOther ? (orig ? (typeof tcManager === 'function' ? tcManager(orig.id) : orig.name.trim()) : p.origOwner) : '',
   };
-  yearSel.onchange = refreshRounds;
-  refreshRounds();
-  row.querySelector('.pick-remove').onclick = () => row.remove();
-  container.appendChild(row);
+}
+
+function pickChipsHTML(teamId) {
+  const owned = ownedPicksFor(teamId)
+    .sort((x, y) => x.year - y.year || x.round - y.round);
+  if (!owned.length) return '<div class="pick-chips-empty">No picks</div>';
+  return owned.map((p) => {
+    const l = pickLabel(p, teamId);
+    return `
+      <label class="pick-chip">
+        <input type="checkbox" data-year="${p.year}" data-round="${p.round}" data-orig-owner="${escapeHtml(p.origOwner)}" />
+        <span>${l.main}${l.via ? ` <small>via ${escapeHtml(l.via)}</small>` : ''}</span>
+      </label>`;
+  }).join('');
+}
+
+// Tick the chip for a pick (prefills, balance suggestions). Prefer an exact
+// original-owner match; older prefills only carry year + round.
+function checkPickChip(side, pick) {
+  const boxes = $$(`#team-${side}-picks .pick-chip input`)
+    .filter((c) => c.dataset.year === String(pick.year) && c.dataset.round === String(pick.round) && !c.checked);
+  const box = boxes.find((c) => pick.origOwner && c.dataset.origOwner === pick.origOwner) || boxes[0];
+  if (box) box.checked = true;
+  return !!box;
 }
 
 function collectSideAssets(side) {
@@ -2587,15 +2587,11 @@ function collectSideAssets(side) {
     name: c.dataset.name,
     pos: c.dataset.pos,
   }));
-  const picks = $$(`#team-${side}-picks .pick-row`).map((r) => {
-    const selOpt = r.querySelector('.pick-round option:checked');
-    const origOwner = selOpt?.dataset?.origOwner || '';
-    return {
-      year: parseInt(r.querySelector('.pick-year').value, 10),
-      round: parseInt(r.querySelector('.pick-round').value, 10),
-      origOwner,
-    };
-  });
+  const picks = $$(`#team-${side}-picks .pick-chip input:checked`).map((c) => ({
+    year: parseInt(c.dataset.year, 10),
+    round: parseInt(c.dataset.round, 10),
+    origOwner: c.dataset.origOwner || '',
+  }));
   return { teamId, players, picks };
 }
 
@@ -2612,13 +2608,27 @@ function resetTradeBuilder() {
 }
 
 async function submitTrade() {
-  const a = collectSideAssets('a');
-  const b = collectSideAssets('b');
+  const btn = $('#submit-trade');
+  btn.disabled = true;
+  try {
+    const ok = await sendTradeProposal(collectSideAssets('a'), collectSideAssets('b'));
+    if (ok) resetTradeBuilder();
+  } finally {
+    btn.disabled = false;
+  }
+}
 
-  if (!a.teamId || !b.teamId) { toast('Pick both teams', 'error'); return; }
-  if (a.teamId === b.teamId) { toast('Teams must differ', 'error'); return; }
-  if (!a.players.length && !a.picks.length) { toast('Your side is empty', 'error'); return; }
-  if (!b.players.length && !b.picks.length) { toast('Partner side is empty', 'error'); return; }
+/**
+ * Validate, save and announce a trade offer. Shared by the classic builder and
+ * the Simple-mode wizard (simple.js). a = my side (what I send), b = partner.
+ * Each side: { teamId, players: [{id,name,pos}], picks: [{year,round,origOwner}] }.
+ * Resolves true when the offer was saved.
+ */
+async function sendTradeProposal(a, b) {
+  if (!a.teamId || !b.teamId) { toast('Pick both teams', 'error'); return false; }
+  if (a.teamId === b.teamId) { toast('Teams must differ', 'error'); return false; }
+  if (!a.players.length && !a.picks.length) { toast('Your side is empty', 'error'); return false; }
+  if (!b.players.length && !b.picks.length) { toast('Partner side is empty', 'error'); return false; }
 
   // Match Stein sheet schema exactly. Includes the 'assestsOffered' typo from the sheet.
   // Beta 1.3: explicit teamAId/teamBId columns give downstream tools stable ID handles,
@@ -2636,7 +2646,6 @@ async function submitTrade() {
     ...(typeof tcValuationField === 'function' ? tcValuationField(a, b) : {}),
   };
 
-  $('#submit-trade').disabled = true;
   try {
     await postTrade(trade);
     toast('Trade submitted', 'success');
@@ -2650,14 +2659,13 @@ async function submitTrade() {
         window.open('sms:?&body=' + encodeURIComponent(text));
       }
     } catch (err) { /* user dismissed share sheet — no-op */ }
-    resetTradeBuilder();
     await loadPendingTrades();
     renderPendingTrades();
+    return true;
   } catch (err) {
     console.error(err);
     toast('Submit failed', 'error');
-  } finally {
-    $('#submit-trade').disabled = false;
+    return false;
   }
 }
 
@@ -2707,6 +2715,7 @@ function renderAssetItems(side) {
 }
 
 function renderPendingTrades() {
+  if (typeof smRenderTrades === 'function') smRenderTrades();
   const el = $('#pending-trades-list');
   // Beta 1.7 privacy audit: check both stable teamAId/teamBId AND legacy names
   // so no trade ever leaks to a non-participant, even if one field is missing.
@@ -2753,41 +2762,46 @@ function renderPendingTrades() {
     `;
   }).join('');
 
-  el.onclick = async (e) => {
+  el.onclick = (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const card = btn.closest('.trade-card');
-    const tradeId = card.dataset.tradeId;
-    const action = btn.dataset.action;
-    const trade = state.pendingTrades.find((x) => x.tradeId === tradeId);
-    if (!trade || !tradeId) return;
-
-    btn.disabled = true;
-    try {
-      if (action === 'counter') {
-        await handleCounteroffer(trade);
-        return;
-      }
-      const statusMap = { accept: 'Accepted', reject: 'Rejected', cancel: 'Cancelled' };
-      const toastMap = { accept: 'Trade Accepted', reject: 'Trade declined', cancel: 'Trade offer cancelled' };
-      const newStatus = statusMap[action];
-      if (!newStatus) return;
-      if (action === 'accept') {
-        const r = btn.getBoundingClientRect();
-        triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
-          paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
-      }
-      await updateTradeStatus(tradeId, newStatus);
-      toast(toastMap[action], 'success');
-      if (action === 'accept') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
-      await loadPendingTrades();
-      renderPendingTrades();
-    } catch (err) {
-      console.error(err);
-      toast('Update failed', 'error');
-      btn.disabled = false;
-    }
+    const trade = state.pendingTrades.find((x) => x.tradeId === card?.dataset.tradeId);
+    if (trade) handleTradeAction(trade, btn.dataset.action, btn);
   };
+}
+
+/**
+ * Accept / decline / cancel / counter a pending trade. Shared by the Pending
+ * Trades card and Simple mode's offer cards (simple.js).
+ */
+async function handleTradeAction(trade, action, btn) {
+  if (!trade?.tradeId) return;
+  if (btn) btn.disabled = true;
+  try {
+    if (action === 'counter') {
+      await handleCounteroffer(trade);
+      return;
+    }
+    const statusMap = { accept: 'Accepted', reject: 'Rejected', cancel: 'Cancelled' };
+    const toastMap = { accept: 'Trade Accepted', reject: 'Trade declined', cancel: 'Trade offer cancelled' };
+    const newStatus = statusMap[action];
+    if (!newStatus) return;
+    if (action === 'accept' && btn) {
+      const r = btn.getBoundingClientRect();
+      triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
+        paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
+    }
+    await updateTradeStatus(trade.tradeId, newStatus);
+    toast(toastMap[action], 'success');
+    if (action === 'accept') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
+    await loadPendingTrades();
+    renderPendingTrades();
+  } catch (err) {
+    console.error(err);
+    toast('Update failed', 'error');
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Build a plain-text emoji-friendly trade summary for SMS/clipboard sharing.
@@ -4474,6 +4488,8 @@ function showTeamPicker() {
     setMyTeamId(id);
     modal.hidden = true;
     if ($('#view-myteam').classList.contains('active')) renderMyTeam();
+    if ($('#view-trades').classList.contains('active')) setView('trades');
+    setTimeout(maybePromptLayout, 400);
   };
   modal.hidden = false;
 }
@@ -5108,41 +5124,138 @@ async function handleCounteroffer(trade) {
 
 /* ----------------------- Theme ----------------------- */
 
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('theme', t); } catch (err) { /* storage blocked */ }
+}
+
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
   $('#theme-toggle').onclick = () => {
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
+    setTheme(current === 'dark' ? 'light' : 'dark');
   };
 }
 
-/* ----------------------- Density (Beta 1.20) -----------------------
- * Compact layout lives in compact.css, scoped to html[data-density="compact"].
- * Classic stays the default. Tap the W logo to switch; the choice is per device.
- * To make compact the league default, change DEFAULT_DENSITY below.
+/* ----------------------- Layout: Classic / Compact / Simple -----------------------
+ * Compact lives in compact.css, Simple in simple.css (+ simple.js), each scoped to
+ * html[data-density="..."]. Classic stays the default. Tapping the W logo opens
+ * the Display sheet (layout, theme, your team); the choice is per device.
+ * Beta 1.35: devices that never picked a layout get the sheet once on launch.
  * ------------------------------------------------------------------ */
 
 const DEFAULT_DENSITY = 'classic';
+const DENSITIES = [
+  { key: 'classic', title: 'Classic', sub: 'Everything, full detail' },
+  { key: 'compact', title: 'Compact', sub: 'Same features, tighter' },
+  { key: 'simple', title: 'Simple', sub: 'Bigger text, just the basics' },
+];
+// Tabs Simple mode leaves out of the bottom nav.
+const SIMPLE_HIDDEN_VIEWS = ['activity', 'myteam', 'vault'];
+
+function isSimple() {
+  return document.documentElement.getAttribute('data-density') === 'simple';
+}
+
+function setDensity(d) {
+  const prev = document.documentElement.getAttribute('data-density');
+  document.documentElement.setAttribute('data-density', d);
+  try { localStorage.setItem('density', d); } catch (err) { /* storage blocked */ }
+  if (prev === d) return;
+  // Re-enter the current tab so layout-specific rendering (Simple trades,
+  // hidden tabs) catches up. Simple's hidden tabs fall back to Standings.
+  const current = document.body.dataset.theme;
+  if (current && VIEW_ORDER.includes(current)) setView(current);
+}
 
 function initDensity() {
-  const apply = (d) => document.documentElement.setAttribute('data-density', d);
-  apply(localStorage.getItem('density') || DEFAULT_DENSITY);
+  let saved = null;
+  try { saved = localStorage.getItem('density'); } catch (err) { /* storage blocked */ }
+  document.documentElement.setAttribute('data-density', saved || DEFAULT_DENSITY);
   const logo = $('.logo-dot');
-  if (!logo) return;
-  logo.setAttribute('role', 'button');
-  logo.setAttribute('tabindex', '0');
-  logo.setAttribute('aria-label', 'Switch layout density');
-  const toggle = () => {
-    const next = document.documentElement.getAttribute('data-density') === 'compact' ? 'classic' : 'compact';
-    apply(next);
-    localStorage.setItem('density', next);
-    toast(next === 'compact' ? 'Compact layout on. Tap the W to switch back.' : 'Classic layout on.', 'success');
-  };
-  logo.onclick = toggle;
-  logo.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+  if (logo) {
+    logo.setAttribute('role', 'button');
+    logo.setAttribute('tabindex', '0');
+    logo.setAttribute('aria-label', 'Display settings');
+    logo.onclick = () => openDisplaySheet();
+    logo.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDisplaySheet(); } };
+  }
+  const sheet = $('#display-sheet');
+  if (sheet) {
+    const close = () => { sheet.hidden = true; };
+    $('#display-close').onclick = close;
+    sheet.onclick = (e) => {
+      if (e.target === sheet) { close(); return; }
+      const opt = e.target.closest('[data-density-opt]');
+      if (opt) { setDensity(opt.dataset.densityOpt); renderDisplaySheet(); return; }
+      const th = e.target.closest('[data-theme-opt]');
+      if (th) { setTheme(th.dataset.themeOpt); renderDisplaySheet(); return; }
+      if (e.target.closest('[data-display-team]')) { close(); showTeamPicker(); return; }
+      if (e.target.closest('[data-display-done]')) close();
+    };
+  }
+  // "Switch to full app" link at the bottom of Simple's Standings
+  $('#simple-switch')?.addEventListener('click', () => openDisplaySheet());
+}
+
+function renderDisplaySheet() {
+  const body = $('#display-body');
+  if (!body) return;
+  const density = document.documentElement.getAttribute('data-density') || DEFAULT_DENSITY;
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const me = state.myTeamId ? teamById(state.myTeamId) : null;
+  body.innerHTML = `
+    <div class="ds-h">Layout</div>
+    <div class="ds-options" role="radiogroup" aria-label="Layout">
+      ${DENSITIES.map((d) => `
+        <button type="button" class="ds-opt ds-opt-${d.key} ${d.key === density ? 'on' : ''}" role="radio"
+                aria-checked="${d.key === density}" data-density-opt="${d.key}">
+          <span class="ds-radio" aria-hidden="true"></span>
+          <span class="ds-opt-text">
+            <span class="ds-opt-title">${d.title}</span>
+            <span class="ds-opt-sub">${d.sub}</span>
+          </span>
+        </button>`).join('')}
+    </div>
+    <div class="ds-h">Colors</div>
+    <div class="segmented ds-theme" role="radiogroup" aria-label="Colors">
+      <button type="button" class="seg-btn ${theme === 'dark' ? 'active' : ''}" role="radio" aria-checked="${theme === 'dark'}" data-theme-opt="dark">Dark</button>
+      <button type="button" class="seg-btn ${theme === 'light' ? 'active' : ''}" role="radio" aria-checked="${theme === 'light'}" data-theme-opt="light">Light</button>
+    </div>
+    <div class="ds-h">Your team</div>
+    <button type="button" class="modal-team-btn ds-team" data-display-team>
+      <span>
+        <div>${me ? escapeHtml(me.name) : 'Pick your team'}</div>
+        ${me ? `<div class="owner">${escapeHtml(me.owner || '')}</div>` : ''}
+      </span>
+      <span class="arrow">Change →</span>
+    </button>
+    <button type="button" class="btn-primary ds-done" data-display-done>Done</button>`;
+}
+
+function openDisplaySheet(opts = {}) {
+  const sheet = $('#display-sheet');
+  if (!sheet) return;
+  $('#display-title').textContent = opts.firstRun ? 'How should the app look?' : 'Display';
+  $('#display-sub').textContent = opts.firstRun
+    ? 'Simple has bigger text and just the basics. You can change this any time by tapping the W.'
+    : 'Pick how the app looks on this device.';
+  renderDisplaySheet();
+  sheet.hidden = false;
+}
+
+// One-time layout prompt for devices that never picked one. Waits until the
+// team picker / update prompt are out of the way; called after boot and on
+// every tab change until it has shown once.
+function maybePromptLayout() {
+  try {
+    if (localStorage.getItem('density') || localStorage.getItem('layoutPrompted')) return;
+  } catch (err) { return; }
+  if (!state.myTeamId) return;
+  if ($('#update-modal') || $$('.modal-overlay').some((m) => !m.hidden)) return;
+  try { localStorage.setItem('layoutPrompted', '1'); } catch (err) { /* storage blocked */ }
+  openDisplaySheet({ firstRun: true });
 }
 
 /* ----------------------- Navigation ----------------------- */
@@ -5168,6 +5281,8 @@ function flashAmbientBar() {
 }
 
 function setView(name) {
+  // Simple layout has no Activity / Research / Vault tabs (push links included).
+  if (isSimple() && SIMPLE_HIDDEN_VIEWS.includes(name)) name = 'standings';
   const oldName = document.body.dataset.theme;
   const oldIdx = VIEW_ORDER.indexOf(oldName);
   const newIdx = VIEW_ORDER.indexOf(name);
@@ -5212,6 +5327,8 @@ function setView(name) {
     });
     loadTradeBlock().then(renderTradeBlockSection);
     wireTradeSearch();
+    // Simple layout: offers + step-by-step flow (simple.js). Reads any prefill first.
+    if (typeof smEnterTrades === 'function') smEnterTrades();
     // Apply any prefill from "Trade For" navigation
     setTimeout(applyTradePrefill, 50);
     // Trade calculator: values, live meter, finder (trade-calc.js)
@@ -5226,10 +5343,13 @@ function setView(name) {
     loadTradeBlock().then(renderRoster);
     wireRosterSearch();
     wireRosterMode();
-    if (state.rosterMode === 'waivers') showWaivers();
+    // Simple has no Waivers toggle: always show the team rosters.
+    if (isSimple() && state.rosterMode === 'waivers') $('#roster-mode [data-mode="teams"]')?.click();
+    else if (state.rosterMode === 'waivers') showWaivers();
   }
   if (name === 'vault') initVaultView();
   if (name === 'activity' && typeof actOpen === 'function') actOpen();
+  setTimeout(maybePromptLayout, 600);
 }
 
 // ?view=trades etc. (tapped push notifications): open that tab, then tidy the URL.
@@ -5354,6 +5474,8 @@ async function boot() {
     if (!state.myTeamId && state.teams.length) {
       setTimeout(showTeamPicker, 400);
     }
+    // ...then (once) ask how the app should look.
+    setTimeout(maybePromptLayout, 1500);
 
     // Live scoring: see livePollTick(). Pull game clocks right away so the
     // cards show who's playing without waiting for the first tick.
@@ -5886,7 +6008,9 @@ function renderFrontPage(rows) {
   const week = String(latest.weekNumber || '?');
   const saved = readFpState();
   const newWeek = saved.seenWeek !== week;
-  let mode = saved.collapsed && !newWeek ? 'collapsed' : 'preview';
+  // Simple layout starts with just the headline unless the reader opened it before.
+  const collapsedPref = saved.collapsed ?? isSimple();
+  let mode = collapsedPref && (!newWeek || isSimple()) ? 'collapsed' : 'preview';
   if (newWeek) writeFpState({ ...saved, seenWeek: week });
 
   el.hidden = false;
@@ -7285,7 +7409,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.34.0';
+const BUILD_ID = '1.35.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

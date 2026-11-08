@@ -366,7 +366,6 @@
 [data-density="compact"] .asset-item .player-photo-wrap,
 [data-density="compact"] .asset-item .player-photo,
 [data-density="compact"] .asset-item .player-photo-fallback { width: 24px; height: 24px; font-size: 8px; }
-[data-density="compact"] #reset-trade { margin-top: 10px; }
 
 /* ---------- Trade finder ---------- */
 [data-density="compact"] .tv-filters { gap: 4px; margin: 8px 0 0; }
@@ -387,56 +386,31 @@
 [data-density="compact"] .tv-feed-sides { margin-top: 4px; gap: 8px; font-size: 12px; }
 [data-density="compact"] .tv-feed-sides .lbl { font-size: 9px; }
 
-/* ---------- Trade block ---------- */
-[data-density="compact"] .block-entry {
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 6px 10px 6px 8px;
-  margin: 0;
-  border-radius: 0;
-  border-width: 0 1px 1px 3px;
-}
-[data-density="compact"] .block-entry:first-child {
-  border-top-width: 1px;
-  border-top-left-radius: var(--radius-sm);
-  border-top-right-radius: var(--radius-sm);
-}
-[data-density="compact"] .block-entry:last-child {
-  border-bottom-left-radius: var(--radius-sm);
-  border-bottom-right-radius: var(--radius-sm);
-}
-[data-density="compact"] .block-entry:hover { transform: none; }
-[data-density="compact"] .block-entry .player-photo-wrap,
-[data-density="compact"] .block-entry .player-photo,
-[data-density="compact"] .block-entry .player-photo-fallback { width: 32px; height: 32px; border-width: 1px; font-size: 10px; }
-[data-density="compact"] .block-player { font-size: 13px; }
-[data-density="compact"] .block-pos { font-size: 8px; padding: 0 4px; margin-left: 4px; }
-[data-density="compact"] .block-stats { margin-top: 1px; font-size: 10px; }
-[data-density="compact"] .block-stats .pos-rank { font-size: 9px; padding: 0 4px; }
-[data-density="compact"] .block-stats .stat-lbl,
-[data-density="compact"] .block-entry .tv-row-val .stat-lbl { font-size: 8px; }
-[data-density="compact"] .block-entry .tv-row-val-line { margin-top: 0; font-size: 11px; }
-[data-density="compact"] .block-owner { font-size: 10px; margin-top: 0; }
-[data-density="compact"] .block-interest-list { font-size: 9px; margin-top: 1px; }
-[data-density="compact"] .block-actions { flex-direction: row; gap: 4px; }
-[data-density="compact"] .block-actions .player-action {
-  min-width: 26px;
-  height: 22px;
-  padding: 0 6px;
-  font-size: 12px;
-  line-height: 1;
-  border-radius: 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-[data-density="compact"] .block-actions .player-action .pa-lbl {
-  position: absolute;
-  width: 1px; height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
+/* ---------- Trade block bar (Beta 1.35) ---------- */
+[data-density="compact"] .tb-summary { padding: 8px 10px; min-height: 40px; gap: 6px; }
+[data-density="compact"] .tb-title { font-size: 11px; }
+[data-density="compact"] .tb-face .player-photo-wrap,
+[data-density="compact"] .tb-face .player-photo,
+[data-density="compact"] .tb-face .player-photo-fallback { width: 22px; height: 22px; }
+[data-density="compact"] .tb-list { padding: 0 8px 6px; }
+[data-density="compact"] .tb-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; padding: 5px 2px; }
+[data-density="compact"] .tb-row .player-photo-wrap,
+[data-density="compact"] .tb-row .player-photo,
+[data-density="compact"] .tb-row .player-photo-fallback { width: 24px; height: 24px; font-size: 8px; }
+[data-density="compact"] .tb-name { font-size: 12px; }
+[data-density="compact"] .tb-sub { font-size: 10px; }
+[data-density="compact"] .tb-actions { gap: 4px; }
+[data-density="compact"] .tb-actions .player-action { height: 24px; padding: 0 8px; font-size: 11px; border-radius: 5px; }
+[data-density="compact"] .tb-act { min-width: 54px; }
+[data-density="compact"] .tb-star { min-width: 26px; font-size: 13px; }
+[data-density="compact"] .pick-chips { gap: 4px; }
+[data-density="compact"] .pick-chip { padding: 3px 8px; min-height: 26px; font-size: 11px; }
+[data-density="compact"] .trade-sendbar { padding: 6px 8px; gap: 6px; margin: 10px -4px -4px; }
+[data-density="compact"] .sb-counts { font-size: 12px; }
+[data-density="compact"] .sb-verdict { font-size: 10px; }
+[data-density="compact"] .trade-sendbar .sb-send { padding: 8px 12px; font-size: 12px; }
+[data-density="compact"] .trade-sendbar .sb-clear { padding: 7px 10px; }
+[data-density="compact"] .tv-more { margin-top: 8px; padding-top: 4px; }
 
 /* ---------- My Team: matchmaker, draft assets, value ---------- */
 [data-density="compact"] .matchmaker-card { padding: 10px; margin-bottom: 12px; border-width: 1px; }
