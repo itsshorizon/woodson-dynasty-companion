@@ -1,6 +1,6 @@
 /* Release checklist: bump CACHE_NAME here, BUILD_ID in app.js, version.json,
  * and every ?v= in index.html to the same version. */
-const CACHE_NAME = 'wcc-v1.33.0';
+const CACHE_NAME = 'wcc-v1.34.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,8 @@ const CORE_ASSETS = [
   './research.js',
   './activity-engine.js',
   './social.js',
+  './push-engine.js',
+  './push.js',
   './minigame.js',
   './assets/minigame/run.png',
   './assets/minigame/jump.png',
@@ -95,4 +97,34 @@ self.addEventListener('fetch', (event) => {
       return res;
     }))
   );
+});
+
+/* ---------------- Push notifications (push.js, functions/) ----------------
+ * Payload: { title, body, tag, url }. A notification with the same tag
+ * replaces the last one, so live scoring never stacks up on the lock screen. */
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'Woodson Clan', {
+    body: d.body || '',
+    tag: d.tag || undefined,
+    renotify: !!d.tag,
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+    data: { url: d.url || './' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || './', self.registration.scope).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = wins.find((w) => w.url.startsWith(self.registration.scope));
+    if (open) {
+      open.postMessage({ type: 'push-open', url });
+      return open.focus();
+    }
+    return self.clients.openWindow(url);
+  })());
 });

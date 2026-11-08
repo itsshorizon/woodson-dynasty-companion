@@ -1,8 +1,10 @@
-// Firestore rules for league chat + reactions (social.js).
+// Firestore rules for league chat + reactions (social.js) and push
+// notifications (push.js, functions/).
 //
 // Live in Firebase project woodson-clan-bf598b (owner wood6on@gmail.com).
-// Editing this file does NOT deploy it: after a change, paste it into
-// Firebase console → Firestore → Rules → Publish.
+// Editing this file does NOT deploy it. Deploy with
+//   firebase deploy --only firestore:rules
+// (or paste it into Firebase console → Firestore → Rules → Publish).
 //
 // Setup, already done for this league (kept for a fresh project; the free
 // Spark plan is plenty for one league):
@@ -66,5 +68,39 @@ service cloud.firestore {
         && request.resource.data.d == false;
       allow update: if authed() && softDelete(['img']) && request.resource.data.img == '';
     }
+
+    // One doc per browser push subscription; the id is a hash of its endpoint,
+    // which only that browser knows. Only Cloud Functions read these.
+    match /pushSubs/{id} {
+      allow create, update: if authed() && stamped()
+        && request.resource.data.keys().hasOnly(['uid', 'teamId', 'sub', 'prefs', 'tz', 'quiet', 'pausedUntil', 'ua', 'u'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.teamId is int
+        && request.resource.data.sub is map
+        && request.resource.data.sub.endpoint is string
+        && request.resource.data.sub.endpoint.matches('https://.*')
+        && request.resource.data.sub.endpoint.size() <= 1000
+        && request.resource.data.prefs is map && request.resource.data.prefs.size() <= 40
+        && request.resource.data.tz is string && request.resource.data.tz.size() <= 64
+        && request.resource.data.quiet is map
+        && request.resource.data.pausedUntil is int
+        && request.resource.data.ua is string && request.resource.data.ua.size() <= 16;
+      allow delete: if authed();
+    }
+
+    // One-shot notices from the app (trade offers and replies, newsletter,
+    // test push). Cloud Functions handle and delete them; nobody reads them.
+    match /events/{id} {
+      allow create: if authed()
+        && request.resource.data.keys().hasOnly(['type', 'from', 'to', 'x', 'uid', 'at'])
+        && request.resource.data.type in ['test', 'trade_offer', 'trade_reply', 'newsletter']
+        && request.resource.data.from is int
+        && (request.resource.data.to == null || request.resource.data.to is int)
+        && request.resource.data.x is string && request.resource.data.x.size() <= 140
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.at == request.time;
+    }
+
+    // push_state/* is server-only (Admin SDK skips rules), so no match here.
   }
 }

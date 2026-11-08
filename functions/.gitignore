@@ -1,0 +1,6 @@
+node_modules/
+lib/
+# VAPID private key for the local emulator. The deployed functions read it
+# from Secret Manager (firebase functions:secrets:set VAPID_PRIVATE).
+.secret.local
+*.log

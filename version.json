@@ -1,11 +1,12 @@
 {
-  "version": "1.33.0",
-  "title": "📈 Game Flow",
+  "version": "1.34.0",
+  "title": "🔔 Notifications",
   "notes": [
-    "📈 Full-screen matchups have a new Game Flow chart: both teams' scores over the week, lead changes, a dashed line to each projected finish, and a win % strip underneath. Drag across it to see the score and the plays at any moment.",
-    "🔥 Scoring plays: every score for either team shows up in a feed as it happens (big plays are highlighted). Points scored while the app was closed show up as \"away\". Tap a play to see how it scored.",
-    "📊 New mini charts: points by position for both lineups, and a Path to Win card that shows what each side still needs.",
-    "🟩 Each player's row now has a thin bar showing how close they are to their projection.",
-    "🏈 Psst… when ESPN is down there's something to do while you wait. (Or tap the week title in full screen five times.)"
+    "🔔 Push notifications are here. Tap the bell at the top to turn them on for this device (on iPhone, add the app to your Home Screen first).",
+    "🤝 Trades: get pinged when someone sends you an offer, when your offer is accepted, declined or countered, and when a trade goes through.",
+    "🏈 Game day: touchdowns and 5+ point plays by your players, a lineup warning before kickoff if a starter is out or on bye, close-game alerts and your final score.",
+    "💬 Chat: hear about every message, only when someone @s you (the default), or nothing at all.",
+    "📊 A Tuesday-morning Front Office digest with your value risers and fallers, plus a sell-high and a buy-low idea.",
+    "🤫 Every alert has its own switch, plus quiet hours, a 24-hour pause and a daily cap, so your phone won't get blown up."
   ]
 }

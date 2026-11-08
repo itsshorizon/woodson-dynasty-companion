@@ -1,0 +1,17 @@
+{
+  "name": "woodson-clan-push",
+  "private": true,
+  "description": "Push notifications for the Woodson Clan app (Firebase Cloud Functions).",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "copy-engines": "node copy-engines.js",
+    "serve": "npm run copy-engines && firebase emulators:start --only functions,firestore",
+    "deploy": "firebase deploy --only functions,firestore:rules"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0",
+    "web-push": "3.6.7"
+  }
+}

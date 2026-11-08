@@ -21,6 +21,9 @@ const CONFIG = {
     projectId: 'woodson-clan-bf598b',
     appId: '1:304723851532:web:83e44cb003aca577c07129',
   },
+  // Push notifications (push.js + functions/). Web Push VAPID public key; the
+  // private half is the VAPID_PRIVATE secret in Firebase. Blank = no bell.
+  PUSH_VAPID: 'BDNGj8-jCPQmpiKrCUrgUXb9IAP_EtH35yqJD6YIU_mlyxk09Khj-R0usLC7OF6FsFQPTXdkMdnA7sc7wnVH5Ps',
 };
 
 const POSITION_MAP = { 1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DST' };
@@ -439,6 +442,7 @@ async function postTrade(trade) {
     body: JSON.stringify([trade]),
   });
   if (!res.ok) throw new Error(`Trade submit failed: ${res.status}`);
+  if (typeof pushEvent === 'function') pushEvent('trade_offer', trade.teamBId, '', trade.teamAId);
   return res.json();
 }
 
@@ -449,7 +453,21 @@ async function updateTradeStatus(tradeId, status) {
     body: JSON.stringify({ condition: { tradeId }, set: { status } }),
   });
   if (!res.ok) throw new Error(`Trade update failed: ${res.status}`);
+  notifyTradeStatus(tradeId, status);
   return res.json();
+}
+
+// Push: tell the other side. Replies go to the proposer; a withdrawn offer goes to the receiver.
+function notifyTradeStatus(tradeId, status) {
+  if (typeof pushEvent !== 'function') return;
+  const t = state.allTrades.find((x) => x.tradeId === tradeId);
+  if (!t) return;
+  const a = Number(t.teamAId) || teamByName(t.teamProposing)?.id;
+  const b = Number(t.teamBId) || teamByName(t.teamReceiving)?.id;
+  if (a == null || b == null) return;
+  // `from` is the team, not whoever tapped: the commissioner can act for a team.
+  if (status === 'Cancelled') pushEvent('trade_reply', b, status, a);
+  else if (['Accepted', 'Rejected', 'Countered'].includes(status)) pushEvent('trade_reply', a, status, b);
 }
 
 async function deleteTrade(tradeId) {
@@ -4428,6 +4446,7 @@ function setMyTeamId(id) {
   renderScores(); // re-pin "Your Matchup"
   if (typeof rxRefreshAll === 'function') rxRefreshAll(); // "mine" highlights follow the team
   if (typeof actDataChanged === 'function') actDataChanged();
+  if (typeof pushTeamChanged === 'function') pushTeamChanged();
 }
 
 const COMMISH_TEAM_NAME = 'toe guano';
@@ -5213,6 +5232,16 @@ function setView(name) {
   if (name === 'activity' && typeof actOpen === 'function') actOpen();
 }
 
+// ?view=trades etc. (tapped push notifications): open that tab, then tidy the URL.
+function openDeepLinkView() {
+  const params = new URLSearchParams(location.search);
+  const view = params.get('view');
+  if (!view) return;
+  if (VIEW_ORDER.includes(view) && view !== 'standings') setView(view);
+  params.delete('view');
+  history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
+}
+
 function wireNavigation() {
   $$('.nav-btn').forEach((btn) => { btn.onclick = () => setView(btn.dataset.view); });
   // #standings-toggle was removed in V2.2 (Leaderboard + Scores now render side-by-side).
@@ -5286,6 +5315,7 @@ async function boot() {
   initDensity();
   wireNavigation();
   document.body.dataset.theme = 'standings'; // initial tab theme
+  openDeepLinkView();
   $('#standings-content').innerHTML = skeletonRows(8);
   $('#scores-content').innerHTML = Array.from({ length: 6 }, () => '<div class="skeleton skel-match"></div>').join('');
   renderFrontPageSkeleton();
@@ -6200,6 +6230,7 @@ async function handlePressPublish() {
       return;
     }
     toast('🚀 Published to league!', 'success');
+    if (typeof pushEvent === 'function') pushEvent('newsletter', null, headline);
     $('#press-modal').hidden = true;
     // Refresh front page
     loadFrontPage();
@@ -7254,7 +7285,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.33.0';
+const BUILD_ID = '1.34.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
