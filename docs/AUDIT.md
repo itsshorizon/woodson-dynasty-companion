@@ -2,6 +2,27 @@
 
 Written against Beta 1.35.0 (November 2026). Measured in a phone-sized browser (390 px wide) with live league data, signed in as Toe Guano.
 
+## Status (updated for Beta 1.37.0)
+
+Decisions made: this league only, all five Research ideas approved, Classic + Simple layouts, Mac available.
+
+| Phase | Item | State |
+|---|---|---|
+| 0 | Release script, CI, app bundle, vendored charts | Shipped 1.36 |
+| 0 | Trade Finder must-includes | Shipped 1.36 |
+| 1 | Trades sub-tabs (Offers, Find, Build, Feed) | Shipped 1.37 |
+| 1 | Research Briefing landing page (idea 2) | Shipped 1.37 |
+| 1 | Season Impact on the meter and Finder (idea 1) | Shipped 1.37 |
+| 1 | One Settings sheet; commissioner tools moved in | Shipped 1.37 |
+| 1 | Old My Team page, Matchmaker, Compact retired | Shipped 1.37 |
+| 1 | Activity capped at 20 per page | Shipped 1.37 |
+| 1 | Watchlist, trade report card, scouting reports (ideas 3 to 5) | Queued, see section 9 |
+| 1 | Vault tab cleanup, Ask as a button, split `app.js` | Queued, see section 9 |
+| 2 | Sign-in, storage off the Sheet, chat report/block, privacy page | Queued, needs you for Firebase console steps |
+| 3 | Capacitor iOS shell, Apple push, icons, TestFlight | Queued, needs your Mac |
+
+Sections 1 to 3 below describe the app as it was at 1.35.0, before this work.
+
 ## TL;DR
 
 - The data is strong. The map is the problem. The same job lives in two or three places, and the newest, best features sit behind the oldest screens.
@@ -221,3 +242,17 @@ Also worth doing in Phase 1 or 2: split `app.js` (7,437 lines, one shared scope)
 4. **Research.** Which of the five ideas? My pick is 1 + 2.
 5. **Must-include meaning.** I built it as "every named asset is in the deal". If you wanted "at least one of them", say so and I will add a toggle.
 6. **Apple.** Do you have a Mac and a developer account?
+
+## 9. Work queue (each item is self-contained)
+
+Every item: branch from main, keep `npm run check` green, bump with `node scripts/release.js`, no em dashes in user-facing text, test in a 390 px browser.
+
+1. **Watchlist.** Star button on the player profile (`openPlayerProfile` in `app.js`). Store ids in localStorage key `watchlist`. New Research sub-tab "Watch" in `research.js` listing each player with value, 30-day trend (`tcPlayer(id).tr`), owner, latest headline (`RS.news`), and a "Find a deal" button that sets `TC.must.get = ['player:<id>']`, selects the owner in `#finder-partner`, and opens Trades > Find (`tradeTab('find')`). Add a Briefing row when a watched player moves 10% or more.
+2. **Trade report card.** For each accepted trade, value at trade date versus today from `data/history/<date>.json` (daily since 2026-10-03). Pure function in `trade-engine.js` with tests; render a "Then vs now" line in `tcTradeFeedItemHTML`. Trades older than the history get "partial".
+3. **Scouting report.** Tapping a team in Research > League (`rsRenderLeague`) opens a sheet: approach, weak and strong positions (`m.teamCtx`), accepted-trade tendencies from `state.allTrades`, and the top two deals (`rsShowFits` already finds them).
+4. **Vault cleanup.** Five sub-tabs: Records (Record Book + Trauma Ledger), Draft (Board + Time Machine), Managers (Resumes + index), Players, Rivalry (Desk + heatmap). Move the Schedule Luck chart from Standings to Research > League.
+5. **Ask as a button.** Remove the Ask sub-tab; add "Ask about this" to each Research pane, passing that pane's data pack (`rsTeamPack`).
+6. **Split `app.js`.** One file per tab (standings, rosters, trades, vault, settings, press room). Plain script tags, same globals, no behavior change. Add each new file to `index.html` and `CORE_ASSETS` in `sw.js`; the release check enforces both.
+7. **Privacy policy page.** `privacy.html`: what is stored (anonymous Firebase id, team choice, chat messages, reactions, push subscription), where (Firebase, the trade sheet), and a contact address supplied by the owner.
+8. **Chat report and block.** Long-press a chat message: Report (writes `reports/{id}` in Firestore, rules allow create only) and Block (hide that team's messages on this device). Commissioner sees reports in Settings.
+9. **App icons.** 1024 px master icon and the iOS set; replace the placeholder `icon-192.png` and `icon-512.png`.

@@ -5951,3 +5951,49 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .tv-more[open] > summary { margin-bottom: 8px; }
 .tv-more .tv-badges:first-of-type { margin-top: 0; }
 
+
+/* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
+.trade-subnav { margin-bottom: 12px; }
+.trade-subnav .seg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg-count { min-width: 18px; padding: 1px 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 900; line-height: 16px; }
+.seg-count[hidden] { display: none; }
+#trade-interest.card { padding-bottom: 6px; }
+.tv-feed-dead { margin-top: 14px; }
+.tv-feed-dead > summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--text-dim); padding: 8px 0; }
+
+/* Season impact (trade meter + finder results) */
+.tv-impact { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: rgba(var(--tab-accent-rgb), 0.05); }
+.tv-impact-h { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tab-accent); margin-bottom: 6px; }
+.tv-impact-row { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; font-size: 13px; }
+.tv-impact-row + .tv-impact-row { border-top: 1px solid var(--border); }
+.tv-impact-row .who { font-weight: 800; }
+.tv-impact-row .nums { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.tv-impact-note { margin: 6px 0 0; font-size: 10px; color: var(--text-mute); }
+.tv-finder-impact { margin-top: 8px; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.tv-finder-impact .lbl { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); margin-right: 6px; }
+
+/* Research Briefing */
+.rs-brief-hero { padding: 14px; border: 1px solid var(--tab-accent); border-radius: 16px; background: rgba(var(--tab-accent-rgb), 0.06); cursor: pointer; }
+.rs-brief-id { display: flex; align-items: center; gap: 12px; }
+.rs-brief-name { font-size: 18px; font-weight: 900; line-height: 1.15; }
+.rs-brief-sub { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.35; }
+.rs-brief-odds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.rs-brief-odds > div { display: flex; flex-direction: column; gap: 1px; }
+.rs-brief-big { font-size: 26px; font-weight: 900; color: var(--tab-accent); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rs-brief-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.rs-brief-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; text-align: left; font-family: var(--font); color: var(--text); background: transparent; border: 1px solid var(--border-strong); border-radius: 14px; cursor: pointer; }
+.rs-brief-icon { flex: 0 0 auto; font-size: 20px; }
+.rs-brief-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rs-brief-kicker { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tab-accent); }
+.rs-brief-title { font-size: 14px; font-weight: 800; line-height: 1.25; }
+.rs-brief-chev { flex: 0 0 auto; font-size: 20px; color: var(--text-mute); }
+.rs-brief-note { text-align: center; }
+
+/* Settings sheet + header */
+.ds-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.ds-tools .btn-ghost { flex: 1 1 auto; }
+#display-body .patch-notes-btn { width: 100%; }
+/* Notifications moved into Settings; push.js still drives this button's state. */
+#push-bell { display: none !important; }
+.press-room-trigger[hidden] { display: none !important; }
+.roster-picks { margin-top: 18px; }

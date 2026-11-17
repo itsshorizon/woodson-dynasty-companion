@@ -1,11 +1,13 @@
 {
-  "version": "1.36.0",
-  "title": "📌 Trade Finder: Must-Includes",
+  "version": "1.37.0",
+  "title": "🧭 A Simpler Map + Season Impact",
   "notes": [
-    "📌 Trade Finder has a new \"Must include\" box. Name one or two of your players or picks, one or two of theirs, or both, and every deal it suggests will have them in it.",
-    "🔎 Want a certain player but not sure who has him? Leave the team on \"Any team\" and pick him under \"From them\". The Finder picks the team for you.",
-    "🏷️ Tab titles at the top (Standings, Research, Trade Desk) no longer get cut off on phones.",
-    "⚡ Interest Alerts no longer list your own team as interested in your own player.",
-    "📊 Charts now load from the app itself, so they still work with a weak signal."
+    "🔮 New: Season Impact. Build a trade and the meter shows what it does to both teams this year: playoff odds, title odds and points per week, before and after. Trade Finder ideas show it too.",
+    "📋 Research now opens on your Briefing: one screen with your odds, your next game, the one move to make, who's rising and falling on your roster, a buy-low target and the latest headline. Tap any line for the full story.",
+    "🗂️ The Trades tab is now four short tabs: Offers, Find, Build and Feed. A red number on Offers (and a dot on the Trades button) means someone is waiting on you.",
+    "⚙️ One Settings button (the gear, top right) for your team, layout, colors, notifications and patch notes. Commissioner tools live there too.",
+    "📦 Where things moved: your offers are on Trades > Offers. Draft picks are under every team on Rosters. Your trade history is on Trades > Feed > My trades.",
+    "👋 Retired: the old My Team page, the Smart Trade Matchmaker (Find and Plan do its job better) and the Compact layout. If you used Compact, you're on Classic now.",
+    "📜 Activity loads 20 items at a time, so it opens faster."
   ]
 }

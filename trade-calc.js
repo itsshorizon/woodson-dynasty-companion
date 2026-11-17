@@ -301,6 +301,7 @@ function tcMeterHTML(opts) {
           <div><span class="lbl">${escapeHtml(opts.names.b)} gets</span><b>${tcFmt(r.totals.b)}</b></div>
         </div>
         ${tcBalanceHTML(r, opts)}
+        ${opts.impact && typeof rsImpactHTML === 'function' ? rsImpactHTML(opts.teamIds, opts.sends, { a: opts.meLeft ? 'You' : opts.names.a, b: opts.names.b }) : ''}
         <details class="tv-more">
           <summary>More detail</summary>
           ${badges.length ? `<div class="tv-badges">${badges.join('')}</div>` : ''}
@@ -855,6 +856,7 @@ function tcRenderBuilderMeter() {
     candidates: { a: tcBuilderCandidates('a', a.teamId), b: tcBuilderCandidates('b', b.teamId) },
     feedback: true,
     meLeft: true,
+    impact: true, // playoff + title odds before and after (research.js rsImpactHTML)
   };
   const wasOpen = host.querySelector('.tv-more')?.open;
   host.innerHTML = tcMeterHTML(opts);
@@ -1036,11 +1038,33 @@ function tcRenderTradeFeed() {
   const el = $('#trade-feed-list');
   if (!el) return;
   if (!TC.ctx) { el.innerHTML = ''; return; }
-  const accepted = state.allTrades.filter((t) => t.status === 'Accepted')
+  // League-wide by default; "Mine" narrows to my deals and adds what each side
+  // has scored since, plus the offers that never went through.
+  const mine = TC.feedMine && !!myTeam();
+  const filters = $('#trade-feed-filters');
+  if (filters && myTeam()) {
+    const chip = (on, val, label) => `<button type="button" class="tv-filter ${on ? 'on' : ''}" data-feed-mine="${val}" aria-pressed="${on}">${label}</button>`;
+    filters.innerHTML = `<div class="tv-filter-row">${chip(!mine, 0, 'Whole league')}${chip(mine, 1, 'My trades')}</div>`;
+    filters.onclick = (e) => {
+      const b = e.target.closest('[data-feed-mine]');
+      if (!b) return;
+      TC.feedMine = b.dataset.feedMine === '1';
+      tcRenderTradeFeed();
+    };
+  }
+  const involved = (t) => myRoleInTrade(t) != null;
+  const accepted = state.allTrades.filter((t) => t.status === 'Accepted' && (!mine || involved(t)))
     .map((t) => ({ t, st: tcStoredTrade(t) }))
     .sort((x, y) => (y.st.date?.getTime() || 0) - (x.st.date?.getTime() || 0));
-  if (!accepted.length) { el.innerHTML = empty('No accepted trades yet. When a deal goes through, it shows up here with its grade.'); return; }
-  el.innerHTML = accepted.map(({ t, st }) => tcTradeFeedItemHTML(t, st) + rxBar('trade', t.tradeId)).join('');
+  const dead = mine ? state.allTrades.filter((t) => involved(t) && !['Accepted', 'Pending'].includes(t.status)).reverse() : [];
+  const list = accepted.length
+    ? accepted.map(({ t, st }) => tcTradeFeedItemHTML(t, st) + (mine ? renderTradeRegret(t, myRoleInTrade(t) === 'proposer') : '') + rxBar('trade', t.tradeId)).join('')
+    : empty(mine ? 'You have no accepted trades yet.' : 'No accepted trades yet. When a deal goes through, it shows up here with its grade.');
+  el.innerHTML = list + (dead.length ? `
+    <details class="tv-feed-dead">
+      <summary>Offers that didn't go through (${dead.length})</summary>
+      ${dead.map(renderHistoryCard).join('')}
+    </details>` : '');
 }
 
 // One accepted trade: who got what and its grade. Shared with the Activity
@@ -1507,6 +1531,9 @@ function tcFinderItemHTML(r, i, my, myWindow) {
   const iWant = r.iWant != null ? r.iWant : r.myFit > 0;
   const theyWant = r.theyWant != null ? r.theyWant : r.theirFit > 0;
   const sentence = tcWinnerSentence(r.band.key, r.band.key === 'fair' ? null : r.edge > 0 ? 'a' : 'b', { a: my.id, b: r.partner.id });
+  // What the deal does to my season (research.js). Picks don't play, so pick-only sides add nothing.
+  const playerIds = (list) => list.filter((a) => a.type === 'player').map((a) => a.id);
+  const imp = typeof rsTradeImpact === 'function' && state.schedule?.length ? rsTradeImpact(my.id, r.partner.id, playerIds(r.give), playerIds(r.get)) : null;
   const reasons = (list) => `<ul class="tv-why-list">${list.map((x) => `<li class="${x.good ? 'good' : 'bad'}">${escapeHtml(x.text)}</li>`).join('')}</ul>`;
   const side = (ok, okTitle, mixedTitle, noTitle, win, list) => {
     const mixed = !ok && list.some((x) => x.good);
@@ -1531,6 +1558,7 @@ function tcFinderItemHTML(r, i, my, myWindow) {
         <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
         <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
       </div>
+      ${imp ? `<div class="tv-finder-impact"><span class="lbl">Your season</span> Playoffs ${rsImpactShift(imp.a.before.playoffPct, imp.a.after.playoffPct)} · Title ${rsImpactShift(imp.a.before.titlePct, imp.a.after.titlePct)}</div>` : ''}
       <div class="tv-finder-why">
         ${side(iWant, 'Why it helps you', 'Mixed for you', 'Trade-off for you', myWindow, tcFitReasons(my.id, r.get, r.give, myWindow))}
         ${side(theyWant, "Why they'd say yes", 'Mixed for them', 'They may need convincing', theirWindow, tcFitReasons(r.partner.id, r.give, r.get, theirWindow))}
@@ -1781,6 +1809,8 @@ function tcInitTradesView() {
     tcRenderBuilderMeter();
     tcDecorateAssetLists();
     tcRenderFinderCard();
+    // The meter's season impact uses rest-of-season projections (research.js).
+    if (typeof rsLoadAdvanced === 'function' && !RS.adv) rsLoadAdvanced().then(tcRenderBuilderMeter);
     if (typeof renderPendingTrades === 'function') renderPendingTrades();
     tcRenderTradeFeed();
   });

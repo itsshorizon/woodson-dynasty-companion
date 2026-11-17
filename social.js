@@ -29,7 +29,7 @@ const SOCIAL = {
   movesAt: 0,
   movesLoading: null,
   names: {},          // playerId → { name, pos } for players no longer on a roster
-  shown: 60,
+  shown: 20,
 };
 const ACT_FILTERS = { all: 'All', chat: 'Chat', trades: 'Trades', moves: 'Moves', scores: 'Scores', news: 'News' };
 const RX_COLORS = ['#ff4d6d', '#ff6b35', '#f1c40f', '#a8ff3d', '#2ecc71', '#4cc9f0', '#2563ff', '#d946ef', '#ffffff', '#111111'];
@@ -723,8 +723,8 @@ function wireActivity() {
   if (!view) return;
   view.addEventListener('click', (e) => {
     const f = e.target.closest('[data-filter]');
-    if (f) { socWrite('actFilter', f.dataset.filter); SOCIAL.shown = 60; renderActivity(); return; }
-    if (e.target.closest('[data-act-more]')) { SOCIAL.shown += 60; renderActivity(); return; }
+    if (f) { socWrite('actFilter', f.dataset.filter); SOCIAL.shown = 20; renderActivity(); return; }
+    if (e.target.closest('[data-act-more]')) { SOCIAL.shown += 20; renderActivity(); return; }
     const prof = e.target.closest('[data-profile]');
     if (prof) { openPlayerProfile(Number(prof.dataset.profile)); return; }
     const news = e.target.closest('[data-news-week]');
