@@ -680,7 +680,7 @@ function tcOpenTeamValueBoard() {
   setView('vault');
   state.vaultSubview = 'teamvalue';
   $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sub === 'teamvalue'));
-  ['board', 'teamvalue', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((sub) => {
+  VAULT_SUBS.forEach((sub) => {
     const el = $(`#vault-${sub}`);
     if (el) el.hidden = sub !== 'teamvalue';
   });
@@ -1090,7 +1090,83 @@ function tcTradeFeedItemHTML(t, st = tcStoredTrade(t)) {
         <div><span class="lbl">${escapeHtml(st.receiver.name)} got</span>${list(st.proposer.sends)}</div>
       </div>
       ${tcTradeAnalysisHTML(t, null, { atTradeTime: true })}
+      <div class="tv-report" data-tid="${escapeHtml(String(t.tradeId))}">${tcReportLineHTML(t, st)}</div>
     </div>`;
+}
+
+/* ----------------------- Trade report card (then vs now) ----------------------- */
+
+// Daily value snapshots (data/history/<day>.json) are fetched lazily, once per
+// date. Lines are filled in place when a snapshot arrives.
+TC.hist = { days: null, indexLoading: false, snaps: {} };
+
+function tcHistDayFor(date) {
+  const days = TC.hist.days;
+  if (!days || !days.length || !date) return null;
+  const key = date.toISOString().slice(0, 10);
+  let pick = null;
+  for (const d of days) if (d <= key) pick = d;
+  return pick ? { day: pick, partial: false } : { day: days[0], partial: true };
+}
+
+function tcHistLoad(day) {
+  if (day in TC.hist.snaps) return;
+  TC.hist.snaps[day] = 'loading';
+  fetchJSON(`./data/history/${day}.json`)
+    .then((snap) => { TC.hist.snaps[day] = snap && snap.p ? snap : null; })
+    .catch(() => { TC.hist.snaps[day] = null; })
+    .then(tcFillReports);
+}
+
+function tcHistEnsureIndex() {
+  if (TC.hist.days || TC.hist.indexLoading) return;
+  TC.hist.indexLoading = true;
+  fetchJSON('./data/history/index.json')
+    .then((idx) => { TC.hist.days = Array.isArray(idx && idx.days) ? idx.days : []; })
+    .catch(() => { TC.hist.days = []; })
+    .then(tcFillReports);
+}
+
+// Report card for a stored trade, or null while history is unavailable.
+function tcTradeReport(t, st = tcStoredTrade(t)) {
+  if (!TC.ctx || !st.date) return null;
+  if (!TC.hist.days) { tcHistEnsureIndex(); return null; }
+  const hit = tcHistDayFor(st.date);
+  if (!hit) return null;
+  const snap = TC.hist.snaps[hit.day];
+  if (snap === undefined) { tcHistLoad(hit.day); return null; }
+  if (!snap || snap === 'loading') return null;
+  const vals = (assets) => assets.map((a) => {
+    if (a.type === 'pick') { const v = TradeEngine.pickValue(a, TC.ctx); return { then: v, now: v }; }
+    const then = snap.p[String(a.id)];
+    const now = tcPlayer(a.id)?.dv;
+    return { then: then == null ? null : then, now: now == null ? null : now };
+  });
+  const card = TradeEngine.reportCard({ aGot: vals(st.receiver.assets), bGot: vals(st.proposer.assets) });
+  card.partial = card.partial || hit.partial;
+  return card;
+}
+
+function tcReportLineHTML(t, st) {
+  const r = tcTradeReport(t, st);
+  if (!r) return '';
+  const arrow = (d) => {
+    const v = Math.round(d);
+    return v ? `<b class="${v > 0 ? 'tv-up' : 'tv-down'}">${v > 0 ? '▲' : '▼'} ${tcFmt(Math.abs(v))}</b>` : '<b>no change</b>';
+  };
+  const side = (name) => `${name}${/s$/i.test(name) ? "'" : "'s"} side`;
+  const nameA = escapeHtml(String(st.proposer.name).trim()), nameB = escapeHtml(String(st.receiver.name).trim());
+  const verdict = r.winner ? `Aging better for ${r.winner === 'a' ? nameA : nameB}` : 'About even so far';
+  const since = r.partial ? ' <span class="tv-dim">(values tracked since Oct 3)</span>' : '';
+  return `<span class="tv-dim">Since the trade:</span> ${side(nameA)} ${arrow(r.a.delta)} · ${side(nameB)} ${arrow(r.b.delta)}. <span class="tv-report-verdict">${verdict}</span>${since}`;
+}
+
+function tcFillReports() {
+  document.querySelectorAll('.tv-report[data-tid]').forEach((el) => {
+    const t = (state.allTrades || []).find((x) => String(x.tradeId) === el.dataset.tid);
+    if (!t) return;
+    try { el.innerHTML = tcReportLineHTML(t, tcStoredTrade(t)); } catch (e) { el.innerHTML = ''; }
+  });
 }
 
 // Player rows inside any expanded analysis open the profile.

@@ -1,13 +1,14 @@
 {
-  "version": "1.37.0",
-  "title": "🧭 A Simpler Map + Season Impact",
+  "version": "1.38.0",
+  "title": "✨ Cleaner Look + Watchlist, Scouting, Report Cards",
   "notes": [
-    "🔮 New: Season Impact. Build a trade and the meter shows what it does to both teams this year: playoff odds, title odds and points per week, before and after. Trade Finder ideas show it too.",
-    "📋 Research now opens on your Briefing: one screen with your odds, your next game, the one move to make, who's rising and falling on your roster, a buy-low target and the latest headline. Tap any line for the full story.",
-    "🗂️ The Trades tab is now four short tabs: Offers, Find, Build and Feed. A red number on Offers (and a dot on the Trades button) means someone is waiting on you.",
-    "⚙️ One Settings button (the gear, top right) for your team, layout, colors, notifications and patch notes. Commissioner tools live there too.",
-    "📦 Where things moved: your offers are on Trades > Offers. Draft picks are under every team on Rosters. Your trade history is on Trades > Feed > My trades.",
-    "👋 Retired: the old My Team page, the Smart Trade Matchmaker (Find and Plan do its job better) and the Compact layout. If you used Compact, you're on Classic now.",
-    "📜 Activity loads 20 items at a time, so it opens faster."
+    "🎨 A cleaner look. Sections are open now, with one box per trade, deal or matchup. No more boxes inside boxes.",
+    "📋 The Briefing got faces: player photos and team logos on every line, grouped into This Week, Your Move, Your Roster, On the Market and Headlines. It also shows who you have out.",
+    "⭐ New: Watchlist. Open any player and tap Watch. Research > Watch tracks their value, trend and news, and Find a Deal takes you straight to the Trade Finder for them.",
+    "🕵️ New: Scouting reports. In Research > League, open a team (or tap its bubble on the map) to see what they need, how they trade, their best players and deals to pitch.",
+    "📈 New: Trade report cards. Every trade in the Feed shows how each side's value has moved since the deal.",
+    "🤖 Ask is now an \"Ask Claude about this\" button at the bottom of Outlook, Plan, Market and League, with questions that fit each screen.",
+    "🏛️ The Vault is tidier: Records, Draft, Team Value, Managers, Players and Rivalry, with nothing stacked above or below the tabs.",
+    "📐 Compact is back in Settings. If you used it before, you are already on it again."
   ]
 }

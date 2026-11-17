@@ -63,7 +63,7 @@ const state = {
   history: {},             // { 2022: {teams, members, schedule, draftDetail}, ... }
   historyLoaded: false,
   historyError: null,
-  vaultSubview: 'board',   // 'board' | 'rivalry' | 'resumes' | 'timemachine'
+  vaultSubview: 'board',   // 'records' | 'board' (Draft) | 'teamvalue' | 'managers' | 'playerindex' | 'rivalry'  (old ids timemachine/resumes/managerindex map via vaultSubNormalize)
   selectedBoardYear: 2027,
   selectedTimeMachineYear: 2025,
   selectedResumeMemberId: null,
@@ -3558,9 +3558,9 @@ function initVaultView() {
     sub.onclick = (e) => {
       const btn = e.target.closest('.seg-btn');
       if (!btn) return;
-      state.vaultSubview = btn.dataset.sub;
+      state.vaultSubview = vaultSubNormalize(btn.dataset.sub);
       $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      ['board', 'teamvalue', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((s) => {
+      VAULT_SUBS.forEach((s) => {
         $(`#vault-${s}`).hidden = (s !== state.vaultSubview);
       });
       renderVaultSubview();
@@ -3594,42 +3594,45 @@ function initVaultView() {
   renderVaultSubview();
 }
 
+const VAULT_SUBS = ['records', 'board', 'teamvalue', 'managers', 'playerindex', 'rivalry'];
+const VAULT_SUB_LEGACY = { timemachine: 'board', resumes: 'managers', managerindex: 'managers' };
+function vaultSubNormalize(id) {
+  id = VAULT_SUB_LEGACY[id] || id;
+  return VAULT_SUBS.includes(id) ? id : 'board';
+}
+
 function renderVaultSubview() {
-  // Extremes header always shows (needs history)
+  state.vaultSubview = vaultSubNormalize(state.vaultSubview);
+  // Make sure the visible section and active button match state (covers restored/legacy ids).
+  VAULT_SUBS.forEach((s) => { const el = $(`#vault-${s}`); if (el) el.hidden = (s !== state.vaultSubview); });
+  $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sub === state.vaultSubview));
   ensureHistoryLoaded().then(() => {
-    renderExtremesRecordBook();
-    if (state.vaultSubview === 'board') {
+    const sub = state.vaultSubview;
+    if (sub === 'records') {
+      renderExtremesRecordBook();
+      renderTraumaLedger();
+    } else if (sub === 'board') {
       loadDraftPicks().then(renderDraftBoard);
-    } else if (state.vaultSubview === 'teamvalue') {
-      if (typeof tcRenderTeamValueVault === 'function') tcRenderTeamValueVault();
-    } else if (state.vaultSubview === 'rivalry') {
-      renderRivalryDesk();
-    } else if (state.vaultSubview === 'resumes') {
-      renderResumesTiles();
-      setTimeout(renderDynastyArcChart, 50);
-    } else if (state.vaultSubview === 'timemachine') {
       renderTimeMachine();
-    } else if (state.vaultSubview === 'playerindex') {
-      wirePlayerIndexControls();
-      renderPlayerIndex();
-    } else if (state.vaultSubview === 'managerindex') {
+    } else if (sub === 'teamvalue') {
+      if (typeof tcRenderTeamValueVault === 'function') tcRenderTeamValueVault();
+    } else if (sub === 'rivalry') {
+      renderRivalryDesk();
+      setTimeout(renderRivalryHeatmap, 30);
+    } else if (sub === 'managers') {
+      renderResumesTiles();
       wireManagerLedgerSorting();
       renderManagerLedger();
       setTimeout(() => {
+        renderDynastyArcChart();
         renderAllTimeLuckChart();
         renderVolatilityChart();
-        renderRivalryHeatmap();
         wireAllPlayManagerSelect();
         wireLuckPlayback();
-      }, 30);
-    }
-    // V2.5: Trauma Ledger is now isolated to the Manager Index subview only.
-    // Other subviews hide it to keep their layouts focused.
-    const traumaCard = $('#trauma-ledger-card');
-    if (traumaCard) {
-      const showTrauma = state.vaultSubview === 'managerindex';
-      traumaCard.hidden = !showTrauma;
-      if (showTrauma) renderTraumaLedger();
+      }, 50);
+    } else if (sub === 'playerindex') {
+      wirePlayerIndexControls();
+      renderPlayerIndex();
     }
   });
 }
@@ -4604,14 +4607,17 @@ function tradesForMe() {
 }
 
 // Beta 1.7 — determines the user's role in a given trade for action gating.
-function myRoleInTrade(t) {
-  const me = teamById(state.myTeamId);
-  if (!me) return null;
-  const asProposer = (t.teamAId && Number(t.teamAId) === me.id) || t.teamProposing === me.name;
-  const asReceiver = (t.teamBId && Number(t.teamBId) === me.id) || t.teamReceiving === me.name;
+function roleInTradeFor(t, teamId) {
+  const team = teamById(teamId);
+  if (!team) return null;
+  const asProposer = (t.teamAId && Number(t.teamAId) === team.id) || t.teamProposing === team.name;
+  const asReceiver = (t.teamBId && Number(t.teamBId) === team.id) || t.teamReceiving === team.name;
   if (asProposer) return 'proposer';
   if (asReceiver) return 'receiver';
   return null;
+}
+function myRoleInTrade(t) {
+  return roleInTradeFor(t, state.myTeamId);
 }
 
 // Role-scoped action button set. Proposers ONLY see Cancel; receivers see Accept/Counter/Decline.
@@ -4988,17 +4994,19 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', saved);
 }
 
-/* ----------------------- Layout: Classic / Simple -----------------------
- * Simple lives in simple.css (+ simple.js), scoped to html[data-density="simple"].
+/* ----------------------- Layout: Classic / Compact / Simple -----------------------
+ * Compact lives in compact.css and Simple in simple.css (+ simple.js), each scoped to
+ * html[data-density="..."].
  * Classic is the default. The gear (or the W logo) opens the Settings sheet:
  * team, layout, colors, notifications, commissioner tools. All per device.
  * Beta 1.35: devices that never picked a layout get the sheet once on launch.
  * ------------------------------------------------------------------ */
 
 const DEFAULT_DENSITY = 'classic';
-// Compact was retired in Beta 1.37: devices that had it fall back to Classic.
+// Compact came back in 1.37.1. Devices that saved it never lost it (initDensity only fell back in memory).
 const DENSITIES = [
   { key: 'classic', title: 'Classic', sub: 'Everything, full detail' },
+  { key: 'compact', title: 'Compact', sub: 'Same features, tighter' },
   { key: 'simple', title: 'Simple', sub: 'Bigger text, just the basics' },
 ];
 // Tabs Simple mode leaves out of the bottom nav.
@@ -6217,9 +6225,17 @@ function openPlayerProfile(playerId) {
         <span class="owner-chip">${escapeHtml(owner ? owner.name.toUpperCase() : player.waiver?.st === 'WA' ? 'ON WAIVERS' : 'FREE AGENT')}</span>
         ${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? `<span class="injury-chip">${escapeHtml(player.injuryStatus)}</span>` : ''}
       </div>
+      <button type="button" class="wl-star${typeof wlHas === 'function' && wlHas(playerId) ? ' on' : ''}" id="player-watch-btn">${typeof wlHas === 'function' && wlHas(playerId) ? '★ Watching' : '☆ Watch'}</button>
     </div>
   `;
   $('#player-profile-close').onclick = () => { $('#player-profile-modal').hidden = true; };
+  $('#player-watch-btn').onclick = (e) => {
+    if (typeof wlToggle !== 'function') return;
+    const on = wlToggle(playerId);
+    e.currentTarget.classList.toggle('on', on);
+    e.currentTarget.textContent = on ? '★ Watching' : '☆ Watch';
+    if (typeof RS !== 'undefined' && RS.sub === 'watch' && typeof rsRenderWatch === 'function') rsRenderWatch();
+  };
 
   const body = $('#player-profile-body');
   if (!log.length) {
@@ -7164,7 +7180,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.37.0';
+const BUILD_ID = '1.38.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

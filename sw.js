@@ -1,10 +1,11 @@
 /* Release: run `node scripts/release.js <version>`. It sets CACHE_NAME here,
  * BUILD_ID in app.js, version.json and every ?v= in index.html together. */
-const CACHE_NAME = 'wcc-v1.37.0';
+const CACHE_NAME = 'wcc-v1.38.0';
 const CORE_ASSETS = [
   './',
   './index.html',
   './styles.css',
+  './compact.css',
   './simple.css',
   './vendor/chart.umd.js',
   './select.js',

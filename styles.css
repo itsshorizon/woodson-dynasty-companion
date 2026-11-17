@@ -5240,7 +5240,6 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .rs-profile-news { margin-top: 18px; }
 .rs-profile-news h4 { margin: 0 0 8px; }
 .rs-profile-news .rs-news-item { margin-bottom: 8px; }
-.rs-ask-lede { font-size: 13px; color: var(--text-dim); line-height: 1.45; margin: 0 0 10px; }
 .rs-ask-starters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .rs-ask-starters .tv-filter { text-align: left; border-radius: 10px; line-height: 1.35; }
 .rs-ask-q {
@@ -5952,6 +5951,27 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .tv-more .tv-badges:first-of-type { margin-top: 0; }
 
 
+/* ---------- Trade report card: then vs now line on feed cards ---------- */
+.tv-report { font-size: 12px; line-height: 1.4; margin-top: 8px; }
+.tv-report:empty { display: none; }
+.tv-report-verdict { font-weight: 600; }
+/* ---------- Manager scouting report (Research > League) ---------- */
+#scout-title { display: flex; align-items: center; gap: 10px; }
+#scout-body h5 { margin: 14px 0 6px; }
+.rs-scout-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.rs-scout-btn { margin: 8px 0; }
+.rs-scout-player { cursor: pointer; }
+/* ---------- Watchlist ---------- */
+.wl-star { margin-top: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.wl-star.on { color: #f1c40f; border-color: #f1c40f; }
+.wl-remove { border: 0; background: transparent; color: var(--text-dim); font-size: 14px; padding: 2px 6px; cursor: pointer; }
+.wl-btn { margin-top: 6px; border: 1px solid var(--tab-accent); background: transparent; color: var(--tab-accent); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.wl-news { margin-top: 2px; }
+/* ---------- Ask Claude button + sheet (research.js) ---------- */
+.research-askbar { margin: 16px 0 4px; text-align: center; }
+.research-askbar[hidden] { display: none; }
+.research-askbar .btn-ghost { width: auto; padding: 10px 16px; font-size: 12px; }
+
 /* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
 .trade-subnav { margin-bottom: 12px; }
 .trade-subnav .seg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -5997,3 +6017,57 @@ html.mfs-open .modal-overlay { z-index: 450; }
 #push-bell { display: none !important; }
 .press-room-trigger[hidden] { display: none !important; }
 .roster-picks { margin-top: 18px; }
+
+/* ---------- Beta 1.38: one box per thing ----------
+ * A border is for one object you act on: a matchup, a trade, a deal.
+ * Sections are a heading and their content on the page, and the parts of an
+ * object are split with hairlines. Nothing boxed sits inside another box.
+ * Simple layout keeps its own look. */
+html:not([data-density="simple"]) #app .card:not(.tb-bar):not(.act-compose) {
+  background: none; border: 0; border-radius: 0; box-shadow: none; padding: 0; margin-bottom: 28px;
+}
+html:not([data-density="simple"]) #app .card:not(.tb-bar):not(.act-compose)::before { display: none; }
+html:not([data-density="simple"]) #app .card > h2 {
+  font-size: 19px; font-weight: 900; text-transform: none; letter-spacing: -0.01em; margin: 0 0 10px;
+}
+html:not([data-density="simple"]) #app #trade-interest.card { padding: 0; }
+
+/* Research sections open up the same way */
+html:not([data-density="simple"]) .rs-card { background: none; border: 0; box-shadow: none; padding: 0; margin-bottom: 28px; }
+html:not([data-density="simple"]) .rs-card .myteam-section-header { margin: 0 0 10px; }
+html:not([data-density="simple"]) .rs-card .myteam-section-header h3 { font-size: 17px; text-transform: none; letter-spacing: -0.01em; }
+
+/* A plan or move is a heading with a colored rule; its deals are the boxes */
+html:not([data-density="simple"]) .rs-move {
+  background: none; border-width: 0 0 0 3px; border-radius: 0; box-shadow: none; padding: 2px 0 2px 14px; margin-bottom: 26px;
+}
+html:not([data-density="simple"]) .rs-path.rec { box-shadow: none; }
+
+/* Inside a trade: the analysis and its meter are parts, split by a hairline */
+.tv-feed-item .tv-analysis, .trade-card .tv-analysis, .act-item .tv-analysis {
+  border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; margin-top: 12px;
+}
+.tv-analysis .tv-meter { border: 0; background: none; padding: 10px 0 0; }
+.act-item .tv-feed-item { border: 0; background: none; padding: 0; }
+.trade-side .asset-list { border: 0; background: none; padding: 0; }
+
+/* Secondary buttons are a soft fill, never a dashed outline */
+.btn-ghost { border: 0; background: var(--bg-elev-2); color: var(--text); padding: 10px; }
+
+/* Briefing: open hero, then sections of lines with a face on every one */
+.rs-brief-hero { padding: 4px 2px 0; border: 0; border-radius: 0; background: none; }
+.rs-brief-name { font-size: 22px; }
+.rs-brief-odds { margin-top: 16px; padding: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.rs-brief-big { font-size: 30px; }
+.rs-brief-sec { margin-top: 22px; }
+.rs-brief-sec h3 { margin: 0 2px 2px; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: var(--tab-accent); }
+.rs-brief-row { gap: 12px; padding: 11px 2px; border: 0; border-radius: 0; background: none; border-bottom: 1px solid var(--border); }
+.rs-brief-sec .rs-brief-row:last-child { border-bottom: 0; }
+.rs-brief-lead { flex: 0 0 44px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.rs-brief-lead .player-photo-wrap, .rs-brief-lead .player-photo, .rs-brief-lead .player-photo-fallback { width: 44px; height: 44px; }
+.rs-brief-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--bg-elev-2); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; color: var(--tab-accent); }
+.rs-brief-kicker { color: var(--text-mute); }
+.rs-brief-title { font-size: 15px; }
+.rs-brief-list { display: none; }
+.rs-brief-note { margin-top: 18px; }
+.rs-brief-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

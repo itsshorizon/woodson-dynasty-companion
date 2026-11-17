@@ -16,10 +16,11 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.37.0" />
-  <link rel="stylesheet" href="simple.css?v=1.37.0" />
+  <link rel="stylesheet" href="styles.css?v=1.38.0" />
+  <link rel="stylesheet" href="compact.css?v=1.38.0" />
+  <link rel="stylesheet" href="simple.css?v=1.38.0" />
   <!-- Chart.js 4.4.1, served from this repo so charts work offline and inside a native app shell. -->
-  <script src="vendor/chart.umd.js?v=1.37.0"></script>
+  <script src="vendor/chart.umd.js?v=1.38.0"></script>
 </head>
 <body>
   <!-- Top ambient light bar — color pulses to active tab accent -->
@@ -237,21 +238,37 @@
         <button data-rs="outlook" class="seg-btn" type="button">Outlook</button>
         <button data-rs="moves" class="seg-btn" type="button">Plan</button>
         <button data-rs="market" class="seg-btn" type="button">Market</button>
+        <button data-rs="watch" class="seg-btn" type="button">Watch</button>
         <button data-rs="league" class="seg-btn" type="button">League</button>
         <button data-rs="news" class="seg-btn" type="button">News</button>
-        <button data-rs="ask" class="seg-btn" type="button">Ask</button>
       </div>
       <div class="research-pane" data-pane="brief"><div id="research-brief"></div></div>
       <div class="research-pane" data-pane="outlook" hidden><div id="research-outlook"></div></div>
       <div class="research-pane" data-pane="moves" hidden><div id="research-moves"></div></div>
       <div class="research-pane" data-pane="market" hidden><div id="research-market"></div></div>
+      <div class="research-pane" data-pane="watch" hidden><div id="research-watch"></div></div>
       <div class="research-pane" data-pane="league" hidden><div id="research-league"></div></div>
       <div class="research-pane" data-pane="news" hidden><div id="research-news"></div></div>
-      <div class="research-pane" data-pane="ask" hidden><div id="research-ask"></div></div>
+      <div class="research-askbar" id="research-askbar" hidden>
+        <button type="button" class="btn-ghost" id="rs-ask-open">🤖 Ask Claude about this</button>
+      </div>
     </section>
 
-    <!-- Vault View (Draft Board + Historical Archives) -->
+    <!-- Vault View: 6 sub-tabs (Records, Draft, Team Value, Managers, Players, Rivalry). Nothing sits outside the sub-tabs. -->
     <section class="view" id="view-vault">
+      <div class="vault-subnav-fade">
+        <div class="segmented vault-subnav" id="vault-subnav">
+          <button data-sub="records" class="seg-btn">Records</button>
+          <button data-sub="board" class="seg-btn active">Draft</button>
+          <button data-sub="teamvalue" class="seg-btn">Team Value</button>
+          <button data-sub="managers" class="seg-btn">Managers</button>
+          <button data-sub="playerindex" class="seg-btn">Players</button>
+          <button data-sub="rivalry" class="seg-btn">Rivalry</button>
+        </div>
+      </div>
+
+      <!-- Sub: Records (Record Book + Historical Trauma Ledger) -->
+      <div class="vault-section" id="vault-records" hidden>
       <!-- League-wide Extremes Record Book + All-Play toggle -->
       <div class="card" id="extremes-card">
         <h2>Record Book · 2022–2025</h2>
@@ -262,19 +279,25 @@
         </div>
       </div>
 
-      <div class="vault-subnav-fade">
-        <div class="segmented vault-subnav" id="vault-subnav">
-          <button data-sub="board" class="seg-btn active">Draft Board</button>
-          <button data-sub="teamvalue" class="seg-btn">Team Value</button>
-          <button data-sub="rivalry" class="seg-btn">Rivalry</button>
-          <button data-sub="resumes" class="seg-btn">Resumes</button>
-          <button data-sub="timemachine" class="seg-btn">Time Machine</button>
-          <button data-sub="playerindex" class="seg-btn">Players</button>
-          <button data-sub="managerindex" class="seg-btn">Managers</button>
+      <div class="card" id="trauma-ledger-card">
+        <h2>📉 The Historical Trauma Ledger</h2>
+        <p class="chart-sub">All-time bad beats and great escapes across 2022–2025.</p>
+        <div class="trauma-split">
+          <div class="trauma-col">
+            <h3 class="trauma-h trauma-bad">💔 Top 5 Bad Beats</h3>
+            <p class="trauma-sub">Highest scores that still <b>lost</b>.</p>
+            <div id="trauma-bad-beats"></div>
+          </div>
+          <div class="trauma-col">
+            <h3 class="trauma-h trauma-escape">🍀 Top 5 Great Escapes</h3>
+            <p class="trauma-sub">Lowest scores that still <b>won</b>.</p>
+            <div id="trauma-escapes"></div>
+          </div>
         </div>
       </div>
+      </div>
 
-      <!-- Sub: Visual Draft Board -->
+      <!-- Sub: Draft (Draft Board, then Draft Time Machine) -->
       <div class="vault-section" id="vault-board">
         <div class="segmented" id="board-year-toggle">
           <button data-year="2027" class="seg-btn active">2027</button>
@@ -288,6 +311,22 @@
           <span><span class="dot dot-original"></span>Original</span>
           <span><span class="dot dot-traded"></span>Traded</span>
         </div>
+      
+
+        <!-- Draft Time Machine -->
+        <div class="segmented" id="tm-year-toggle">
+          <button data-year="2025" class="seg-btn active">2025</button>
+          <button data-year="2024" class="seg-btn">2024</button>
+          <button data-year="2023" class="seg-btn">2023</button>
+          <button data-year="2022" class="seg-btn">2022</button>
+        </div>
+        <div class="card chart-card" id="steals-busts-card">
+          <h2>Steals &amp; Busts</h2>
+          <p class="chart-sub">X = Overall pick · Y = Season fantasy points. Lower-left = early bust, upper-right = late steal.</p>
+          <div class="chart-wrap"><canvas id="steals-chart"></canvas></div>
+        </div>
+        <div id="timemachine-content"></div>
+      
       </div>
 
       <!-- Sub: Team Value (trade-calc.js) -->
@@ -305,22 +344,8 @@
         </div>
       </div>
 
-      <!-- Sub: Rivalry Desk -->
-      <div class="vault-section" id="vault-rivalry" hidden>
-        <div class="card">
-          <h2>Rivalry Desk</h2>
-          <div class="rivalry-pickers">
-            <select id="rivalry-a"></select>
-            <span class="vs">VS</span>
-            <select id="rivalry-b"></select>
-          </div>
-          <button class="btn-primary" id="rivalry-compare">Compare</button>
-        </div>
-        <div id="rivalry-result"></div>
-      </div>
-
-      <!-- Sub: Manager Resumes -->
-      <div class="vault-section" id="vault-resumes" hidden>
+      <!-- Sub: Managers (Resumes, then Historical Manager Index) -->
+      <div class="vault-section" id="vault-managers" hidden>
         <div class="card chart-card" id="dynasty-arc-card">
           <h2>All-Time Dynasty Arc</h2>
           <p class="chart-sub">Each manager's season Points For from 2022–2025. Click a name in the legend to toggle.</p>
@@ -328,42 +353,8 @@
         </div>
         <div class="resume-grid" id="resume-tiles"></div>
         <div id="resume-detail"></div>
-      </div>
+      
 
-      <!-- Sub: Master Player Index -->
-      <div class="vault-section" id="vault-playerindex" hidden>
-        <div class="card">
-          <h2>Master Player Index · 2022–2025</h2>
-          <p class="chart-sub">Lifetime ledger of every player who's been rostered. Click any row for their full profile.</p>
-          <div class="player-index-controls">
-            <input type="search" id="player-index-search" placeholder="Search by name..." />
-            <select id="player-index-pos-filter">
-              <option value="">All Positions</option>
-              <option>QB</option><option>RB</option><option>WR</option>
-              <option>TE</option><option>K</option><option>DST</option>
-            </select>
-          </div>
-          <div class="player-index-wrap">
-            <table class="player-index">
-              <thead>
-                <tr>
-                  <th data-sort="name">Player</th>
-                  <th data-sort="pos">Pos</th>
-                  <th data-sort="totalPts" class="num desc">Career Pts</th>
-                  <th data-sort="ppg" class="num">PPG</th>
-                  <th data-sort="high" class="num">High</th>
-                  <th data-sort="low" class="num">Low</th>
-                  <th data-sort="seasons" class="num">Yrs</th>
-                </tr>
-              </thead>
-              <tbody id="player-index-body"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sub: Historical Manager Index -->
-      <div class="vault-section" id="vault-managerindex" hidden>
         <!-- Career Ledger Table -->
         <div class="card">
           <h2>Historical Manager Index · 2022–2025</h2>
@@ -413,6 +404,63 @@
           <div class="chart-wrap chart-tall"><canvas id="volatility-chart"></canvas></div>
         </div>
 
+        <!-- All-Play Reality Timeline -->
+        <div class="card chart-card">
+          <h2>All-Play Reality vs Actual</h2>
+          <p class="chart-sub">Pick a manager. We plot their Actual win % alongside what their win % SHOULD have been if they'd played every other team every week. Gaps = schedule luck.</p>
+          <select id="allplay-manager-select" style="margin-bottom:10px;"></select>
+          <div class="chart-wrap"><canvas id="allplay-reality-chart"></canvas></div>
+        </div>
+      
+      </div>
+
+      <!-- Sub: Master Player Index (unchanged) -->
+      <div class="vault-section" id="vault-playerindex" hidden>
+        <div class="card">
+          <h2>Master Player Index · 2022–2025</h2>
+          <p class="chart-sub">Lifetime ledger of every player who's been rostered. Click any row for their full profile.</p>
+          <div class="player-index-controls">
+            <input type="search" id="player-index-search" placeholder="Search by name..." />
+            <select id="player-index-pos-filter">
+              <option value="">All Positions</option>
+              <option>QB</option><option>RB</option><option>WR</option>
+              <option>TE</option><option>K</option><option>DST</option>
+            </select>
+          </div>
+          <div class="player-index-wrap">
+            <table class="player-index">
+              <thead>
+                <tr>
+                  <th data-sort="name">Player</th>
+                  <th data-sort="pos">Pos</th>
+                  <th data-sort="totalPts" class="num desc">Career Pts</th>
+                  <th data-sort="ppg" class="num">PPG</th>
+                  <th data-sort="high" class="num">High</th>
+                  <th data-sort="low" class="num">Low</th>
+                  <th data-sort="seasons" class="num">Yrs</th>
+                </tr>
+              </thead>
+              <tbody id="player-index-body"></tbody>
+            </table>
+          </div>
+        </div>
+      
+      </div>
+
+      <!-- Sub: Rivalry (Rivalry Desk, then Blood Feud Heatmap) -->
+      <div class="vault-section" id="vault-rivalry" hidden>
+        <div class="card">
+          <h2>Rivalry Desk</h2>
+          <div class="rivalry-pickers">
+            <select id="rivalry-a"></select>
+            <span class="vs">VS</span>
+            <select id="rivalry-b"></select>
+          </div>
+          <button class="btn-primary" id="rivalry-compare">Compare</button>
+        </div>
+        <div id="rivalry-result"></div>
+      
+
         <!-- Rivalry Heatmap -->
         <div class="card">
           <h2>The Blood Feud Heatmap</h2>
@@ -421,48 +469,6 @@
             <div class="heatmap" id="rivalry-heatmap"></div>
           </div>
           <div class="heatmap-tooltip" id="heatmap-tooltip" hidden></div>
-        </div>
-
-        <!-- All-Play Reality Timeline -->
-        <div class="card chart-card">
-          <h2>All-Play Reality vs Actual</h2>
-          <p class="chart-sub">Pick a manager. We plot their Actual win % alongside what their win % SHOULD have been if they'd played every other team every week. Gaps = schedule luck.</p>
-          <select id="allplay-manager-select" style="margin-bottom:10px;"></select>
-          <div class="chart-wrap"><canvas id="allplay-reality-chart"></canvas></div>
-        </div>
-      </div>
-
-      <!-- Sub: Draft Time Machine -->
-      <div class="vault-section" id="vault-timemachine" hidden>
-        <div class="segmented" id="tm-year-toggle">
-          <button data-year="2025" class="seg-btn active">2025</button>
-          <button data-year="2024" class="seg-btn">2024</button>
-          <button data-year="2023" class="seg-btn">2023</button>
-          <button data-year="2022" class="seg-btn">2022</button>
-        </div>
-        <div class="card chart-card" id="steals-busts-card">
-          <h2>Steals &amp; Busts</h2>
-          <p class="chart-sub">X = Overall pick · Y = Season fantasy points. Lower-left = early bust, upper-right = late steal.</p>
-          <div class="chart-wrap"><canvas id="steals-chart"></canvas></div>
-        </div>
-        <div id="timemachine-content"></div>
-      </div>
-
-      <!-- Historical Trauma Ledger (persistent at base of Vault) -->
-      <div class="card" id="trauma-ledger-card">
-        <h2>📉 The Historical Trauma Ledger</h2>
-        <p class="chart-sub">All-time bad beats and great escapes across 2022–2025.</p>
-        <div class="trauma-split">
-          <div class="trauma-col">
-            <h3 class="trauma-h trauma-bad">💔 Top 5 Bad Beats</h3>
-            <p class="trauma-sub">Highest scores that still <b>lost</b>.</p>
-            <div id="trauma-bad-beats"></div>
-          </div>
-          <div class="trauma-col">
-            <h3 class="trauma-h trauma-escape">🍀 Top 5 Great Escapes</h3>
-            <p class="trauma-sub">Lowest scores that still <b>won</b>.</p>
-            <div id="trauma-escapes"></div>
-          </div>
         </div>
       </div>
     </section>
@@ -615,6 +621,17 @@
     </div>
   </div>
 
+  <!-- Manager scouting report (research.js rsOpenScout) -->
+  <div class="modal-overlay" id="scout-sheet" hidden>
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <button class="modal-close" id="scout-close" aria-label="Close">×</button>
+        <h2 id="scout-title">Scouting report</h2>
+      </div>
+      <div class="modal-body" id="scout-body"></div>
+    </div>
+  </div>
+
   <!-- Reaction sheet: picker, who reacted, make a league reaction (social.js) -->
   <div class="modal-overlay rx-overlay" id="rx-sheet" hidden>
     <div class="modal rx-modal">
@@ -626,7 +643,7 @@
     </div>
   </div>
 
-  <!-- Settings sheet: your team, layout (Classic / Simple), colors, notifications,
+  <!-- Settings sheet: your team, layout (Classic / Compact / Simple), colors, notifications,
        commissioner tools. Opens from the gear or the W logo; shown once on first launch (app.js initDensity). -->
   <div class="modal-overlay" id="display-sheet" hidden>
     <div class="modal display-modal" role="dialog" aria-modal="true" aria-labelledby="display-title">
@@ -636,6 +653,24 @@
         <p id="display-sub">Pick how the app looks on this device.</p>
       </div>
       <div class="modal-body" id="display-body"></div>
+    </div>
+  </div>
+
+  <!-- Ask Claude sheet (research.js): opens from the button under Outlook, Plan, Market and League -->
+  <div class="modal-overlay" id="rs-ask-sheet" hidden>
+    <div class="modal push-modal">
+      <div class="modal-header">
+        <button class="modal-close" id="rs-ask-close" aria-label="Close">×</button>
+        <h2>Ask Claude</h2>
+        <p>The app copies your team's data, then opens Claude in a new tab on your own Claude account. Paste it there and send. Free accounts work.</p>
+      </div>
+      <div class="modal-body">
+        <div class="rs-ask-starters" id="rs-ask-starters"></div>
+        <textarea id="rs-ask-q" class="rs-ask-q" rows="3" placeholder="Or type your own question"></textarea>
+        <button class="btn-primary" id="rs-ask-go" type="button">📋 Copy &amp; Open Claude</button>
+        <div id="rs-ask-fallback"></div>
+        <details class="rs-ask-preview"><summary>What gets copied</summary><p class="tv-note">Your record, playoff odds, position rooms, injuries, full roster with values and PPG, draft picks, schedule, the app's suggested moves, every other team's top players and needs, and the best waiver names. No logins or personal info.</p></details>
+      </div>
     </div>
   </div>
 
@@ -653,16 +688,16 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.37.0"></script>
-  <script src="app.js?v=1.37.0"></script>
-  <script src="trade-engine.js?v=1.37.0"></script>
-  <script src="trade-calc.js?v=1.37.0"></script>
-  <script src="research-engine.js?v=1.37.0"></script>
-  <script src="research.js?v=1.37.0"></script>
-  <script src="activity-engine.js?v=1.37.0"></script>
-  <script src="social.js?v=1.37.0"></script>
-  <script src="push-engine.js?v=1.37.0"></script>
-  <script src="push.js?v=1.37.0"></script>
-  <script src="simple.js?v=1.37.0"></script>
+  <script src="select.js?v=1.38.0"></script>
+  <script src="app.js?v=1.38.0"></script>
+  <script src="trade-engine.js?v=1.38.0"></script>
+  <script src="trade-calc.js?v=1.38.0"></script>
+  <script src="research-engine.js?v=1.38.0"></script>
+  <script src="research.js?v=1.38.0"></script>
+  <script src="activity-engine.js?v=1.38.0"></script>
+  <script src="social.js?v=1.38.0"></script>
+  <script src="push-engine.js?v=1.38.0"></script>
+  <script src="push.js?v=1.38.0"></script>
+  <script src="simple.js?v=1.38.0"></script>
 </body>
 </html>
