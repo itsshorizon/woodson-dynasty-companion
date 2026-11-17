@@ -5962,6 +5962,12 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .rs-scout-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 .rs-scout-btn { margin: 8px 0; }
 .rs-scout-player { cursor: pointer; }
+/* ---------- Watchlist ---------- */
+.wl-star { margin-top: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.wl-star.on { color: #f1c40f; border-color: #f1c40f; }
+.wl-remove { border: 0; background: transparent; color: var(--text-dim); font-size: 14px; padding: 2px 6px; cursor: pointer; }
+.wl-btn { margin-top: 6px; border: 1px solid var(--tab-accent); background: transparent; color: var(--tab-accent); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.wl-news { margin-top: 2px; }
 
 /* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
 .trade-subnav { margin-bottom: 12px; }

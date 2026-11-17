@@ -6225,9 +6225,17 @@ function openPlayerProfile(playerId) {
         <span class="owner-chip">${escapeHtml(owner ? owner.name.toUpperCase() : player.waiver?.st === 'WA' ? 'ON WAIVERS' : 'FREE AGENT')}</span>
         ${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? `<span class="injury-chip">${escapeHtml(player.injuryStatus)}</span>` : ''}
       </div>
+      <button type="button" class="wl-star${typeof wlHas === 'function' && wlHas(playerId) ? ' on' : ''}" id="player-watch-btn">${typeof wlHas === 'function' && wlHas(playerId) ? '★ Watching' : '☆ Watch'}</button>
     </div>
   `;
   $('#player-profile-close').onclick = () => { $('#player-profile-modal').hidden = true; };
+  $('#player-watch-btn').onclick = (e) => {
+    if (typeof wlToggle !== 'function') return;
+    const on = wlToggle(playerId);
+    e.currentTarget.classList.toggle('on', on);
+    e.currentTarget.textContent = on ? '★ Watching' : '☆ Watch';
+    if (typeof RS !== 'undefined' && RS.sub === 'watch' && typeof rsRenderWatch === 'function') rsRenderWatch();
+  };
 
   const body = $('#player-profile-body');
   if (!log.length) {

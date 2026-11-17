@@ -219,6 +219,7 @@ function rsShow() {
   if (RS.sub === 'outlook') rsRenderOutlook();
   if (RS.sub === 'moves') rsRenderMoves();
   if (RS.sub === 'market') rsRenderMarket();
+  if (RS.sub === 'watch') rsRenderWatch();
   if (RS.sub === 'league') rsRenderLeague();
   if (RS.sub === 'news') rsRenderNews();
   if (RS.sub === 'ask') rsRenderAsk();
@@ -1245,6 +1246,79 @@ function rsRenderMarket() {
       if (row) openPlayerProfile(Number(row.dataset.playerId));
     };
   });
+}
+
+/* ----------------------- Watchlist ----------------------- */
+
+function wlIds() {
+  try {
+    const a = JSON.parse(localStorage.getItem('watchlist') || '[]');
+    return Array.isArray(a) ? a.map(Number).filter((n) => Number.isFinite(n)) : [];
+  } catch { return []; }
+}
+function wlHas(id) { return wlIds().includes(Number(id)); }
+// Returns true when the player is now watched.
+function wlToggle(id) {
+  id = Number(id);
+  const ids = wlIds();
+  const i = ids.indexOf(id);
+  if (i >= 0) ids.splice(i, 1); else ids.push(id);
+  try { localStorage.setItem('watchlist', JSON.stringify(ids)); } catch { /* storage blocked */ }
+  return i < 0;
+}
+
+function rsWatchRow(id) {
+  const v = tcPlayer(id);
+  const p = findPlayerAnywhere(id) || state.freeAgents.get(id) || { id, name: v?.n || `Player ${id}`, pos: v?.p || '?' };
+  const owner = ownerTeamOf(id);
+  const tr = v?.tr || 0;
+  const news = (RS.news?.players?.[id] || [])[0];
+  const deal = owner && owner.id !== state.myTeamId
+    ? `<button type="button" class="wl-btn" data-wl-deal="${id}" data-owner="${owner.id}">Find a deal</button>` : '';
+  return `
+    <div class="rs-mkt-row" data-player-id="${id}">
+      ${playerPhotoHTML(p)}
+      <div class="rs-mkt-main">
+        <div class="rs-mkt-name"><span>${escapeHtml(p.name)}</span><button type="button" class="wl-remove" data-wl-remove="${id}" aria-label="Remove from watchlist">✕</button></div>
+        <div class="rs-room-sub">${escapeHtml(p.pos || '')} · ${owner ? escapeHtml(owner.name) : 'Free agent'}</div>
+        <div class="rs-room-sub">Value ${v ? tcFmt(v.dv) : '--'}${tr ? ` <span class="${tr > 0 ? 'tv-up' : 'tv-down'}">${tr > 0 ? '▲' : '▼'}${tcFmt(Math.abs(tr))} (30d)</span>` : ''}</div>
+        ${news ? `<div class="rs-room-sub wl-news">${escapeHtml(news.h)}${news.t ? ` · ${escapeHtml(rsAgo(news.t))}` : ''}</div>` : ''}
+        ${deal}
+      </div>
+    </div>`;
+}
+
+function rsRenderWatch() {
+  const el = $('#research-watch');
+  if (!el) return;
+  el.innerHTML = loading('Loading your watchlist...');
+  Promise.all([tcLoad(), rsLoadNews()]).then(() => {
+    if (RS.sub !== 'watch') return;
+    const ids = wlIds().sort((a, b) => Math.abs(tcPlayer(b)?.tr || 0) - Math.abs(tcPlayer(a)?.tr || 0));
+    el.innerHTML = ids.length
+      ? rsCard('Watchlist', ids.map(rsWatchRow).join(''), `${ids.length} player${ids.length === 1 ? '' : 's'}`)
+      : empty('Nobody on your watchlist yet. Open any player and tap ☆ Watch.');
+    el.onclick = (e) => {
+      const rm = e.target.closest('[data-wl-remove]');
+      if (rm) { wlToggle(rm.dataset.wlRemove); rsRenderWatch(); return; }
+      const deal = e.target.closest('[data-wl-deal]');
+      if (deal) { wlFindDeal(Number(deal.dataset.wlDeal), Number(deal.dataset.owner)); return; }
+      const row = e.target.closest('[data-player-id]');
+      if (row) openPlayerProfile(Number(row.dataset.playerId));
+    };
+  });
+}
+
+function wlFindDeal(id, ownerId) {
+  setView('trades');
+  setTimeout(() => {
+    tradeTab('find');
+    const sel = $('#finder-partner');
+    if (sel) sel.value = String(ownerId); // no change event: its handler would clear the must-include list
+    TC.must.give = [];
+    TC.must.get = ['player:' + id];
+    if (typeof tcRenderFinderMust === 'function') tcRenderFinderMust();
+  }, 100);
 }
 
 /* ----------------------- League: everyone's place ----------------------- */
