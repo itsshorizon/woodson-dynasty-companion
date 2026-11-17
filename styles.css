@@ -5956,6 +5956,12 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .tv-report { font-size: 12px; line-height: 1.4; margin-top: 8px; }
 .tv-report:empty { display: none; }
 .tv-report-verdict { font-weight: 600; }
+/* ---------- Manager scouting report (Research > League) ---------- */
+#scout-title { display: flex; align-items: center; gap: 10px; }
+#scout-body h5 { margin: 14px 0 6px; }
+.rs-scout-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.rs-scout-btn { margin: 8px 0; }
+.rs-scout-player { cursor: pointer; }
 
 /* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
 .trade-subnav { margin-bottom: 12px; }

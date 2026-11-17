@@ -4607,14 +4607,17 @@ function tradesForMe() {
 }
 
 // Beta 1.7 — determines the user's role in a given trade for action gating.
-function myRoleInTrade(t) {
-  const me = teamById(state.myTeamId);
-  if (!me) return null;
-  const asProposer = (t.teamAId && Number(t.teamAId) === me.id) || t.teamProposing === me.name;
-  const asReceiver = (t.teamBId && Number(t.teamBId) === me.id) || t.teamReceiving === me.name;
+function roleInTradeFor(t, teamId) {
+  const team = teamById(teamId);
+  if (!team) return null;
+  const asProposer = (t.teamAId && Number(t.teamAId) === team.id) || t.teamProposing === team.name;
+  const asReceiver = (t.teamBId && Number(t.teamBId) === team.id) || t.teamReceiving === team.name;
   if (asProposer) return 'proposer';
   if (asReceiver) return 'receiver';
   return null;
+}
+function myRoleInTrade(t) {
+  return roleInTradeFor(t, state.myTeamId);
 }
 
 // Role-scoped action button set. Proposers ONLY see Cancel; receivers see Accept/Counter/Decline.
