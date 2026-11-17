@@ -5240,7 +5240,6 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .rs-profile-news { margin-top: 18px; }
 .rs-profile-news h4 { margin: 0 0 8px; }
 .rs-profile-news .rs-news-item { margin-bottom: 8px; }
-.rs-ask-lede { font-size: 13px; color: var(--text-dim); line-height: 1.45; margin: 0 0 10px; }
 .rs-ask-starters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .rs-ask-starters .tv-filter { text-align: left; border-radius: 10px; line-height: 1.35; }
 .rs-ask-q {
@@ -5951,6 +5950,11 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .tv-more[open] > summary { margin-bottom: 8px; }
 .tv-more .tv-badges:first-of-type { margin-top: 0; }
 
+
+/* ---------- Ask Claude button + sheet (research.js) ---------- */
+.research-askbar { margin: 16px 0 4px; text-align: center; }
+.research-askbar[hidden] { display: none; }
+.research-askbar .btn-ghost { width: auto; padding: 10px 16px; font-size: 12px; }
 
 /* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
 .trade-subnav { margin-bottom: 12px; }
