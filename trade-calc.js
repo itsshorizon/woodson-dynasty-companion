@@ -680,7 +680,7 @@ function tcOpenTeamValueBoard() {
   setView('vault');
   state.vaultSubview = 'teamvalue';
   $$('#vault-subnav .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.sub === 'teamvalue'));
-  ['board', 'teamvalue', 'rivalry', 'resumes', 'timemachine', 'playerindex', 'managerindex'].forEach((sub) => {
+  VAULT_SUBS.forEach((sub) => {
     const el = $(`#vault-${sub}`);
     if (el) el.hidden = sub !== 'teamvalue';
   });
