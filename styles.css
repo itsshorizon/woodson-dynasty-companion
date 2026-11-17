@@ -6070,3 +6070,4 @@ html:not([data-density="simple"]) .rs-path.rec { box-shadow: none; }
 .rs-brief-title { font-size: 15px; }
 .rs-brief-list { display: none; }
 .rs-brief-note { margin-top: 18px; }
+.rs-brief-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

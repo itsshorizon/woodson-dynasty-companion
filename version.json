@@ -1,9 +1,14 @@
 {
-  "version": "1.37.1",
-  "title": "📐 Compact Is Back",
+  "version": "1.38.0",
+  "title": "✨ Cleaner Look + Watchlist, Scouting, Report Cards",
   "notes": [
-    "📐 The Compact layout is back in Settings (the gear, top right). If you used it before, you are already on it again.",
-    "✨ Compact now covers the new Briefing, Trades tabs and Season Impact too.",
-    "🧭 Missed the big 1.37.0 update? Open Patch Notes in Settings to see what moved and what's new."
+    "🎨 A cleaner look. Sections are open now, with one box per trade, deal or matchup. No more boxes inside boxes.",
+    "📋 The Briefing got faces: player photos and team logos on every line, grouped into This Week, Your Move, Your Roster, On the Market and Headlines. It also shows who you have out.",
+    "⭐ New: Watchlist. Open any player and tap Watch. Research > Watch tracks their value, trend and news, and Find a Deal takes you straight to the Trade Finder for them.",
+    "🕵️ New: Scouting reports. In Research > League, open a team (or tap its bubble on the map) to see what they need, how they trade, their best players and deals to pitch.",
+    "📈 New: Trade report cards. Every trade in the Feed shows how each side's value has moved since the deal.",
+    "🤖 Ask is now an \"Ask Claude about this\" button at the bottom of Outlook, Plan, Market and League, with questions that fit each screen.",
+    "🏛️ The Vault is tidier: Records, Draft, Team Value, Managers, Players and Rivalry, with nothing stacked above or below the tabs.",
+    "📐 Compact is back in Settings. If you used it before, you are already on it again."
   ]
 }

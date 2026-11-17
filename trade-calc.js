@@ -1152,12 +1152,13 @@ function tcReportLineHTML(t, st) {
   if (!r) return '';
   const arrow = (d) => {
     const v = Math.round(d);
-    return `<b class="${v > 0 ? 'tv-up' : v < 0 ? 'tv-down' : ''}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${tcFmt(Math.abs(v))}</b>`;
+    return v ? `<b class="${v > 0 ? 'tv-up' : 'tv-down'}">${v > 0 ? '▲' : '▼'} ${tcFmt(Math.abs(v))}</b>` : '<b>no change</b>';
   };
+  const side = (name) => `${name}${/s$/i.test(name) ? "'" : "'s"} side`;
   const nameA = escapeHtml(String(st.proposer.name).trim()), nameB = escapeHtml(String(st.receiver.name).trim());
   const verdict = r.winner ? `Aging better for ${r.winner === 'a' ? nameA : nameB}` : 'About even so far';
   const since = r.partial ? ' <span class="tv-dim">(values tracked since Oct 3)</span>' : '';
-  return `<span class="tv-dim">Since the trade:</span> ${nameA}'s side ${arrow(r.a.delta)} · ${nameB}'s side ${arrow(r.b.delta)} <span class="tv-report-verdict">${verdict}</span>${since}`;
+  return `<span class="tv-dim">Since the trade:</span> ${side(nameA)} ${arrow(r.a.delta)} · ${side(nameB)} ${arrow(r.b.delta)}. <span class="tv-report-verdict">${verdict}</span>${since}`;
 }
 
 function tcFillReports() {
