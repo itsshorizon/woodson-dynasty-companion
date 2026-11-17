@@ -424,6 +424,11 @@
    *   get?:  { players, picks }  asset types I want back (default both)
    *   shapes?: ['1-1','1-2','2-1','2-2']  "give-get" piece counts (default all)
    *   requireMutual (default true): both teams' fit must improve
+   *   tilt?: -1..1 (default 0). Positive = win now, negative = build for later.
+   *          Each result carries myNow / myDyn (what I gain minus what I give, in
+   *          win-now and dynasty value). Tilt > 0 keeps only deals with myNow > 0;
+   *          tilt < 0 only deals with myDyn > 0. Ranking stays fairness band first,
+   *          then the tilted score (see tiltScore), then mutual fit.
    *   maxEdge (default 0.08), limit (default 8)
    * }
    * Rules: within ±maxEdge; at least one player in the deal (no pick-for-pick
@@ -490,12 +495,45 @@
         const myFit = fitScore(want, give, opts.myWindow, ctx);
         const theirFit = fitScore(give, want, opts.theirWindow, ctx);
         if (requireMutual && (!meaningfulFit(myFit, want, give, ctx) || !meaningfulFit(theirFit, give, want, ctx))) continue;
+        const sums = (list) => list.reduce((acc, x) => {
+          const v = assetValue(x, ctx);
+          return { now: acc.now + (v.winNow || 0), dyn: acc.dyn + (v.value || 0) };
+        }, { now: 0, dyn: 0 });
+        const gotS = sums(want), gaveS = sums(give);
         results.push({ get: want, give, edge: quick.edge, band: bandFor(quick.edge, ctx), myFit, theirFit,
           iWant: meaningfulFit(myFit, want, give, ctx), theyWant: meaningfulFit(theirFit, give, want, ctx),
-          mutual: Math.min(myFit, theirFit) + 0.25 * (myFit + theirFit) });
+          mutual: Math.min(myFit, theirFit) + 0.25 * (myFit + theirFit),
+          myNow: gotS.now - gaveS.now, myDyn: gotS.dyn - gaveS.dyn });
       }
     }
-    results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
+    const tilt = Math.max(-1, Math.min(1, Number(opts.tilt) || 0));
+    if (tilt === 0) {
+      results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
+    } else {
+      // c converts dynasty points into win-now points: total win-now value over
+      // total dynasty value across both pools. (Win-now cost is divided by c to
+      // express it in dynasty points when tilting toward later.)
+      let totNow = 0, totDyn = 0;
+      for (const a of (opts.mine || []).concat(opts.theirs || [])) {
+        const v = assetValue(a, ctx);
+        totNow += v.winNow || 0; totDyn += v.value || 0;
+      }
+      const c = totDyn > 0 && totNow > 0 ? totNow / totDyn : 1;
+      const bandRank = (r) => Math.max(0, ctx.bands.findIndex((b) => b.key === r.band.key));
+      const mag = Math.abs(tilt);
+      // Win now: myNow minus the dynasty cost, discounted as tilt rises (free at 1).
+      // Later: myDyn minus the win-now cost the same way.
+      const tiltScore = (r) => (tilt > 0
+        ? r.myNow - (1 - mag) * Math.max(0, -r.myDyn) * c
+        : r.myDyn - (1 - mag) * Math.max(0, -r.myNow) / c);
+      for (let i = results.length - 1; i >= 0; i--) {
+        if (tilt > 0 ? !(results[i].myNow > 0) : !(results[i].myDyn > 0)) results.splice(i, 1);
+      }
+      // Expose the score so a caller merging several partners can rank the same way.
+      results.forEach((r) => { r.tiltScore = tiltScore(r); });
+      results.sort((x, y) => bandRank(x) - bandRank(y) || tiltScore(y) - tiltScore(x)
+        || y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
+    }
     // Show variety: one package per set of players you'd get. When the get side
     // is pinned, vary the give side instead; when both are pinned, keep them all.
     const seenSide = new Set();
@@ -559,6 +597,14 @@
     return results.slice(0, limit);
   }
 
+  // How much win-now value moves per 1,000 dynasty value moved the other way.
+  // Null when the deal moves both the same way (or one is flat).
+  function exchangeRate(r) {
+    if (!r || !Number.isFinite(r.myNow) || !Number.isFinite(r.myDyn)) return null;
+    if (r.myNow === 0 || r.myDyn === 0 || (r.myNow > 0) === (r.myDyn > 0)) return null;
+    return { nowPerThousandDyn: Math.abs(r.myNow) / Math.abs(r.myDyn) * 1000 };
+  }
+
   function triples(list) {
     const out = [];
     for (let i = 0; i < list.length; i++)
@@ -592,6 +638,6 @@
 
   return {
     createContext, assetValue, pickValue, pickTier, evaluate, suggestBalance,
-    bestLineup, teamWindows, fitScore, meaningfulFit, findTrades, shopOffers, starValue, reportCard, DEFAULTS, WINDOW_PREFS,
+    bestLineup, teamWindows, fitScore, meaningfulFit, findTrades, exchangeRate, shopOffers, starValue, reportCard, DEFAULTS, WINDOW_PREFS,
   };
 });

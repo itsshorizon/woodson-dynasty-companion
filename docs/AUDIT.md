@@ -2,7 +2,7 @@
 
 Written against Beta 1.35.0 (November 2026). Measured in a phone-sized browser (390 px wide) with live league data, signed in as Toe Guano.
 
-## Status (updated for Beta 1.38.0)
+## Status (updated for Beta 1.39.0)
 
 Decisions made: this league only, all five Research ideas approved, Classic + Simple layouts, Mac available.
 
@@ -20,6 +20,8 @@ Decisions made: this league only, all five Research ideas approved, Classic + Si
 | 1 | Watchlist, trade report card, scouting reports (ideas 3 to 5) | Shipped 1.38 |
 | 1 | Vault tab cleanup, Ask as a button | Shipped 1.38 |
 | 1 | Flat design (one box per thing), Briefing with photos | Shipped 1.38 |
+| 1 | Research > Edge (Now vs Later, Diamonds, Leverage), Trade Finder dial | Shipped 1.39 |
+| 1 | No-outlines design pass, waiver screen fix | Shipped 1.39 |
 | 1 | Split `app.js` | Queued, see section 9 |
 | 2 | Sign-in, storage off the Sheet, chat report/block, privacy page | Queued, needs you for Firebase console steps |
 | 3 | Capacitor iOS shell, Apple push, icons, TestFlight | Queued, needs your Mac |

@@ -1,6 +1,6 @@
 /* Release: run `node scripts/release.js <version>`. It sets CACHE_NAME here,
  * BUILD_ID in app.js, version.json and every ?v= in index.html together. */
-const CACHE_NAME = 'wcc-v1.38.0';
+const CACHE_NAME = 'wcc-v1.39.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,10 @@ const CORE_ASSETS = [
   './trade-calc.js',
   './research-engine.js',
   './research.js',
+  './edge.css',
+  './edge-gap.js',
+  './edge-risers.js',
+  './edge-leverage.js',
   './activity-engine.js',
   './social.js',
   './push-engine.js',

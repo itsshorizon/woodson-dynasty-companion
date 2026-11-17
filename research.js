@@ -48,6 +48,53 @@ function rsGo(sub) {
   window.scrollTo({ top: 0 });
 }
 
+/* ----------------------- Edge -----------------------
+ * Deep dives that go past "who is good": where the numbers disagree with the
+ * market. Each module lives in its own edge-*.js file and registers here:
+ *   rsEdgeRegister({ id, title, blurb, order, render(host, { team, m }) })
+ * render() fills host (a div) and wires its own clicks. Trade values, player
+ * details, advanced stats and the waiver pool are loaded before it runs.
+ */
+const RS_EDGE = [];
+const RS_EDGE_KEY = 'researchEdge';
+
+function rsEdgeRegister(mod) {
+  RS_EDGE.push(mod);
+  RS_EDGE.sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+function rsRenderEdge() {
+  const el = $('#research-edge');
+  if (!el) return;
+  const team = myTeam();
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
+  if (!RS_EDGE.length) { el.innerHTML = empty('Nothing here yet.'); return; }
+  let pick = null;
+  try { pick = localStorage.getItem(RS_EDGE_KEY); } catch (e) { /* storage blocked */ }
+  const mod = RS_EDGE.find((x) => x.id === pick) || RS_EDGE[0];
+  el.innerHTML = `
+    <div class="edge-picker" role="tablist">${RS_EDGE.map((x) => `<button type="button" class="tv-filter ${x === mod ? 'on' : ''}" data-edge="${x.id}" role="tab" aria-selected="${x === mod}">${escapeHtml(x.title)}</button>`).join('')}</div>
+    <p class="edge-blurb">${escapeHtml(mod.blurb || '')}</p>
+    <div id="edge-host" data-edge-id="${mod.id}">${loading('Crunching the numbers...')}</div>`;
+  el.querySelector('.edge-picker').onclick = (e) => {
+    const b = e.target.closest('[data-edge]');
+    if (!b) return;
+    try { localStorage.setItem(RS_EDGE_KEY, b.dataset.edge); } catch (err) { /* storage blocked */ }
+    rsRenderEdge();
+  };
+  Promise.all([
+    typeof tcLoad === 'function' ? tcLoad() : null,
+    typeof tcLoadDetails === 'function' ? tcLoadDetails() : null,
+    rsLoadAdvanced(),
+    loadWaivers().catch(() => null),
+  ]).then(() => setTimeout(() => {
+    const host = $('#edge-host');
+    if (RS.sub !== 'edge' || !host || host.dataset.edgeId !== mod.id) return;
+    if (!TC.ctx) { host.innerHTML = empty('Trade values unavailable right now.'); return; }
+    try { mod.render(host, { team, m: rsModel() }); } catch (err) { console.error(err); host.innerHTML = empty('This one hit a snag. Try again after the next data refresh.'); }
+  }, 30));
+}
+
 /* ----------------------- Briefing -----------------------
  * The landing pane: one screen that says where my team stands this week and
  * what to look at next. Every card opens the pane with the full story.
@@ -217,6 +264,7 @@ function rsShow() {
   $$('#research-subnav [data-rs]').forEach((b) => b.classList.toggle('active', b.dataset.rs === RS.sub));
   $$('#view-myteam .research-pane').forEach((p) => { p.hidden = p.dataset.pane !== RS.sub; });
   if (RS.sub === 'brief') rsRenderBrief();
+  if (RS.sub === 'edge') rsRenderEdge();
   if (RS.sub === 'outlook') rsRenderOutlook();
   if (RS.sub === 'moves') rsRenderMoves();
   if (RS.sub === 'market') rsRenderMarket();
