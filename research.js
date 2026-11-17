@@ -5,7 +5,7 @@
  *             upcoming schedule, dynasty window
  *   Moves     what to sell, buy or add, with real offers attached
  *   News      recent articles on your players (data/news.json)
- *   Ask       copies a team data pack and opens Claude on the viewer's account
+ *   Ask       a button under Outlook/Plan/Market/League; copies a team data pack and opens Claude on the viewer's account
  * Loaded after trade-calc.js; uses app.js globals (state, $, teamById, …),
  * trade-calc.js (TC, tcPlayer, tcWindowFor, tcLeagueTeamValues) and the pure
  * math in research-engine.js (window.ResearchEngine).
@@ -37,6 +37,7 @@ function rsInit() {
       rsShow();
     };
   }
+  rsWireAsk();
   rsShow();
 }
 
@@ -222,7 +223,8 @@ function rsShow() {
   if (RS.sub === 'watch') rsRenderWatch();
   if (RS.sub === 'league') rsRenderLeague();
   if (RS.sub === 'news') rsRenderNews();
-  if (RS.sub === 'ask') rsRenderAsk();
+  const bar = $('#research-askbar');
+  if (bar) bar.hidden = !RS_ASK_STARTERS[RS.sub];
 }
 
 /* ----------------------- Model ----------------------- */
@@ -1038,12 +1040,33 @@ function rsUnderHoodHTML(playerId) {
 
 const RS_CLAUDE_URL = 'https://claude.ai/new';
 const RS_LEAGUE_FORMAT = '12-team dynasty, full PPR (TE 1.5 PPR), 6-pt passing TD, lineup 1QB/2RB/2WR/1TE/3FLEX';
-const RS_STARTERS = [
-  'Am I a contender or should I sell? Give me a plan for the rest of the season.',
-  'Which team should I call to fix my weakest position, and what should I offer?',
-  'Which of my players are sell-high right now, and who is buy-low on other rosters?',
-  'Rank my waiver options and tell me who I should drop for them.',
-];
+const RS_ASK_STARTERS = {
+  outlook: [
+    'What is my biggest weakness right now?',
+    'Am I a contender or should I sell? Give me a plan for the rest of the season.',
+    'Which position room worries you most, and how do I fix it?',
+    'How do my playoff chances look, and what moves them most?',
+  ],
+  moves: [
+    'Which of these moves should I make first?',
+    'Which suggested move is the riskiest, and why?',
+    'Rank my waiver options and tell me who I should drop for them.',
+    'Is there a move here I should skip?',
+  ],
+  market: [
+    'Who is the best buy-low for my team?',
+    'Which of my players are sell-high right now?',
+    'Who should I trade for to fix my weakest position?',
+    'Which player on my roster is most overvalued?',
+  ],
+  league: [
+    'Which manager should I target for a trade?',
+    'Who are my biggest rivals for the title?',
+    'Which team needs what I have extra of?',
+    'Which team is most likely to sell this season?',
+  ],
+};
+const RS_ASK_SCREEN = { outlook: 'Outlook', moves: 'Plan', market: 'Market', league: 'League' };
 
 // full: my roster gets every under-the-hood number; other players a short version.
 function rsPlayerPack(p, full = true) {
@@ -1124,9 +1147,9 @@ function rsTeamPack(team) {
   };
 }
 
-function rsAskPrompt(question, pack) {
+function rsAskPrompt(question, pack, screen) {
   return `You're my dynasty fantasy football analyst. My league: ${RS_LEAGUE_FORMAT}.
-
+${screen ? `\nI'm looking at the ${screen} screen of my league app, so focus your answer there.\n` : ''}
 Use only the data below for stats, values and rosters. Don't invent numbers or players. If you need something that isn't here (like news after this snapshot), say so. "dynastyValue" is a 0-10000 trade value; "career" is Ascending / Prime / Declining / Cliff by age.
 
 My question: ${question}
@@ -1137,34 +1160,40 @@ ${JSON.stringify(pack)}
 \`\`\``;
 }
 
-function rsRenderAsk() {
-  const el = $('#research-ask');
-  if (!el) return;
-  const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
-  const draft = RS.askDraft || '';
-  el.innerHTML = rsCard('🤖 Ask Claude', `
-    <p class="rs-ask-lede">Ask anything about your team. The app copies your team's full data, then opens Claude on <b>your own Claude account</b>. Paste and send. Free accounts work.</p>
-    <div class="rs-ask-starters">${RS_STARTERS.map((q, i) => `<button type="button" class="tv-filter" data-starter="${i}">${escapeHtml(q)}</button>`).join('')}</div>
-    <textarea id="rs-ask-q" class="rs-ask-q" rows="3" placeholder="e.g. Should I trade my 2027 1st for a WR2?">${escapeHtml(draft)}</textarea>
-    <button class="btn-primary" id="rs-ask-go" type="button">📋 Copy &amp; Open Claude</button>
-    <div id="rs-ask-fallback"></div>
-    <details class="rs-ask-preview"><summary>What gets copied</summary><p class="tv-note">Your record, playoff odds, position rooms, injuries, full roster with values and PPG, draft picks, schedule, the app's suggested moves, every other team's top players and needs, and the best waiver names. No logins or personal info.</p></details>`);
-
+// The sheet markup lives in index.html; wired once.
+function rsWireAsk() {
+  const sheet = $('#rs-ask-sheet');
+  if (!sheet || sheet.dataset.wired) return;
+  sheet.dataset.wired = '1';
   const q = $('#rs-ask-q');
-  q.oninput = () => { RS.askDraft = q.value; };
-  el.onclick = (e) => {
+  $('#rs-ask-open').onclick = rsOpenAsk;
+  $('#rs-ask-close').onclick = () => { sheet.hidden = true; };
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.hidden = true; });
+  $('#rs-ask-starters').onclick = (e) => {
     const s = e.target.closest('[data-starter]');
-    if (s) { q.value = RS_STARTERS[Number(s.dataset.starter)]; RS.askDraft = q.value; q.focus(); return; }
-    if (e.target.closest('#rs-ask-go')) rsAskGo();
+    if (!s) return;
+    q.value = RS_ASK_STARTERS[RS.askFrom]?.[Number(s.dataset.starter)] || '';
+    q.focus();
   };
+  $('#rs-ask-go').onclick = rsAskGo;
+}
+
+function rsOpenAsk() {
+  if (!myTeam()) { toast('Pick your team on the Briefing tab first.'); return; }
+  RS.askFrom = RS.sub;
+  const list = RS_ASK_STARTERS[RS.askFrom] || [];
+  $('#rs-ask-starters').innerHTML = list.map((q, i) => `<button type="button" class="tv-filter" data-starter="${i}">${escapeHtml(q)}</button>`).join('');
+  $('#rs-ask-q').value = '';
+  $('#rs-ask-fallback').innerHTML = '';
+  $('#rs-ask-sheet').hidden = false;
   // Waiver names make the pack better; load them in the background.
   loadWaivers().catch(() => null);
 }
 
 function rsAskGo() {
-  const question = $('#rs-ask-q').value.trim() || RS_STARTERS[0];
-  const text = rsAskPrompt(question, rsTeamPack(myTeam()));
+  const from = RS.askFrom;
+  const question = $('#rs-ask-q').value.trim() || RS_ASK_STARTERS[from]?.[0] || 'What should I do next?';
+  const text = rsAskPrompt(question, rsTeamPack(myTeam()), RS_ASK_SCREEN[from]);
   // Open first, while the tap still counts as a user gesture (popup blockers).
   window.open(RS_CLAUDE_URL, '_blank', 'noopener');
   const fallback = () => {

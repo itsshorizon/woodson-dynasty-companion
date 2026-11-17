@@ -241,7 +241,6 @@
         <button data-rs="watch" class="seg-btn" type="button">Watch</button>
         <button data-rs="league" class="seg-btn" type="button">League</button>
         <button data-rs="news" class="seg-btn" type="button">News</button>
-        <button data-rs="ask" class="seg-btn" type="button">Ask</button>
       </div>
       <div class="research-pane" data-pane="brief"><div id="research-brief"></div></div>
       <div class="research-pane" data-pane="outlook" hidden><div id="research-outlook"></div></div>
@@ -250,7 +249,9 @@
       <div class="research-pane" data-pane="watch" hidden><div id="research-watch"></div></div>
       <div class="research-pane" data-pane="league" hidden><div id="research-league"></div></div>
       <div class="research-pane" data-pane="news" hidden><div id="research-news"></div></div>
-      <div class="research-pane" data-pane="ask" hidden><div id="research-ask"></div></div>
+      <div class="research-askbar" id="research-askbar" hidden>
+        <button type="button" class="btn-ghost" id="rs-ask-open">🤖 Ask Claude about this</button>
+      </div>
     </section>
 
     <!-- Vault View: 6 sub-tabs (Records, Draft, Team Value, Managers, Players, Rivalry). Nothing sits outside the sub-tabs. -->
@@ -652,6 +653,24 @@
         <p id="display-sub">Pick how the app looks on this device.</p>
       </div>
       <div class="modal-body" id="display-body"></div>
+    </div>
+  </div>
+
+  <!-- Ask Claude sheet (research.js): opens from the button under Outlook, Plan, Market and League -->
+  <div class="modal-overlay" id="rs-ask-sheet" hidden>
+    <div class="modal push-modal">
+      <div class="modal-header">
+        <button class="modal-close" id="rs-ask-close" aria-label="Close">×</button>
+        <h2>Ask Claude</h2>
+        <p>The app copies your team's data, then opens Claude in a new tab on your own Claude account. Paste it there and send. Free accounts work.</p>
+      </div>
+      <div class="modal-body">
+        <div class="rs-ask-starters" id="rs-ask-starters"></div>
+        <textarea id="rs-ask-q" class="rs-ask-q" rows="3" placeholder="Or type your own question"></textarea>
+        <button class="btn-primary" id="rs-ask-go" type="button">📋 Copy &amp; Open Claude</button>
+        <div id="rs-ask-fallback"></div>
+        <details class="rs-ask-preview"><summary>What gets copied</summary><p class="tv-note">Your record, playoff odds, position rooms, injuries, full roster with values and PPG, draft picks, schedule, the app's suggested moves, every other team's top players and needs, and the best waiver names. No logins or personal info.</p></details>
+      </div>
     </div>
   </div>
 
