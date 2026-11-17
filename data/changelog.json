@@ -1,6 +1,71 @@
 {
  "entries": [
   {
+   "version": "1.39.0",
+   "title": "💎 Edge: Find What the League Is Missing",
+   "date": "2026-11-17T01:33:19Z",
+   "notes": [
+    "💎 New Research tab: Edge. Three deep dives that look for places where the numbers and the market disagree.",
+    "⚖️ Now vs Later: every player has a price for this year and a price for the long run. See who scores far more than his price says (buy if you're contending) and who is priced for seasons that aren't here yet (cash in). It builds a swap for you too.",
+    "📈 Diamonds: players whose role is growing before their price moves. Snap share and targets over their last 3 games, usage that says they should be scoring more, and players running hot who are due to cool off. Free agents are tagged.",
+    "🎯 Leverage: where an upgrade moves your weekly score the most, what that is worth in playoff odds, who to target, and which teams have the softest playoff weeks.",
+    "🎚️ Trade Finder has a dial: Build for later, Balanced, Win now. Every deal now shows the trade-off in plain words, like \"You give up 796 long-term value to add 412 win-now value.\"",
+    "🎨 A much bigger visual cleanup: no outlines. Rosters and standings are clean lists, tabs are underlined text, and chips and buttons are soft fills.",
+    "🛠️ Fixed the Waivers screen in Compact, where names were cut off and stats stacked on top of each other. \"INJURY_RESERVE\" now just says IR."
+   ]
+  },
+  {
+   "version": "1.38.0",
+   "title": "✨ Cleaner Look + Watchlist, Scouting, Report Cards",
+   "date": "2026-11-17T01:06:44Z",
+   "notes": [
+    "🎨 A cleaner look. Sections are open now, with one box per trade, deal or matchup. No more boxes inside boxes.",
+    "📋 The Briefing got faces: player photos and team logos on every line, grouped into This Week, Your Move, Your Roster, On the Market and Headlines. It also shows who you have out.",
+    "⭐ New: Watchlist. Open any player and tap Watch. Research > Watch tracks their value, trend and news, and Find a Deal takes you straight to the Trade Finder for them.",
+    "🕵️ New: Scouting reports. In Research > League, open a team (or tap its bubble on the map) to see what they need, how they trade, their best players and deals to pitch.",
+    "📈 New: Trade report cards. Every trade in the Feed shows how each side's value has moved since the deal.",
+    "🤖 Ask is now an \"Ask Claude about this\" button at the bottom of Outlook, Plan, Market and League, with questions that fit each screen.",
+    "🏛️ The Vault is tidier: Records, Draft, Team Value, Managers, Players and Rivalry, with nothing stacked above or below the tabs.",
+    "📐 Compact is back in Settings. If you used it before, you are already on it again."
+   ]
+  },
+  {
+   "version": "1.37.1",
+   "title": "📐 Compact Is Back",
+   "date": "2026-11-17T00:52:26Z",
+   "notes": [
+    "📐 The Compact layout is back in Settings (the gear, top right). If you used it before, you are already on it again.",
+    "✨ Compact now covers the new Briefing, Trades tabs and Season Impact too.",
+    "🧭 Missed the big 1.37.0 update? Open Patch Notes in Settings to see what moved and what's new."
+   ]
+  },
+  {
+   "version": "1.37.0",
+   "title": "🧭 A Simpler Map + Season Impact",
+   "date": "2026-11-17T00:35:31Z",
+   "notes": [
+    "🔮 New: Season Impact. Build a trade and the meter shows what it does to both teams this year: playoff odds, title odds and points per week, before and after. Trade Finder ideas show it too.",
+    "📋 Research now opens on your Briefing: one screen with your odds, your next game, the one move to make, who's rising and falling on your roster, a buy-low target and the latest headline. Tap any line for the full story.",
+    "🗂️ The Trades tab is now four short tabs: Offers, Find, Build and Feed. A red number on Offers (and a dot on the Trades button) means someone is waiting on you.",
+    "⚙️ One Settings button (the gear, top right) for your team, layout, colors, notifications and patch notes. Commissioner tools live there too.",
+    "📦 Where things moved: your offers are on Trades > Offers. Draft picks are under every team on Rosters. Your trade history is on Trades > Feed > My trades.",
+    "👋 Retired: the old My Team page, the Smart Trade Matchmaker (Find and Plan do its job better) and the Compact layout. If you used Compact, you're on Classic now.",
+    "📜 Activity loads 20 items at a time, so it opens faster."
+   ]
+  },
+  {
+   "version": "1.36.0",
+   "title": "📌 Trade Finder: Must-Includes",
+   "date": "2026-11-17T00:09:30Z",
+   "notes": [
+    "📌 Trade Finder has a new \"Must include\" box. Name one or two of your players or picks, one or two of theirs, or both, and every deal it suggests will have them in it.",
+    "🔎 Want a certain player but not sure who has him? Leave the team on \"Any team\" and pick him under \"From them\". The Finder picks the team for you.",
+    "🏷️ Tab titles at the top (Standings, Research, Trade Desk) no longer get cut off on phones.",
+    "⚡ Interest Alerts no longer list your own team as interested in your own player.",
+    "📊 Charts now load from the app itself, so they still work with a weak signal."
+   ]
+  },
+  {
    "version": "1.35.0",
    "title": "🧭 Simple Mode + Cleaner Trades",
    "date": "2026-11-08T17:48:52-05:00",
