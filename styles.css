@@ -6071,3 +6071,59 @@ html:not([data-density="simple"]) .rs-path.rec { box-shadow: none; }
 .rs-brief-list { display: none; }
 .rs-brief-note { margin-top: 18px; }
 .rs-brief-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ---------- Beta 1.39: no outlines ----------
+ * Three kinds of surface, and nothing else:
+ *   lists     rows on the page, split by a hairline
+ *   objects   one soft fill (a trade, a deal, a matchup, a post), no border, no glow
+ *   controls  tabs are text with an underline; chips and fields are soft fills
+ * Color is kept for meaning: the fairness stripe, position stripe, active tab.
+ * Simple layout keeps its own look. */
+
+/* Lists */
+html:not([data-density="simple"]) :is(.player-row, .standings-row, .draft-detail-row) {
+  background: none; border-top: 0; border-right: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none;
+}
+html:not([data-density="simple"]) .standings-row { border-left: 0; }
+
+/* Objects */
+html:not([data-density="simple"]) :is(.tv-finder-item, .tv-meter, .tv-feed-item, .trade-card, .trade-side, .matchup, .act-item, .front-page, .tb-bar, .draft-summary-card, .tv-must, .tv-impact, .act-compose) {
+  background: var(--bg-elev); border-top: 0; border-right: 0; border-bottom: 0; box-shadow: none;
+}
+html:not([data-density="simple"]) :is(.tv-feed-item, .trade-card, .trade-side, .matchup, .act-item, .front-page, .tb-bar, .draft-summary-card, .tv-must, .tv-impact, .act-compose) { border-left: 0; }
+html:not([data-density="simple"]) .matchup.mine { border-left: 3px solid var(--tab-accent); }
+html:not([data-density="simple"]) .draft-summary-card.active { background: var(--bg-elev-2); box-shadow: inset 0 -2px 0 var(--tab-accent); }
+html:not([data-density="simple"]) .tb-bar::before, html:not([data-density="simple"]) .act-compose::before { display: none; }
+/* Parts of an object stay flat (restated: the rule above would refill them) */
+html:not([data-density="simple"]) .tv-analysis .tv-meter,
+html:not([data-density="simple"]) .act-item .tv-feed-item,
+html:not([data-density="simple"]) .tv-finder-item .tv-impact,
+html:not([data-density="simple"]) .tv-meter .tv-impact { background: none; border: 0; padding-left: 0; padding-right: 0; }
+html:not([data-density="simple"]) .tv-meter .tv-impact { border-top: 1px solid var(--border); border-radius: 0; margin-top: 12px; padding-top: 10px; }
+html:not([data-density="simple"]) .trade-side .trade-side { background: none; }
+
+/* Stat tiles become plain numbers */
+html:not([data-density="simple"]) .rs-stat { background: none; padding: 0; border-radius: 0; }
+html:not([data-density="simple"]) .rs-stats { gap: 16px 12px; }
+html:not([data-density="simple"]) .rs-stat-val { font-size: 22px; }
+
+/* Tabs: text with an underline */
+html:not([data-density="simple"]) .segmented {
+  background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; padding: 0; gap: 2px;
+}
+html:not([data-density="simple"]) .seg-btn {
+  background: none; border-radius: 0; box-shadow: none; color: var(--text-mute);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; padding-top: 10px; padding-bottom: 10px;
+}
+html:not([data-density="simple"]) .seg-btn.active { background: none; box-shadow: none; color: var(--tab-accent); border-bottom-color: var(--tab-accent); }
+
+/* Chips, tags and fields: soft fill, no outline. :where() keeps this weaker
+ * than each chip's own "on" / colored variants. */
+html:not([data-density="simple"]) :where(.tv-filter, .wv-chip, .act-filter, .team-pill, .tv-badge, .rs-mkt-score, .pos-rank, .tv-flag, .count,
+  .player-action, .pick-chip, .wp-chip, .rx-add, .power-rank, .storyline-badge, .search-input, .fs-trigger, .theme-toggle, .header-meta) {
+  border-color: transparent; background-color: var(--bg-elev-2); box-shadow: none;
+}
+html:not([data-density="simple"]) :where(.tv-filter.on, .act-filter.active, .team-pill.active) { border-color: transparent; }
+html:not([data-density="simple"]) .header-meta { color: var(--text-dim); }
+/* Per-tab themes paint the active tab as a filled block: the underline replaces it. */
+html:not([data-density="simple"]) .segmented .seg-btn.active { background: none !important; box-shadow: none !important; color: var(--tab-accent) !important; }

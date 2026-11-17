@@ -609,7 +609,14 @@
 }
 
 /* Waivers: status chips wrap under the name instead of squeezing the row */
-[data-density="compact"] .player-row .player-actions:has(.wv-chip) { flex-wrap: wrap; justify-content: flex-start; }
+/* The two-column grid squeezed the name to a few letters and stacked the
+ * stats one word per line: waiver rows get a full-width line each. */
+[data-density="compact"] .player-row.is-waiver .player-info {
+  grid-template-areas: "name val" "meta meta" "act act";
+  row-gap: 3px;
+}
+[data-density="compact"] .player-row.is-waiver .player-actions { flex-wrap: wrap; justify-content: flex-start; }
+[data-density="compact"] .player-row.is-waiver .wv-chip { font-size: 10px; padding: 2px 7px; }
 
 /* Activity + reactions (social.js) */
 [data-density="compact"] .act-item { padding: 10px 12px; }

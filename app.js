@@ -1874,6 +1874,10 @@ function actionLabel(icon, label) {
   return `<span class="pa-ic">${icon}</span> <span class="pa-lbl">${label}</span>`;
 }
 
+// ESPN's status codes in plain words ("INJURY_RESERVE" ran rows off the screen).
+const INJURY_LABELS = { INJURY_RESERVE: 'IR', QUESTIONABLE: 'Questionable', DOUBTFUL: 'Doubtful', OUT: 'Out', SUSPENSION: 'Suspended', DAY_TO_DAY: 'Day to day' };
+const injuryLabel = (code) => INJURY_LABELS[code] || String(code).replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+
 function renderPlayerRow(player, ownerTeam, context = 'none') {
   const valueChunk = typeof tcValueChipHTML === 'function' ? tcValueChipHTML(player.id) : '';
   const points = playerStatsLineHTML(player);
@@ -1899,11 +1903,11 @@ function renderPlayerRow(player, ownerTeam, context = 'none') {
   }
 
   return `
-    <div class="player-row pos-row-${player.pos}" data-player-id="${player.id}">
+    <div class="player-row pos-row-${player.pos}${context === 'waiver' ? ' is-waiver' : ''}" data-player-id="${player.id}">
       ${playerPhotoHTML(player)}
       <div class="player-info">
         <div class="player-name">${escapeHtml(player.name)}${isPubliclyBlocked ? ' <span class="block-tag">ON BLOCK</span>' : ''}</div>
-        <div class="player-meta">${escapeHtml(player.slot)}${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? ' • ' + escapeHtml(player.injuryStatus) : ''}${points ? ' • ' + points : ''}</div>
+        <div class="player-meta">${escapeHtml(player.slot)}${player.injuryStatus && player.injuryStatus !== 'ACTIVE' ? ' • ' + escapeHtml(injuryLabel(player.injuryStatus)) : ''}${points ? ' • ' + points : ''}</div>
         ${valueChunk ? `<div class="player-meta tv-row-val-line">${valueChunk}</div>` : ''}
         ${actions ? `<div class="player-actions">${actions}</div>` : ''}
       </div>
