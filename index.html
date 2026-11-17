@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="styles.css?v=1.38.0" />
   <link rel="stylesheet" href="compact.css?v=1.38.0" />
   <link rel="stylesheet" href="simple.css?v=1.38.0" />
+  <link rel="stylesheet" href="edge.css?v=1.38.0" />
   <!-- Chart.js 4.4.1, served from this repo so charts work offline and inside a native app shell. -->
   <script src="vendor/chart.umd.js?v=1.38.0"></script>
 </head>
@@ -238,6 +239,7 @@
         <button data-rs="outlook" class="seg-btn" type="button">Outlook</button>
         <button data-rs="moves" class="seg-btn" type="button">Plan</button>
         <button data-rs="market" class="seg-btn" type="button">Market</button>
+        <button data-rs="edge" class="seg-btn" type="button">Edge</button>
         <button data-rs="watch" class="seg-btn" type="button">Watch</button>
         <button data-rs="league" class="seg-btn" type="button">League</button>
         <button data-rs="news" class="seg-btn" type="button">News</button>
@@ -246,6 +248,7 @@
       <div class="research-pane" data-pane="outlook" hidden><div id="research-outlook"></div></div>
       <div class="research-pane" data-pane="moves" hidden><div id="research-moves"></div></div>
       <div class="research-pane" data-pane="market" hidden><div id="research-market"></div></div>
+      <div class="research-pane" data-pane="edge" hidden><div id="research-edge"></div></div>
       <div class="research-pane" data-pane="watch" hidden><div id="research-watch"></div></div>
       <div class="research-pane" data-pane="league" hidden><div id="research-league"></div></div>
       <div class="research-pane" data-pane="news" hidden><div id="research-news"></div></div>
@@ -694,6 +697,10 @@
   <script src="trade-calc.js?v=1.38.0"></script>
   <script src="research-engine.js?v=1.38.0"></script>
   <script src="research.js?v=1.38.0"></script>
+  <!-- Research > Edge modules: each file registers itself with rsEdgeRegister (research.js) -->
+  <script src="edge-gap.js?v=1.38.0"></script>
+  <script src="edge-risers.js?v=1.38.0"></script>
+  <script src="edge-leverage.js?v=1.38.0"></script>
   <script src="activity-engine.js?v=1.38.0"></script>
   <script src="social.js?v=1.38.0"></script>
   <script src="push-engine.js?v=1.38.0"></script>

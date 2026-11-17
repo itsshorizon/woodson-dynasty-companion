@@ -1,0 +1,21 @@
+/* Research > Edge. One region per module: keep each module's rules inside its own region. */
+.edge-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.edge-blurb { margin: 0 2px 16px; font-size: 13px; line-height: 1.45; color: var(--text-dim); }
+
+/* ===== region: gap (edge-gap.js) ===== */
+
+/* ===== end region: gap ===== */
+
+
+
+
+/* ===== region: risers (edge-risers.js) ===== */
+
+/* ===== end region: risers ===== */
+
+
+
+
+/* ===== region: leverage (edge-leverage.js) ===== */
+
+/* ===== end region: leverage ===== */
