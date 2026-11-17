@@ -1,14 +1,13 @@
 {
-  "version": "1.38.0",
-  "title": "✨ Cleaner Look + Watchlist, Scouting, Report Cards",
+  "version": "1.39.0",
+  "title": "💎 Edge: Find What the League Is Missing",
   "notes": [
-    "🎨 A cleaner look. Sections are open now, with one box per trade, deal or matchup. No more boxes inside boxes.",
-    "📋 The Briefing got faces: player photos and team logos on every line, grouped into This Week, Your Move, Your Roster, On the Market and Headlines. It also shows who you have out.",
-    "⭐ New: Watchlist. Open any player and tap Watch. Research > Watch tracks their value, trend and news, and Find a Deal takes you straight to the Trade Finder for them.",
-    "🕵️ New: Scouting reports. In Research > League, open a team (or tap its bubble on the map) to see what they need, how they trade, their best players and deals to pitch.",
-    "📈 New: Trade report cards. Every trade in the Feed shows how each side's value has moved since the deal.",
-    "🤖 Ask is now an \"Ask Claude about this\" button at the bottom of Outlook, Plan, Market and League, with questions that fit each screen.",
-    "🏛️ The Vault is tidier: Records, Draft, Team Value, Managers, Players and Rivalry, with nothing stacked above or below the tabs.",
-    "📐 Compact is back in Settings. If you used it before, you are already on it again."
+    "💎 New Research tab: Edge. Three deep dives that look for places where the numbers and the market disagree.",
+    "⚖️ Now vs Later: every player has a price for this year and a price for the long run. See who scores far more than his price says (buy if you're contending) and who is priced for seasons that aren't here yet (cash in). It builds a swap for you too.",
+    "📈 Diamonds: players whose role is growing before their price moves. Snap share and targets over their last 3 games, usage that says they should be scoring more, and players running hot who are due to cool off. Free agents are tagged.",
+    "🎯 Leverage: where an upgrade moves your weekly score the most, what that is worth in playoff odds, who to target, and which teams have the softest playoff weeks.",
+    "🎚️ Trade Finder has a dial: Build for later, Balanced, Win now. Every deal now shows the trade-off in plain words, like \"You give up 796 long-term value to add 412 win-now value.\"",
+    "🎨 A much bigger visual cleanup: no outlines. Rosters and standings are clean lists, tabs are underlined text, and chips and buttons are soft fills.",
+    "🛠️ Fixed the Waivers screen in Compact, where names were cut off and stats stacked on top of each other. \"INJURY_RESERVE\" now just says IR."
   ]
 }

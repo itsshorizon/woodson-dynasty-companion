@@ -6150,3 +6150,4 @@ html:not([data-density="simple"]) :where(.tv-filter.on, .act-filter.active, .tea
 html:not([data-density="simple"]) .header-meta { color: var(--text-dim); }
 /* Per-tab themes paint the active tab as a filled block: the underline replaces it. */
 html:not([data-density="simple"]) .segmented .seg-btn.active { background: none !important; box-shadow: none !important; color: var(--tab-accent) !important; }
+html:not([data-density="simple"]) .seg-btn.active { background: none !important; box-shadow: none !important; color: var(--tab-accent) !important; border-bottom: 2px solid var(--tab-accent); }
