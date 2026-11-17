@@ -68,17 +68,26 @@ function rsOddsSince(team, odds) {
   return prev == null ? null : { week: prev, playoffPct: mine[prev][0], titlePct: mine[prev][1] };
 }
 
-function rsBriefRow(go, icon, kicker, title, sub = '', attrs = '') {
+// One line of the Briefing. lead = photo, logo or icon HTML.
+function rsBriefRow(go, lead, kicker, title, sub = '', attrs = '') {
   return `
     <button type="button" class="rs-brief-row" data-brief-go="${go}" ${attrs}>
-      <span class="rs-brief-icon" aria-hidden="true">${icon}</span>
+      <span class="rs-brief-lead">${lead}</span>
       <span class="rs-brief-main">
-        <span class="rs-brief-kicker">${kicker}</span>
+        ${kicker ? `<span class="rs-brief-kicker">${kicker}</span>` : ''}
         <span class="rs-brief-title">${title}</span>
         ${sub ? `<span class="rs-brief-sub">${sub}</span>` : ''}
       </span>
       <span class="rs-brief-chev" aria-hidden="true">›</span>
     </button>`;
+}
+
+const rsBriefIcon = (glyph) => `<span class="rs-brief-icon" aria-hidden="true">${glyph}</span>`;
+const rsBriefSection = (title, rows) => (rows.length ? `<section class="rs-brief-sec"><h3>${title}</h3>${rows.join('')}</section>` : '');
+
+// A Briefing line about one player: headshot first, tap opens the profile.
+function rsBriefPlayer(p, kicker, sub, go = 'player') {
+  return rsBriefRow(go, playerPhotoHTML(p), kicker, escapeHtml(p.name), sub, `data-player-id="${p.id}"`);
 }
 
 function rsBriefHTML(team) {
@@ -91,59 +100,69 @@ function rsBriefHTML(team) {
     const d = Math.round((now - was) * 100);
     return d ? `<span class="${d > 0 ? 'tv-up' : 'tv-down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)} since Wk ${prev.week}</span>` : `same as Wk ${prev.week}`;
   };
-  const rows = [];
+  const trend = (tr) => `<b class="${tr > 0 ? 'tv-up' : 'tv-down'}">${tr > 0 ? '▲' : '▼'} ${tcFmt(Math.abs(tr))}</b>`;
+  const skill = team.roster.filter((p) => ResearchEngine.POS.includes(p.pos));
 
-  // Offers waiting on me
+  /* ---- This week ---- */
+  const week = [];
   const { incoming } = tradesForMe();
   if (incoming.length) {
-    rows.push(rsBriefRow('trades', '📬', 'Waiting on you', `${incoming.length} trade offer${incoming.length > 1 ? 's' : ''} to answer`,
-      escapeHtml(incoming.map((t) => `from ${t.teamProposing}`).join(', '))));
+    const from = teamByName(incoming[0].teamProposing) || teamById(Number(incoming[0].teamAId));
+    week.push(rsBriefRow('trades', from ? teamLogoHTML(from, 40) : rsBriefIcon('📬'), 'Waiting on you',
+      `${incoming.length} trade offer${incoming.length > 1 ? 's' : ''} to answer`, escapeHtml(incoming.map((t) => `from ${t.teamProposing}`).join(', '))));
   }
-
-  // Next game
   const next = m.remaining.find((g) => g.home === team.id || g.away === team.id);
   if (next) {
     const opp = teamById(next.home === team.id ? next.away : next.home);
     const win = normCdf((m.mean[team.id] - m.mean[opp.id]) / (ResearchEngine.WEEKLY_SD * Math.SQRT2));
-    rows.push(rsBriefRow('outlook', '🗓️', `Week ${next.week}`, `vs ${escapeHtml(opp.name.trim())}`,
-      `${recordOf(opp)} · <b class="${win >= 0.6 ? 'tv-up' : win < 0.4 ? 'tv-down' : ''}">${rsPct(win)}</b> chance to win`));
+    const last3 = rsAvg((m.results[opp.id] || []).slice(-3).map((g) => g.pts));
+    week.push(rsBriefRow('outlook', teamLogoHTML(opp, 40), `Week ${next.week}`, `vs ${escapeHtml(opp.name.trim())}`,
+      `<b class="${win >= 0.6 ? 'tv-up' : win < 0.4 ? 'tv-down' : ''}">${rsPct(win)}</b> chance to win · they are ${recordOf(opp)}${last3 != null ? `, ${last3.toFixed(0)} a week lately` : ''}`));
   }
+  // Players I can't start right now, most valuable first
+  skill.filter((p) => !rsAvailable(p)).sort((a, b) => (tcPlayer(b.id)?.dv || 0) - (tcPlayer(a.id)?.dv || 0)).slice(0, 2)
+    .forEach((p) => week.push(rsBriefPlayer(p, p.slot === 'IR' ? 'On IR' : 'Out', `${p.pos} · ${ppgFor(p).toFixed(1)} a game when healthy`)));
 
-  // The one move to make
+  /* ---- Your move ---- */
+  const moveRows = [];
   const move = ResearchEngine.moves(rsMoveInput(team, m)).sort((a, b) => a.priority - b.priority)[0];
-  if (move) rows.push(rsBriefRow('moves', '🎯', 'Your move', escapeHtml(move.headline), escapeHtml(move.why[0] || '')));
-
-  // Biggest 30-day value mover on my roster, each way
-  const movers = team.roster.map((p) => ({ p, tr: tcPlayer(p.id)?.tr || 0 })).filter((x) => x.tr);
-  const mover = (x, kicker) => rsBriefRow('player', x.tr > 0 ? '📈' : '📉', kicker, escapeHtml(x.p.name),
-    `<b class="${x.tr > 0 ? 'tv-up' : 'tv-down'}">${x.tr > 0 ? '▲' : '▼'} ${tcFmt(Math.abs(x.tr))}</b> value in 30 days · now ${tcFmt(tcPlayer(x.p.id)?.dv)}`,
-    `data-player-id="${x.p.id}"`);
-  const up = movers.filter((x) => x.tr > 0).sort((a, b) => b.tr - a.tr)[0];
-  const down = movers.filter((x) => x.tr < 0).sort((a, b) => a.tr - b.tr)[0];
-  if (up) rows.push(mover(up, 'Rising'));
-  if (down) rows.push(mover(down, 'Falling'));
-
-  // Best buy-low on another team, at a position I'm weak at when there is one
-  const weak = m.teamCtx[team.id]?.weakPos || [];
-  const buys = Object.entries(m.market).filter(([id, e]) => e.buy && ownerTeamOf(Number(id))?.id !== team.id)
-    .map(([id, e]) => ({ p: findPlayerAnywhere(Number(id)), e: e.buy })).filter((x) => x.p)
-    .sort((a, b) => (weak.includes(b.p.pos) - weak.includes(a.p.pos)) || b.e.score - a.e.score);
-  if (buys[0]) {
-    const b = buys[0];
-    rows.push(rsBriefRow('market', '🛒', weak.includes(b.p.pos) ? `Buy low · fills your ${b.p.pos} need` : 'Buy low',
-      `${escapeHtml(b.p.name)} <span class="tv-dim">${b.p.pos} · ${escapeHtml(ownerTeamOf(b.p.id)?.name.trim() || '')}</span>`, escapeHtml(b.e.reasons[0] || '')));
+  if (move) {
+    const face = findPlayerAnywhere((move.sell || [])[0]) || (move.add && state.freeAgents.get(move.add)) || null;
+    const lead = face ? playerPhotoHTML(face) : rsBriefIcon(move.buyPos || '🎯');
+    moveRows.push(rsBriefRow('moves', lead, '', escapeHtml(move.headline), escapeHtml(move.why[0] || '')));
   }
 
-  // Latest headline on my players
+  /* ---- Your roster: biggest 30-day value moves ---- */
+  const movers = skill.map((p) => ({ p, tr: tcPlayer(p.id)?.tr || 0 })).filter((x) => x.tr);
+  const moverRow = (x) => rsBriefPlayer(x.p, '', `${trend(x.tr)} in 30 days · ${x.p.pos} · worth ${tcFmt(tcPlayer(x.p.id)?.dv)}`);
+  const rosterRows = movers.filter((x) => x.tr > 0).sort((a, b) => b.tr - a.tr).slice(0, 2)
+    .concat(movers.filter((x) => x.tr < 0).sort((a, b) => a.tr - b.tr).slice(0, 2)).map(moverRow);
+
+  /* ---- Market: one to buy, one of mine to sell ---- */
+  const market = [];
+  const weak = m.teamCtx[team.id]?.weakPos || [];
+  const entries = (kind, mine) => Object.entries(m.market).filter(([id, e]) => e[kind] && (ownerTeamOf(Number(id))?.id === team.id) === mine)
+    .map(([id, e]) => ({ p: findPlayerAnywhere(Number(id)), e: e[kind] })).filter((x) => x.p);
+  const buy = entries('buy', false).sort((a, b) => (weak.includes(b.p.pos) - weak.includes(a.p.pos)) || b.e.score - a.e.score)[0];
+  if (buy) {
+    market.push(rsBriefPlayer(buy.p, weak.includes(buy.p.pos) ? `Buy low · fills your ${buy.p.pos} need` : 'Buy low',
+      `${escapeHtml(ownerTeamOf(buy.p.id)?.name.trim() || '')} · ${escapeHtml(buy.e.reasons[0] || '')}`));
+  }
+  const sell = entries('sell', true).sort((a, b) => b.e.score - a.e.score)[0];
+  if (sell) market.push(rsBriefPlayer(sell.p, 'Sell high', escapeHtml(sell.e.reasons[0] || '')));
+
+  /* ---- Headlines on my players ---- */
   const news = RS.news?.players || {};
-  const latest = team.roster.flatMap((p) => (news[p.id] || []).map((a) => ({ a, p })))
-    .sort((x, y) => (Date.parse(y.a.t) || 0) - (Date.parse(x.a.t) || 0))[0];
-  if (latest) rows.push(rsBriefRow('news', '📰', `News · ${escapeHtml(latest.p.name)}`, escapeHtml(latest.a.h), escapeHtml(rsAgo(latest.a.t))));
+  const seen = new Set();
+  const headlines = skill.flatMap((p) => (news[p.id] || []).map((a) => ({ a, p })))
+    .sort((x, y) => (Date.parse(y.a.t) || 0) - (Date.parse(x.a.t) || 0))
+    .filter((x) => { const k = x.a.u || x.a.h; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 2)
+    .map((x) => rsBriefRow('news', playerPhotoHTML(x.p), `${escapeHtml(x.p.name)} · ${escapeHtml(rsAgo(x.a.t))}`, escapeHtml(x.a.h)));
 
   return `
     <div class="rs-brief-hero" data-brief-go="outlook" role="button" tabindex="0">
       <div class="rs-brief-id">
-        ${teamLogoHTML(team, 44)}
+        ${teamLogoHTML(team, 52)}
         <div>
           <div class="rs-brief-name">${escapeHtml(team.name.trim())}</div>
           <div class="rs-brief-sub">${recordOf(team)} · ${ResearchEngine.ordinal(seed)} of ${n} · ${escapeHtml(rsApproach(m).label)}</div>
@@ -156,7 +175,11 @@ function rsBriefHTML(team) {
         <div><span class="rs-brief-big">${odds.avgWins.toFixed(1)}</span><span class="rs-stat-label">Projected wins</span></div>
       </div>` : ''}
     </div>
-    <div class="rs-brief-list">${rows.join('')}</div>
+    ${rsBriefSection('This week', week)}
+    ${rsBriefSection('Your move', moveRows)}
+    ${rsBriefSection('Your roster', rosterRows)}
+    ${rsBriefSection('On the market', market)}
+    ${rsBriefSection('Headlines', headlines)}
     <p class="tv-note rs-brief-note">Tap any line for the full story.${prev ? '' : ' Odds changes show here once this device has seen two different weeks.'}</p>`;
 }
 
