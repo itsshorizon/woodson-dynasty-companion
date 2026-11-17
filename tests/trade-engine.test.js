@@ -255,6 +255,70 @@ test('trade finder must-includes: every deal carries the named assets', () => {
   for (const r of sellBest) assert.ok(has(r.give, asset('wr1')));
 });
 
+test('tilt: 0 changes nothing; results carry myNow and myDyn', () => {
+  const mine = ['wr1', 'wr15a', 'mid_a', 'bench1', 'pick:2027-1'].map(asset);
+  const theirs = ['top5', 'wr10', 'rb15', 'mid_b', 'bench2'].map(asset);
+  const base = { mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', limit: 50 };
+  assert.deepEqual(TE.findTrades({ ...base, tilt: 0 }, ctx), TE.findTrades(base, ctx));
+  // wr15a (dv 6000, wn 6000) for vet_wr (dv 6500, wn 7400): +1400 now, +500 dyn
+  const one = TE.findTrades({ mine: [asset('wr15a')], theirs: [asset('vet_wr')], myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false, maxEdge: 0.249 }, ctx);
+  assert.equal(one.length, 1);
+  assert.equal(one[0].myNow, 1400);
+  assert.equal(one[0].myDyn, 500);
+});
+
+const tiltBase = () => ({
+  mine: ['wr1', 'wr15a', 'mid_a', 'bench1', 'pick:2027-1', 'pick:2027-2'].map(asset),
+  theirs: ['top5', 'wr10', 'rb15', 'mid_b', 'vet_wr', 'rookie_wr', 'pick:2028-1'].map(asset),
+  myWindow: 'Contender', theirWindow: 'Contender', requireMutual: false, maxEdge: 0.249, limit: 60,
+});
+
+test('tilt 1 keeps only deals that add win-now, biggest first within the best band', () => {
+  const res = TE.findTrades({ ...tiltBase(), tilt: 1 }, ctx);
+  assert.ok(res.length > 0);
+  for (const r of res) assert.ok(r.myNow > 0);
+  const rank = (r) => ctx.bands.findIndex((b) => b.key === r.band.key);
+  for (let i = 1; i < res.length; i++) assert.ok(rank(res[i - 1]) <= rank(res[i]), 'bands stay in order');
+  const first = res[0];
+  for (const r of res) if (rank(r) === rank(first)) assert.ok(first.myNow >= r.myNow);
+});
+
+test('tilt -1 mirrors: only deals that add dynasty value, biggest first within the best band', () => {
+  const res = TE.findTrades({ ...tiltBase(), tilt: -1 }, ctx);
+  assert.ok(res.length > 0);
+  for (const r of res) assert.ok(r.myDyn > 0);
+  const rank = (r) => ctx.bands.findIndex((b) => b.key === r.band.key);
+  for (let i = 1; i < res.length; i++) assert.ok(rank(res[i - 1]) <= rank(res[i]));
+  for (const r of res) if (rank(r) === rank(res[0])) assert.ok(res[0].myDyn >= r.myDyn);
+});
+
+test('tilt never promotes a lopsided deal over a fair one', () => {
+  for (const tilt of [-1, -0.5, 0.5, 1]) {
+    const res = TE.findTrades({ ...tiltBase(), tilt }, ctx);
+    const rank = (r) => ctx.bands.findIndex((b) => b.key === r.band.key);
+    for (let i = 1; i < res.length; i++) assert.ok(rank(res[i - 1]) <= rank(res[i]), `tilt ${tilt}`);
+  }
+});
+
+test('tilt keeps the no-fleece rule and must-includes', () => {
+  const res = TE.findTrades({ ...tiltBase(), maxEdge: 0.08, tilt: 1, mustGet: [asset('vet_wr')] }, ctx);
+  for (const r of res) {
+    assert.ok(Math.abs(r.edge) <= 0.08);
+    assert.ok(r.get.some((a) => a.id === 'vet_wr'));
+  }
+});
+
+test('exchangeRate: opposite signs give a rate, same direction gives null', () => {
+  // give 796 long-term to add 412 now: 412/796 per dyn = 517.6 per 1,000
+  const a = TE.exchangeRate({ myNow: 412, myDyn: -796 });
+  assert.ok(Math.abs(a.nowPerThousandDyn - 517.59) < 0.01);
+  // add 1,240 long-term, give up 380 now
+  const b = TE.exchangeRate({ myNow: -380, myDyn: 1240 });
+  assert.ok(Math.abs(b.nowPerThousandDyn - 306.45) < 0.01);
+  assert.equal(TE.exchangeRate({ myNow: 210, myDyn: 340 }), null);
+  assert.equal(TE.exchangeRate({ myNow: -5, myDyn: -9 }), null);
+});
+
 test('reportCard: clear winner, even, partial, empty', () => {
   const win = TE.reportCard({ aGot: [{ then: 1000, now: 1500 }], bGot: [{ then: 1000, now: 800 }] });
   assert.equal(win.a.delta, 500);
