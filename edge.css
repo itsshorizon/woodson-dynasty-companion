@@ -30,6 +30,32 @@
 
 
 /* ===== region: risers (edge-risers.js) ===== */
+.edge-scope { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.edge-seg { display: flex; margin-bottom: 4px; }
+.edge-list { margin: 4px 0 8px; }
+.edge-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.edge-row:last-child { border-bottom: 0; }
+.edge-head { font-size: 13px; line-height: 1.4; }
+.edge-name { font-weight: 800; color: var(--text); }
+.edge-line { margin: 4px 0 2px; font-size: 13px; line-height: 1.45; color: var(--text); }
+.edge-row .tv-note { margin: 2px 0 0; }
+.edge-tag { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-mute); margin-left: 2px; }
+.edge-tag-fa { color: var(--tab-accent); }
+.edge-tag-mine { color: var(--text); }
+.edge-acts { margin-top: 8px; }
+.edge-act { text-decoration: none; cursor: pointer; display: inline-block; }
+.edge-spark-wrap { padding: 6px 0 0; }
+.edge-spark { display: block; width: 90px; height: 28px; overflow: visible; }
+.edge-sp { fill: none; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
+.edge-sp-hi { stroke-width: 2.2; opacity: 1; }
+.edge-sp-a { stroke: var(--tab-accent); }
+.edge-sp-b { stroke: var(--text-dim); stroke-dasharray: 3 2; }
+.edge-sp-a-dot { fill: var(--tab-accent); }
+.edge-sp-b-dot { fill: var(--text-dim); }
+.edge-sp-band { fill: var(--bg-elev-2); }
+.edge-how { margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+.edge-how summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.edge-how p { margin: 6px 0; line-height: 1.45; }
 
 /* ===== end region: risers ===== */
 
