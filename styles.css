@@ -5952,6 +5952,11 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .tv-more .tv-badges:first-of-type { margin-top: 0; }
 
 
+/* ---------- Trade report card: then vs now line on feed cards ---------- */
+.tv-report { font-size: 12px; line-height: 1.4; margin-top: 8px; }
+.tv-report:empty { display: none; }
+.tv-report-verdict { font-weight: 600; }
+
 /* ---------- Beta 1.37: Trades sub-tabs, Briefing, season impact, Settings ---------- */
 .trade-subnav { margin-bottom: 12px; }
 .trade-subnav .seg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

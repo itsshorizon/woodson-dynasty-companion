@@ -567,8 +567,31 @@
     return out;
   }
 
+  // Then-vs-now for a finished trade. Each side lists what it received as
+  // { then, now } values (null when unknown). An asset with no "then" value
+  // counts at its "now" value in both sums so it never fakes a gain.
+  function reportCard(trade) {
+    let partial = false;
+    const side = (list) => {
+      let then = 0, now = 0;
+      for (const x of list || []) {
+        const n = Number(x && x.now) || 0;
+        const t = x && x.then != null ? Number(x.then) || 0 : null;
+        if (t == null) partial = true;
+        then += t == null ? n : t;
+        now += n;
+      }
+      return { then, now, delta: now - then };
+    };
+    const a = side(trade && trade.aGot), b = side(trade && trade.bGot);
+    const swing = a.delta - b.delta;
+    const bar = 0.05 * Math.max(a.then, b.then);
+    const winner = Math.abs(swing) > 0 && Math.abs(swing) >= bar ? (swing > 0 ? 'a' : 'b') : null;
+    return { a, b, swing, winner, partial };
+  }
+
   return {
     createContext, assetValue, pickValue, pickTier, evaluate, suggestBalance,
-    bestLineup, teamWindows, fitScore, meaningfulFit, findTrades, shopOffers, starValue, DEFAULTS, WINDOW_PREFS,
+    bestLineup, teamWindows, fitScore, meaningfulFit, findTrades, shopOffers, starValue, reportCard, DEFAULTS, WINDOW_PREFS,
   };
 });

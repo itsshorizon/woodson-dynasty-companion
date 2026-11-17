@@ -254,3 +254,27 @@ test('trade finder must-includes: every deal carries the named assets', () => {
   assert.ok(sellBest.length > 0);
   for (const r of sellBest) assert.ok(has(r.give, asset('wr1')));
 });
+
+test('reportCard: clear winner, even, partial, empty', () => {
+  const win = TE.reportCard({ aGot: [{ then: 1000, now: 1500 }], bGot: [{ then: 1000, now: 800 }] });
+  assert.equal(win.a.delta, 500);
+  assert.equal(win.b.delta, -200);
+  assert.equal(win.swing, 700);
+  assert.equal(win.winner, 'a');
+  assert.equal(win.partial, false);
+  const b = TE.reportCard({ aGot: [{ then: 1000, now: 900 }], bGot: [{ then: 1000, now: 1300 }] });
+  assert.equal(b.winner, 'b');
+
+  const even = TE.reportCard({ aGot: [{ then: 1000, now: 1010 }], bGot: [{ then: 1000, now: 990 }] });
+  assert.equal(even.swing, 20);
+  assert.equal(even.winner, null);
+
+  const part = TE.reportCard({ aGot: [{ then: null, now: 700 }, { then: 300, now: 350 }], bGot: [{ then: 900, now: 900 }] });
+  assert.equal(part.partial, true);
+  assert.equal(part.a.then, 1000);
+  assert.equal(part.a.now, 1050);
+  assert.equal(part.a.delta, 50);
+
+  const none = TE.reportCard({ aGot: [], bGot: [] });
+  assert.deepEqual(none, { a: { then: 0, now: 0, delta: 0 }, b: { then: 0, now: 0, delta: 0 }, swing: 0, winner: null, partial: false });
+});
