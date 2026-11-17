@@ -6018,6 +6018,29 @@ html.mfs-open .modal-overlay { z-index: 450; }
 .press-room-trigger[hidden] { display: none !important; }
 .roster-picks { margin-top: 18px; }
 
+/* ---------- Beta 1.38: Now <-> Later dial and trade-off bar (Trade Finder) ---------- */
+.tv-dial { margin-bottom: 12px; }
+.tv-dial-track { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.tv-dial-stop {
+  height: 36px; padding: 0; border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--bg-elev-2); position: relative; -webkit-tap-highlight-color: transparent;
+}
+.tv-dial-stop::after { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--text-mute); opacity: 0.5; }
+.tv-dial-stop.on { background: var(--tab-accent); }
+.tv-dial-stop.on::after { background: var(--tab-fg); opacity: 1; width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+.tv-dial-ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); }
+.tv-dial-text { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-dim); }
+.tv-dial-mode { font-size: 11px; color: var(--text-mute); white-space: nowrap; }
+.tv-tradeoff { margin-top: 8px; }
+.tv-tradeoff-text { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.tv-tradeoff-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: 5px; }
+.tv-tradeoff-half { display: flex; height: 6px; background: var(--bg-elev-2); border-radius: 3px; overflow: hidden; }
+.tv-tradeoff-half.left { justify-content: flex-end; }
+.tv-tradeoff-half i { display: block; height: 100%; background: var(--text-mute); min-width: 0; }
+.tv-tradeoff-half i.up { background: var(--tv-fair); }
+.tv-tradeoff-half i.down { background: var(--tv-fleece); }
+.tv-tradeoff-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); }
+
 /* ---------- Beta 1.38: one box per thing ----------
  * A border is for one object you act on: a matchup, a trade, a deal.
  * Sections are a heading and their content on the page, and the parts of an

@@ -1426,6 +1426,35 @@ function tcFinderFilters() {
   return { ...TC_FINDER_DEFAULTS, ...(saved || {}) };
 }
 
+// Now <-> Later dial. Five stops; the saved value is the tilt itself.
+const TC_TILT_STOPS = [-1, -0.5, 0, 0.5, 1];
+const TC_TILT_TEXT = {
+  '-1': 'Building for later: only deals that add long-term value. The cost to this season is ignored.',
+  '-0.5': 'Leaning later: deals that add long-term value, as long as the cost to this season is small.',
+  '0': 'Balanced: the fairest deals that fit both teams, with no lean either way.',
+  '0.5': 'Leaning win-now: deals that add to this season, as long as the long-term cost is small.',
+  '1': 'All in on now: only deals that add win-now value. The long-term cost is ignored.',
+};
+
+// Saved tilt, or a starting point from my team mode when nothing is saved yet.
+function tcFinderTilt(f) {
+  if (f && typeof f.tilt === 'number' && TC_TILT_STOPS.includes(f.tilt)) return { tilt: f.tilt, fromMode: false };
+  const my = myTeam();
+  const label = my ? tcWindowFor(my.id).label : '';
+  return { tilt: label === 'Contender' ? 0.5 : label === 'Rebuilder' ? -0.5 : 0, fromMode: true };
+}
+
+function tcDialHTML(f) {
+  const { tilt, fromMode } = tcFinderTilt(f);
+  const name = (v) => (v === -1 ? 'Build for later' : v === 1 ? 'Win now' : v === 0 ? 'Balanced' : v < 0 ? 'Lean later' : 'Lean win now');
+  const stops = TC_TILT_STOPS.map((v) => `<button type="button" class="tv-dial-stop ${v === tilt ? 'on' : ''}" data-tilt="${v}" aria-pressed="${v === tilt}" aria-label="${name(v)}"></button>`).join('');
+  return `<div class="tv-dial">
+    <div class="tv-dial-track" role="group" aria-label="Now or later">${stops}</div>
+    <div class="tv-dial-ends"><span>Build for later</span><span>Balanced</span><span>Win now</span></div>
+    <p class="tv-dial-text">${escapeHtml(TC_TILT_TEXT[String(tilt)])}${fromMode ? ' <span class="tv-dial-mode">Set from your team mode.</span>' : ''}</p>
+  </div>`;
+}
+
 function tcSaveFinderFilters(f) {
   try { localStorage.setItem(TC_FINDER_KEY, JSON.stringify(f)); } catch (e) { /* storage blocked */ }
 }
@@ -1436,11 +1465,19 @@ function tcRenderFinderFilters() {
   const f = tcFinderFilters();
   const chip = (key, label, on) => `<button type="button" class="tv-filter ${on ? 'on' : ''}" data-filter="${key}" aria-pressed="${on}">${label}</button>`;
   const shape = (v, label) => chip(`shape:${v}`, label, f.shapes.includes(v));
-  host.innerHTML = `
+  host.innerHTML = tcDialHTML(f) + `
     <div class="tv-filter-row"><span class="lbl">You give</span>${chip('givePlayers', 'Players', f.givePlayers)}${chip('givePicks', 'Picks', f.givePicks)}</div>
     <div class="tv-filter-row"><span class="lbl">You get</span>${chip('getPlayers', 'Players', f.getPlayers)}${chip('getPicks', 'Picks', f.getPicks)}</div>
     <div class="tv-filter-row"><span class="lbl">Deal size</span>${shape('1-1', '1 for 1')}${shape('2-1', 'Give 2, get 1')}${shape('1-2', 'Give 1, get 2')}${shape('2-2', '2 for 2')}</div>`;
   host.onclick = (e) => {
+    const stop = e.target.closest('[data-tilt]');
+    if (stop) {
+      const cur = tcFinderFilters();
+      cur.tilt = Number(stop.dataset.tilt);
+      tcSaveFinderFilters(cur);
+      tcRenderFinderFilters();
+      return;
+    }
     const btn = e.target.closest('[data-filter]');
     if (!btn) return;
     const cur = tcFinderFilters();
@@ -1557,6 +1594,7 @@ function tcRunFinder() {
   // rule out every shape that fits, use the ones that do instead of nothing.
   const fits = (sh) => Number(sh[0]) >= mustGive.length && Number(sh[2]) >= mustGetKeys.length;
   const shapes = f.shapes.some(fits) ? f.shapes.filter(fits) : TC_FINDER_DEFAULTS.shapes.filter(fits);
+  const tilt = tcFinderTilt(f).tilt;
   out.innerHTML = loading('Looking for fair trades...');
   // Let the loading state paint before the search runs.
   setTimeout(() => {
@@ -1569,7 +1607,7 @@ function tcRunFinder() {
         myWindow, theirWindow: tcWindowFor(partner.id).label,
         give: { players: f.givePlayers, picks: f.givePicks },
         get: { players: f.getPlayers, picks: f.getPicks },
-        shapes,
+        shapes, tilt,
         // Only hard rule: no fleeces. Fairest and best-fitting deals rank first.
         maxEdge: TC_NO_FLEECE, requireMutual: false,
         limit: partnerId ? 8 : 3,
@@ -1577,7 +1615,9 @@ function tcRunFinder() {
       results = results.concat(found.map((r) => ({ ...r, partner })));
     }
     const bandRank = { fair: 0, slight: 1, lopsided: 2, fleece: 3 };
-    results.sort((x, y) => bandRank[x.band.key] - bandRank[y.band.key] || y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
+    // With a tilt: band first, then the engine's own tilted score (same order it used within each partner).
+    if (tilt !== 0) results.sort((x, y) => bandRank[x.band.key] - bandRank[y.band.key] || (y.tiltScore - x.tiltScore) || y.mutual - x.mutual);
+    else results.sort((x, y) => bandRank[x.band.key] - bandRank[y.band.key] || y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
     // Variety: don't let one package of mine (or one partner) fill the list.
     const keyOf = (list) => list.map((a) => TradeEngine.assetValue(a, TC.ctx).key).sort().join('|');
     const giveCount = {}, partnerCount = {};
@@ -1592,7 +1632,9 @@ function tcRunFinder() {
     }).slice(0, 8);
     state._finderResults = results;
     if (!results.length) {
-      out.innerHTML = empty(pinned
+      out.innerHTML = empty(tilt !== 0
+          ? `No fair deals ${tilt > 0 ? 'add to this season' : 'add long-term value'} with these filters. Move the dial one stop toward Balanced, or loosen the filters.`
+          : pinned
           ? 'No deal short of a fleece includes everything you named. Try a bigger deal size, allow picks, or drop a must-include.'
           : 'No deals short of a fleece with these filters. Try loosening them.');
       return;
@@ -1600,6 +1642,36 @@ function tcRunFinder() {
     out.innerHTML = results.map((r, i) => tcFinderItemHTML(r, i, my, myWindow)).join('') + `<p class="tv-note">Fleeces are never suggested. Fairest deals come first, then the ones that fit both teams best. Contenders are judged mostly on this season, Rebuilders on long-term value and age.</p>`;
     out.onclick = tcFinderResultsClick;
   }, 30);
+}
+
+// One line on what a deal trades off between win-now and long-term value, plus a two-ended bar.
+function tcTradeoffHTML(r) {
+  const val = (a) => TradeEngine.assetValue(a, TC.ctx);
+  const sum = (list, k) => list.reduce((s, a) => s + (val(a)[k] || 0), 0);
+  let now = r.myNow, dyn = r.myDyn;
+  if (!Number.isFinite(now) || !Number.isFinite(dyn)) {
+    if (!TC.ctx || !r.get || !r.give) return '';
+    now = sum(r.get, 'winNow') - sum(r.give, 'winNow');
+    dyn = sum(r.get, 'value') - sum(r.give, 'value');
+  }
+  now = Math.round(now); dyn = Math.round(dyn);
+  const flat = (x) => Math.abs(x) < 25;
+  if (flat(now) && flat(dyn)) return '';
+  const n = (x) => tcFmt(Math.abs(x));
+  let text;
+  if (flat(now)) text = `${dyn > 0 ? 'Adds' : 'Costs'} ${n(dyn)} long-term value, no change to win-now value.`;
+  else if (flat(dyn)) text = `${now > 0 ? 'Adds' : 'Costs'} ${n(now)} win-now value, no change to long-term value.`;
+  else if (now > 0 && dyn > 0) text = `Adds to both: +${n(now)} now, +${n(dyn)} long-term.`;
+  else if (now < 0 && dyn < 0) text = `Costs both: −${n(now)} now, −${n(dyn)} long-term.`;
+  else if (dyn < 0) text = `You give up ${n(dyn)} long-term value to add ${n(now)} win-now value.`;
+  else text = `You add ${n(dyn)} long-term value and give up ${n(now)} win-now value.`;
+  const w = (x) => Math.min(100, Math.round(Math.abs(x) / 3000 * 100));
+  const cls = (x) => (flat(x) ? '' : x > 0 ? 'up' : 'down');
+  return `<div class="tv-tradeoff">
+    <div class="tv-tradeoff-text">${escapeHtml(text)}</div>
+    <div class="tv-tradeoff-bar" aria-hidden="true"><span class="tv-tradeoff-half left"><i class="${cls(dyn)}" style="width:${w(dyn)}%"></i></span><span class="tv-tradeoff-half right"><i class="${cls(now)}" style="width:${w(now)}%"></i></span></div>
+    <div class="tv-tradeoff-ends" aria-hidden="true"><span>Long-term</span><span>Win now</span></div>
+  </div>`;
 }
 
 function tcFinderItemHTML(r, i, my, myWindow) {
@@ -1634,6 +1706,7 @@ function tcFinderItemHTML(r, i, my, myWindow) {
         <div><span class="lbl">You get</span>${r.get.map(tcAssetChipHTML).join('')}</div>
         <div><span class="lbl">You give</span>${r.give.map(tcAssetChipHTML).join('')}</div>
       </div>
+      ${tcTradeoffHTML(r)}
       ${imp ? `<div class="tv-finder-impact"><span class="lbl">Your season</span> Playoffs ${rsImpactShift(imp.a.before.playoffPct, imp.a.after.playoffPct)} · Title ${rsImpactShift(imp.a.before.titlePct, imp.a.after.titlePct)}</div>` : ''}
       <div class="tv-finder-why">
         ${side(iWant, 'Why it helps you', 'Mixed for you', 'Trade-off for you', myWindow, tcFitReasons(my.id, r.get, r.give, myWindow))}
