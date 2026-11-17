@@ -1,0 +1,124 @@
+<!-- TODO before publishing: replace [CONTACT EMAIL] with the commissioner's contact address. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Privacy Policy · Woodson Clan Championship</title>
+<style>
+  :root { --bg: #0a1410; --text: #e6efe9; --muted: #9db3a7; --accent: #4cffaf; --line: #23352c; --card: #111f18; }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65; font-size: 16px; -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { color: var(--accent); font-size: 1.8rem; line-height: 1.2; margin: 0 0 4px; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 .5rem; }
+  p, li { margin: .5rem 0; overflow-wrap: anywhere; }
+  ul { padding-left: 1.2rem; }
+  a { color: var(--accent); }
+  .updated { color: var(--muted); margin: 0 0 1.25rem; }
+  .back { display: inline-block; margin-bottom: 1rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+  th { color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  @media (max-width: 520px) {
+    thead { display: none; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr { padding: 8px 0; border-bottom: 1px solid var(--line); }
+    tr:last-child { border-bottom: 0; }
+    td { border: 0; padding: 2px 8px; }
+    td:first-child { font-weight: 600; color: var(--accent); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">Back to the app</a>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: November 17, 2026</p>
+  <p>This is the privacy policy for the Woodson Clan Championship app. We wrote it in plain words. It describes what the app actually does.</p>
+
+  <h2>Who this app is for</h2>
+  <p>This app is for one private fantasy football league. Only invited league managers and their families use it. It is not for the general public.</p>
+  <p>There are no accounts and no passwords. You pick your team from a list, and the app remembers your pick on your device. Anyone who opens the app can pick any team. The app relies on league members trusting each other.</p>
+
+  <h2>What we store and where</h2>
+  <div class="card">
+  <table>
+    <thead><tr><th>Item</th><th>Where it lives</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Trade offers, trade block listings, interest flags, draft pick owners</td><td>A shared Google Sheet, through a service called Stein</td><td>So the league can see and manage trades and picks</td></tr>
+      <tr><td>Weekly newsletter text</td><td>The same Google Sheet</td><td>So everyone can read it</td></tr>
+      <tr><td>Trade calculator feedback (your team name, thumbs up or down, optional comment, the trade you rated)</td><td>The same Google Sheet</td><td>To improve the calculator</td></tr>
+      <tr><td>An anonymous sign-in ID</td><td>Google Firebase</td><td>Chat and reactions need a sign-in. It has no name, email or phone number.</td></tr>
+      <tr><td>Chat messages (text, your team, the time)</td><td>Google Firebase (Firestore)</td><td>League chat</td></tr>
+      <tr><td>Reactions, and custom reactions (short text or a small image)</td><td>Google Firebase (Firestore)</td><td>League fun</td></tr>
+      <tr><td>Notification settings: your device's push address, your team, your choices, time zone, quiet hours, and a device type of "ios", "android" or "desktop"</td><td>Google Firebase (Firestore)</td><td>To send you notifications</td></tr>
+      <tr><td>Short one-time notices (trade offers, replies, newsletter, test)</td><td>Google Firebase, then deleted after they are handled</td><td>To trigger a notification</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>We do not ask for your name, email address, phone number, location or contacts.</p>
+
+  <h2>What stays on your device</h2>
+  <p>The app saves some choices in your browser's local storage. This stays on your device. It includes:</p>
+  <ul>
+    <li>Your team choice.</li>
+    <li>Your layout, theme and density settings.</li>
+    <li>Filters and tabs you picked, such as in the trade tools and Research.</li>
+    <li>A cached copy of recent chat and reactions.</li>
+    <li>A log of odds the Research page has shown, and your best score in the mini game.</li>
+    <li>App version information.</li>
+  </ul>
+  <p>The app also keeps a cache of its own files so it can load fast and work offline. You can clear all of this in your browser or device settings. Deleting the app does the same.</p>
+  <p>The commissioner's Press Room asks for an Anthropic API key. The app keeps that key in memory only. It is not saved, and it is gone when the page closes.</p>
+
+  <h2>Other services the app talks to</h2>
+  <p>When you use the app, your device connects to these services. They can see your IP address and basic device details, as any website can.</p>
+  <ul>
+    <li><strong>ESPN</strong>: league data, scores and player headshots.</li>
+    <li><strong>Stein and Google Sheets</strong>: the shared league sheet described above.</li>
+    <li><strong>Google Firebase</strong>: sign-in, chat, reactions, notification settings and the cloud functions that send notifications. The Firebase code is loaded from Google's servers.</li>
+    <li><strong>Your device's push service</strong> (Apple, Google or your browser maker): delivers notifications to you.</li>
+    <li><strong>Google Fonts</strong>: the Inter font.</li>
+    <li><strong>GitHub Pages</strong>: hosts the app.</li>
+    <li><strong>Anthropic</strong>: used only by the commissioner's Press Room. It sends league data (scores, standings, trades) and the commissioner's own API key to Anthropic to write the newsletter. It does not include your personal details.</li>
+    <li><strong>Claude (claude.ai)</strong>: the Research "Ask" button copies a text summary of your team's numbers to your clipboard and opens claude.ai in a new tab. You choose whether to paste it. Anything you paste goes to your own Claude account and is covered by Anthropic's terms for that account. The app does not send it for you.</li>
+  </ul>
+  <p>These services have their own privacy policies. We do not control them.</p>
+
+  <h2>What we do not do</h2>
+  <ul>
+    <li>No ads.</li>
+    <li>No analytics or tracking tools. We checked the app's code for them.</li>
+    <li>We do not sell or share your data for marketing.</li>
+    <li>We do not collect your location.</li>
+  </ul>
+  <p>One weak spot to know about: league data and chat are readable by anyone signed in to the app, and the shared sheet is not locked to individual people. Please do not post anything private in chat.</p>
+
+  <h2>Notifications</h2>
+  <p>Notifications are optional. The app asks before it turns them on.</p>
+  <p>To turn them off in the app: tap Settings (the gear at the top right), then Notifications. You can also turn them off in your device's own settings. Turning them off in the app removes your notification record from our database.</p>
+
+  <h2>Children</h2>
+  <p>This app is not directed at children under 13. We do not knowingly collect information from children under 13. If a parent thinks that happened, contact us and we will remove it.</p>
+
+  <h2>Deleting your data</h2>
+  <p>You can delete your own chat messages in the app. The message text is erased for everyone.</p>
+  <p>For anything else, such as trade records or sheet entries, ask the commissioner. Clearing the app's data on your device removes what is stored locally.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>We may update this page. The date at the top will change when we do. Big changes will be shared with the league.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or requests? Contact the commissioner at [CONTACT EMAIL].</p>
+</main>
+</body>
+</html>
