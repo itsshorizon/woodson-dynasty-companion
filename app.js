@@ -391,7 +391,9 @@ async function loadLeagueData(silent = false) {
     state.schedule = raw.schedule || [];
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
     // The season span is hidden under 400px (styles.css) so the badge fits narrow phones.
-    meta.innerHTML = `<span class="meta-season">${CONFIG.SEASON} • </span>Wk ${state.currentWeek} • ${state.teams.length} Teams`;
+    // The team count is hidden under 430px too: next to the bell and theme buttons it
+    // cut every tab title short ("TRAD…", "RESEA…") on standard phones.
+    meta.innerHTML = `<span class="meta-season">${CONFIG.SEASON} • </span>Wk ${state.currentWeek}<span class="meta-teams"> • ${state.teams.length} Teams</span>`;
     return true;
   } catch (err) {
     console.error('ESPN load failed:', err);
@@ -4681,7 +4683,8 @@ function renderMyInterestAlerts(team) {
   const alerts = state.tradeBlock
     .filter((e) => myPlayerIds.has(String(e.playerId)))
     .map((e) => {
-      const ids = (safeParse(e.interestedTeamIds) || []).map((x) => parseInt(x, 10));
+      // Skip my own team: interest I marked before trading for the player is stale.
+      const ids = (safeParse(e.interestedTeamIds) || []).map((x) => parseInt(x, 10)).filter((id) => id !== team.id);
       const names = ids.map((id) => teamName(id)).filter(Boolean);
       return { entry: e, interestedNames: names };
     })
@@ -7409,7 +7412,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.35.0';
+const BUILD_ID = '1.36.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }

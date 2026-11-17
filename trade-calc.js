@@ -1089,9 +1089,10 @@ function tcRenderFinderCard() {
     state.teams.filter((t) => t.id !== my.id)
       .map((t) => `<option value="${t.id}" ${teamOptionAttrs(t, `${tcWindowFor(t.id).label} · ${t.owner}`)}>${escapeHtml(t.name)}</option>`).join('');
   partnerSel.value = prev;
-  tcRenderFinderTargets();
+  tcRenderFinderMust();
   tcRenderFinderFilters();
-  partnerSel.onchange = tcRenderFinderTargets;
+  // Their must-includes belong to one team: a new partner starts clean.
+  partnerSel.onchange = () => { TC.must.get = []; tcRenderFinderMust(); };
   $('#finder-run').onclick = tcRunFinder;
   tcWireFinderMode();
   tcRenderShopPane();
@@ -1235,20 +1236,76 @@ function tcRunShop() {
   }, 30);
 }
 
-function tcRenderFinderTargets() {
-  const sel = $('#finder-target');
+/* Must-includes: "any deal has to include my player Y and/or their player Z".
+ * Asset keys (TradeEngine.assetValue().key), up to TC_MUST_MAX a side since the
+ * biggest suggested deal is 2 for 2. Kept for the session, not saved. */
+const TC_MUST_MAX = 2;
+TC.must = { give: [], get: [] };
+
+function tcMustName(a) {
+  return a.type === 'pick' ? a.label.replace(/ \(.*?\)/, '').replace(/ · via .*/, '') : (tcPlayer(a.id)?.n || a.name);
+}
+
+function tcMustOptionHTML(a, team) {
+  const v = TradeEngine.assetValue(a, TC.ctx);
+  const sub = [a.type === 'pick' ? '' : v.pos, tcFmt(v.value), team || ''].filter(Boolean).join(' · ');
+  return `<option value="${escapeHtml(v.key)}" data-sub="${escapeHtml(sub)}">${escapeHtml(a.type === 'pick' ? a.label : v.label)}</option>`;
+}
+
+function tcRenderFinderMust() {
+  const host = $('#finder-must');
+  const my = myTeam();
+  if (!host || !my || !TC.ctx) return;
   const partner = teamById(parseInt($('#finder-partner').value, 10));
-  if (!partner) {
-    sel.innerHTML = '<option value="">Best fits for both teams</option>';
-    sel.disabled = true;
-    return;
-  }
-  sel.disabled = false;
-  const players = partner.roster.filter((p) => p.slot !== 'IR')
-    .map((p) => ({ p, v: tcPlayer(p.id) }))
-    .sort((x, y) => (y.v?.dv || 0) - (x.v?.dv || 0));
-  sel.innerHTML = '<option value="">Best fits for both teams</option>' +
-    players.map(({ p, v }) => `<option value="${p.id}">${escapeHtml(p.name)} · ${p.pos} · ${tcFmt(v?.dv)}</option>`).join('');
+  const byValue = (x, y) => TradeEngine.assetValue(y, TC.ctx).value - TradeEngine.assetValue(x, TC.ctx).value;
+  const mine = tcTeamAssets(my).sort(byValue).map((a) => ({ a }));
+  // No partner yet: offer every other team's players, and picking one picks the team.
+  const theirs = partner
+    ? tcTeamAssets(partner).sort(byValue).map((a) => ({ a, team: partner }))
+    : state.teams.filter((t) => t.id !== my.id)
+      .flatMap((t) => t.roster.filter((p) => p.slot !== 'IR').map((p) => ({ a: tcPlayerAsset(p), team: t })))
+      .sort((x, y) => byValue(x.a, y.a));
+  // Drop anything that has left the roster since it was named.
+  const keysOf = (list) => new Set(list.map((x) => tcAssetKey(x.a)));
+  const mineKeys = keysOf(mine), theirKeys = keysOf(theirs);
+  TC.must.give = TC.must.give.filter((k) => mineKeys.has(k));
+  TC.must.get = partner ? TC.must.get.filter((k) => theirKeys.has(k)) : [];
+
+  const row = (side, label, assets, placeholder, subOf) => {
+    const picked = TC.must[side];
+    const chips = picked.map((k) => {
+      const name = tcMustName(assets.find((x) => tcAssetKey(x.a) === k).a);
+      return `<button type="button" class="tv-filter on tv-must-chip" data-must-side="${side}" data-must-remove="${escapeHtml(k)}" aria-label="Remove ${escapeHtml(name)}">${escapeHtml(name)} <span aria-hidden="true">✕</span></button>`;
+    }).join('');
+    const open = assets.filter((x) => !picked.includes(tcAssetKey(x.a)));
+    const add = picked.length >= TC_MUST_MAX ? '' : `
+      <select class="tv-must-add" data-must-add="${side}" aria-label="${placeholder}">
+        <option value="">${placeholder}</option>
+        ${open.map((x) => tcMustOptionHTML(x.a, subOf ? subOf(x) : '')).join('')}
+      </select>`;
+    return `<div class="tv-must-row"><span class="lbl">${label}</span><div class="tv-must-picks">${chips}${add}</div></div>`;
+  };
+  host.innerHTML = `
+    <div class="tv-must-h">Must include <span class="tv-dim">optional</span></div>
+    ${row('give', 'From you', mine, '+ One of yours')}
+    ${row('get', 'From them', theirs, partner ? '+ One of theirs' : '+ A player you want', partner ? null : (x) => x.team.name.trim())}`;
+  host.onchange = (e) => {
+    const sel = e.target.closest('[data-must-add]');
+    if (!sel || !sel.value) return;
+    const side = sel.dataset.mustAdd;
+    if (side === 'get' && !partner) {
+      const hit = theirs.find((x) => tcAssetKey(x.a) === sel.value);
+      if (hit) $('#finder-partner').value = String(hit.team.id);
+    }
+    TC.must[side] = TC.must[side].concat(sel.value).slice(0, TC_MUST_MAX);
+    tcRenderFinderMust();
+  };
+  host.onclick = (e) => {
+    const btn = e.target.closest('[data-must-remove]');
+    if (!btn) return;
+    TC.must[btn.dataset.mustSide] = TC.must[btn.dataset.mustSide].filter((k) => k !== btn.dataset.mustRemove);
+    tcRenderFinderMust();
+  };
 }
 
 function tcTeamAssets(team) {
@@ -1389,24 +1446,30 @@ function tcRunFinder() {
   const out = $('#finder-results');
   if (!my) return;
   const partnerId = parseInt($('#finder-partner').value, 10);
-  const targetId = parseInt($('#finder-target').value, 10);
   const partners = partnerId ? [teamById(partnerId)] : state.teams.filter((t) => t.id !== my.id);
   const myWindow = tcWindowFor(my.id).label;
   const mine = tcTeamAssets(my);
   const f = tcFinderFilters();
+  const mustGive = mine.filter((a) => TC.must.give.includes(tcAssetKey(a)));
+  const mustGetKeys = partnerId ? TC.must.get : [];
+  const pinned = mustGive.length + mustGetKeys.length > 0;
+  // Two named on one side can't fit a 1-piece deal. If the saved deal sizes
+  // rule out every shape that fits, use the ones that do instead of nothing.
+  const fits = (sh) => Number(sh[0]) >= mustGive.length && Number(sh[2]) >= mustGetKeys.length;
+  const shapes = f.shapes.some(fits) ? f.shapes.filter(fits) : TC_FINDER_DEFAULTS.shapes.filter(fits);
   out.innerHTML = loading('Looking for fair trades...');
   // Let the loading state paint before the search runs.
   setTimeout(() => {
     let results = [];
     for (const partner of partners) {
       const theirs = tcTeamAssets(partner);
-      const target = targetId ? theirs.find((a) => a.type === 'player' && a.id === targetId) : null;
+      const mustGet = theirs.filter((a) => mustGetKeys.includes(tcAssetKey(a)));
       const found = TradeEngine.findTrades({
-        mine, theirs, target,
+        mine, theirs, mustGive, mustGet,
         myWindow, theirWindow: tcWindowFor(partner.id).label,
         give: { players: f.givePlayers, picks: f.givePicks },
-        get: { players: f.getPlayers || !!target, picks: f.getPicks },
-        shapes: f.shapes,
+        get: { players: f.getPlayers, picks: f.getPicks },
+        shapes,
         // Only hard rule: no fleeces. Fairest and best-fitting deals rank first.
         maxEdge: TC_NO_FLEECE, requireMutual: false,
         limit: partnerId ? 8 : 3,
@@ -1420,7 +1483,8 @@ function tcRunFinder() {
     const giveCount = {}, partnerCount = {};
     results = results.filter((r) => {
       const g = keyOf(r.give);
-      if ((giveCount[g] || 0) >= (targetId ? 8 : 1)) return false;
+      // With must-includes the give side repeats on purpose.
+      if ((giveCount[g] || 0) >= (pinned ? 8 : 1)) return false;
       if (!partnerId && (partnerCount[r.partner.id] || 0) >= 2) return false;
       giveCount[g] = (giveCount[g] || 0) + 1;
       partnerCount[r.partner.id] = (partnerCount[r.partner.id] || 0) + 1;
@@ -1428,9 +1492,8 @@ function tcRunFinder() {
     }).slice(0, 8);
     state._finderResults = results;
     if (!results.length) {
-      const partner = partnerId ? teamById(partnerId) : null;
-      out.innerHTML = empty(targetId
-          ? 'No deal short of a fleece for that player. Try a bigger deal size or allow picks.'
+      out.innerHTML = empty(pinned
+          ? 'No deal short of a fleece includes everything you named. Try a bigger deal size, allow picks, or drop a must-include.'
           : 'No deals short of a fleece with these filters. Try loosening them.');
       return;
     }

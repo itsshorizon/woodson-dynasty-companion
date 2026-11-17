@@ -1,0 +1,27 @@
+name: CI
+
+# Runs on every pull request and every push to main: the version copies must
+# agree, the engine tests must pass, and the app bundle must build.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Version copies agree
+        run: node scripts/release.js --check
+      - name: Engine tests
+        run: node --test tests/*.test.js
+      - name: App bundle builds
+        run: node scripts/build-www.js

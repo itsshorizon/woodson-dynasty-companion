@@ -1,12 +1,11 @@
 {
-  "version": "1.35.0",
-  "title": "🧭 Simple Mode + Cleaner Trades",
+  "version": "1.36.0",
+  "title": "📌 Trade Finder: Must-Includes",
   "notes": [
-    "🧭 New Simple layout: bigger text, bigger buttons, and just three tabs (Standings, Rosters, Trades). Tap the W at the top to pick Classic, Compact or Simple.",
-    "🤝 In Simple, making a trade is step by step: pick a team, tap what you want, tap what you'll give, then see in plain words whether it's fair before you send it.",
-    "📋 The Trade Block is now one small bar on the Trades tab. Tap it to see who's on the block.",
-    "↔️ The trade builder now says \"You give\" and \"You get\", draft picks are tap-to-pick buttons, and Send stays at the bottom of the screen while you build.",
-    "🔍 The trade meter shows the verdict up front; fit, sources and the math are under \"More detail\".",
-    "📬 Pending trades now sit near the top of the Trades tab so offers waiting on you are easy to find."
+    "📌 Trade Finder has a new \"Must include\" box. Name one or two of your players or picks, one or two of theirs, or both, and every deal it suggests will have them in it.",
+    "🔎 Want a certain player but not sure who has him? Leave the team on \"Any team\" and pick him under \"From them\". The Finder picks the team for you.",
+    "🏷️ Tab titles at the top (Standings, Research, Trade Desk) no longer get cut off on phones.",
+    "⚡ Interest Alerts no longer list your own team as interested in your own player.",
+    "📊 Charts now load from the app itself, so they still work with a weak signal."
   ]
 }

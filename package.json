@@ -1,0 +1,14 @@
+{
+  "name": "woodson-dynasty-companion",
+  "private": true,
+  "description": "Companion app for the Woodson Clan Championship dynasty league",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/release.js --check && node --test tests/*.test.js",
+    "release": "node scripts/release.js",
+    "build:www": "node scripts/build-www.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

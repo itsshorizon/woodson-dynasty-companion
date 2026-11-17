@@ -415,6 +415,11 @@
    * opts: {
    *   mine: [assets I could give], theirs: [assets they could give],
    *   target?: asset I want (must be in theirs), myWindow, theirWindow,
+   *   mustGet?:  [their assets every deal must include] (target is shorthand for one)
+   *   mustGive?: [my assets every deal must include]
+   *              Up to 2 per side (the biggest deal is 2 for 2). Must-includes
+   *              skip the type filters and the "worth more than a waiver
+   *              pickup" cut: the user asked for them by name.
    *   give?: { players, picks }  asset types I'm willing to give (default both)
    *   get?:  { players, picks }  asset types I want back (default both)
    *   shapes?: ['1-1','1-2','2-1','2-2']  "give-get" piece counts (default all)
@@ -441,21 +446,27 @@
     const myBest = mineAll.length ? mineAll[0].v.value : 0;
     const mine = mineAll.filter(typeOk(giveTypes)).slice(0, 14);
     const theirs = rank(opts.theirs).filter(typeOk(getTypes)).slice(0, 14);
-    const targetKey = opts.target ? assetValue(opts.target, ctx).key : null;
+    const keyOf = (x) => assetValue(x, ctx).key;
+    const uniq = (list) => list.filter((x, i) => list.findIndex((y) => keyOf(y) === keyOf(x)) === i);
+    const mustGet = uniq((opts.mustGet || []).concat(opts.target ? [opts.target] : []));
+    const mustGive = uniq(opts.mustGive || []);
+    const mustGiveKeys = new Set(mustGive.map(keyOf));
 
-    const wantSets = [];
-    if (opts.target) {
-      if (shapes.has('1-1') || shapes.has('2-1')) wantSets.push([opts.target]);
-      if (shapes.has('1-2') || shapes.has('2-2')) {
-        theirs.filter((x) => assetValue(x.a, ctx).key !== targetKey).slice(0, 8)
-          .forEach((x) => wantSets.push([opts.target, x.a]));
-      }
-    } else {
-      if (shapes.has('1-1') || shapes.has('2-1')) combos(theirs.map((x) => x.a), 1).forEach((w) => wantSets.push(w));
-      if (shapes.has('1-2') || shapes.has('2-2')) combos(theirs.slice(0, 8).map((x) => x.a), 2).forEach((w) => wantSets.push(w));
-    }
-    const giveSingles = combos(mine.map((x) => x.a), 1);
-    const givePairs = combos(mine.slice(0, 10).map((x) => x.a), 2);
+    // Every set of `size` assets that holds all of `must`, filled from `pool`.
+    const setsWith = (must, pool, size, cap) => {
+      if (!must.length) return combos(pool.slice(0, cap), size);
+      if (must.length > size) return [];
+      if (must.length === size) return [must.slice()];
+      const have = new Set(must.map(keyOf));
+      return pool.filter((x) => !have.has(keyOf(x))).slice(0, cap).map((x) => must.concat([x]));
+    };
+    const theirPool = theirs.map((x) => x.a);
+    const myPool = mine.map((x) => x.a);
+    const wantSets = []
+      .concat(shapes.has('1-1') || shapes.has('2-1') ? setsWith(mustGet, theirPool, 1, 14) : [])
+      .concat(shapes.has('1-2') || shapes.has('2-2') ? setsWith(mustGet, theirPool, 2, 8) : []);
+    const giveSingles = setsWith(mustGive, myPool, 1, 14);
+    const givePairs = setsWith(mustGive, myPool, 2, mustGive.length ? 14 : 10);
 
     const seen = new Set();
     const results = [];
@@ -470,7 +481,9 @@
         if (Math.abs(quick.edge) > maxEdge) continue;
         const giveBest = Math.max.apply(null, give.map((g) => assetValue(g, ctx).value));
         const getBest = Math.max.apply(null, want.map((g) => assetValue(g, ctx).value));
-        if (giveBest >= myBest && getBest < giveBest && opts.myWindow !== 'Rebuilder') continue;
+        // Skipped when I named that asset as a must-give: I already chose to move it.
+        const givingNamedBest = give.some((g) => mustGiveKeys.has(keyOf(g)) && assetValue(g, ctx).value >= giveBest);
+        if (!givingNamedBest && giveBest >= myBest && getBest < giveBest && opts.myWindow !== 'Rebuilder') continue;
         const key = want.concat(give).map((x) => assetValue(x, ctx).key).sort().join('|');
         if (seen.has(key)) continue;
         seen.add(key);
@@ -483,10 +496,11 @@
       }
     }
     results.sort((x, y) => y.mutual - x.mutual || Math.abs(x.edge) - Math.abs(y.edge));
-    // Show variety: one package per set of players you'd get (or per give set when targeting).
+    // Show variety: one package per set of players you'd get. When the get side
+    // is pinned, vary the give side instead; when both are pinned, keep them all.
     const seenSide = new Set();
     return results.filter((r) => {
-      const side = opts.target ? r.give : r.get;
+      const side = mustGet.length && mustGive.length ? r.get.concat(r.give) : mustGet.length ? r.give : r.get;
       const k = side.map((x) => assetValue(x, ctx).key).sort().join('|');
       if (seenSide.has(k)) return false;
       seenSide.add(k);

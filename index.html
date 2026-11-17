@@ -16,10 +16,11 @@
   <!-- ?v= must match version.json on every release. A new page then can't pick
        up last release's CSS/JS from the browser's HTTP cache (GitHub Pages
        caches files ~10 min), which used to mix old and new code. -->
-  <link rel="stylesheet" href="styles.css?v=1.35.0" />
-  <link rel="stylesheet" href="compact.css?v=1.35.0" />
-  <link rel="stylesheet" href="simple.css?v=1.35.0" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <link rel="stylesheet" href="styles.css?v=1.36.0" />
+  <link rel="stylesheet" href="compact.css?v=1.36.0" />
+  <link rel="stylesheet" href="simple.css?v=1.36.0" />
+  <!-- Chart.js 4.4.1, served from this repo so charts work offline and inside a native app shell. -->
+  <script src="vendor/chart.umd.js?v=1.36.0"></script>
 </head>
 <body>
   <!-- Top ambient light bar — color pulses to active tab accent -->
@@ -186,8 +187,9 @@
           <p class="tv-note">Trade ideas built from real rosters and picks. Fleeces are never suggested.</p>
           <div class="tv-finder-controls">
             <select id="finder-partner" aria-label="Trade partner"></select>
-            <select id="finder-target" aria-label="Player you want"></select>
           </div>
+          <!-- Must-includes: assets every suggested deal has to contain (trade-calc.js tcRenderFinderMust) -->
+          <div id="finder-must" class="tv-must"></div>
           <div id="finder-filters" class="tv-filters"></div>
           <button class="btn-primary tv-find-btn" id="finder-run" type="button">🔍 Find Fair Trades</button>
         </div>
@@ -631,16 +633,16 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="select.js?v=1.35.0"></script>
-  <script src="app.js?v=1.35.0"></script>
-  <script src="trade-engine.js?v=1.35.0"></script>
-  <script src="trade-calc.js?v=1.35.0"></script>
-  <script src="research-engine.js?v=1.35.0"></script>
-  <script src="research.js?v=1.35.0"></script>
-  <script src="activity-engine.js?v=1.35.0"></script>
-  <script src="social.js?v=1.35.0"></script>
-  <script src="push-engine.js?v=1.35.0"></script>
-  <script src="push.js?v=1.35.0"></script>
-  <script src="simple.js?v=1.35.0"></script>
+  <script src="select.js?v=1.36.0"></script>
+  <script src="app.js?v=1.36.0"></script>
+  <script src="trade-engine.js?v=1.36.0"></script>
+  <script src="trade-calc.js?v=1.36.0"></script>
+  <script src="research-engine.js?v=1.36.0"></script>
+  <script src="research.js?v=1.36.0"></script>
+  <script src="activity-engine.js?v=1.36.0"></script>
+  <script src="social.js?v=1.36.0"></script>
+  <script src="push-engine.js?v=1.36.0"></script>
+  <script src="push.js?v=1.36.0"></script>
+  <script src="simple.js?v=1.36.0"></script>
 </body>
 </html>

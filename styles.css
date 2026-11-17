@@ -336,6 +336,9 @@ body {
 }
 .header-meta.err { color: var(--red); border-color: var(--red); }
 /* Narrow phones: drop the season so the badge stays readable next to long titles. */
+@media (max-width: 430px) {
+  .header-meta .meta-teams { display: none; }
+}
 @media (max-width: 400px) {
   .header-meta .meta-season { display: none; }
 }
@@ -4282,7 +4285,16 @@ select:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px
 .tv-compact-sub { font-size: 11px; font-weight: 600; color: var(--text-dim); }
 
 /* Trade finder */
-.tv-finder-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tv-finder-controls { display: grid; grid-template-columns: 1fr; gap: 8px; }
+/* Trade finder must-includes */
+.tv-must { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px; border: 1px dashed var(--border-strong); border-radius: 12px; }
+.tv-must-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+.tv-must-h .tv-dim { font-weight: 600; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+.tv-must-row { display: flex; align-items: flex-start; gap: 6px; }
+.tv-must-row .lbl { flex: 0 0 64px; padding-top: 9px; font-size: 10px; font-weight: 800; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.05em; }
+.tv-must-picks { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tv-must-picks > :not(.tv-must-chip) { flex: 1 1 150px; min-width: 0; }
+.tv-must-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-finder-controls select { min-width: 0; }
 #finder-results { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .tv-finder-item {
