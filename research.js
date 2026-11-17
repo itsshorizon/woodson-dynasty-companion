@@ -1266,6 +1266,7 @@ function rsRenderLeague() {
               ${v ? rsStat('Avg age', v.avgAge != null ? v.avgAge.toFixed(1) : '—') : ''}
               ${v ? rsStat('Draft picks', v.pickCount ?? '—', v.extraPicks ? `${v.extraPicks > 0 ? '+' : ''}${v.extraPicks} vs full set` : 'full set') : ''}
             </div>
+            <button type="button" class="btn-primary btn-sm rs-scout-btn" data-scout="${t.id}">Scouting report</button>
             <p class="rs-uth-line">Needs: <b>${c.weakPos.length ? c.weakPos.join(', ') : 'nothing glaring'}</b> · Strength: <b>${c.strongPos.length ? c.strongPos.join(', ') : 'balanced'}</b></p>
             <ul class="rs-why">${id.reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
             ${t.id !== state.myTeamId && state.myTeamId ? `<button type="button" class="btn-ghost btn-sm" data-fits="${t.id}">Find trades with ${escapeHtml(t.name.trim())}</button><div class="rs-fits" data-fits-out="${t.id}"></div>` : ''}
@@ -1273,6 +1274,8 @@ function rsRenderLeague() {
         </details>`).join('')}</div>`, `${n} teams`)}`;
     rsDrawLeagueMap(rows);
     el.onclick = (e) => {
+      const scout = e.target.closest('[data-scout]');
+      if (scout) { rsOpenScout(Number(scout.dataset.scout)); return; }
       const fit = e.target.closest('[data-fits]');
       if (fit) { rsShowFits(Number(fit.dataset.fits)); return; }
       const load = e.target.closest('[data-finder-load]');
@@ -1332,6 +1335,7 @@ function rsDrawLeagueMap(rows) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      onClick: (evt, els) => { if (els && els.length) rsOpenScout(rows[els[0].index].t.id); },
       layout: { padding: { top: 20, right: 20, left: 4 } },
       plugins: {
         legend: { display: false },
@@ -1353,17 +1357,101 @@ function rsShowFits(partnerId) {
   if (!host || !my || !partner) return;
   host.innerHTML = loading('Looking for fair trades...');
   setTimeout(() => {
-    const m = rsModel();
-    const myWindow = rsApproach(m).window;
-    const found = TradeEngine.findTrades({
-      mine: tcTeamAssets(my), theirs: tcTeamAssets(partner), myWindow, theirWindow: ResearchEngine.APPROACH_WINDOW[m.teamCtx[partnerId].approach],
-      maxEdge: RS_MOVE_EDGE, requireMutual: true, limit: 2,
-    }, TC.ctx).map((r) => ({ ...r, partner }));
+    const { found, myWindow } = rsFitDeals(partnerId);
     const start = (RS.deals || []).length;
     RS.deals = (RS.deals || []).concat(found);
     host.innerHTML = found.length
       ? found.map((r, i) => tcFinderItemHTML(r, start + i, my, myWindow)).join('')
       : '<p class="tv-note">No fair deal that helps both teams right now.</p>';
+  }, 30);
+}
+
+function rsFitDeals(partnerId) {
+  const my = myTeam(), partner = teamById(partnerId);
+  const m = rsModel();
+  const myWindow = rsApproach(m).window;
+  const found = TradeEngine.findTrades({
+    mine: tcTeamAssets(my), theirs: tcTeamAssets(partner), myWindow, theirWindow: ResearchEngine.APPROACH_WINDOW[m.teamCtx[partnerId].approach],
+    maxEdge: RS_MOVE_EDGE, requireMutual: true, limit: 2,
+  }, TC.ctx).map((r) => ({ ...r, partner }));
+  return { found, myWindow };
+}
+
+// Trade habits of one team, from the league trade log.
+function rsTradeHabits(teamId) {
+  const h = { sent: 0, received: 0, accepted: 0, recvAccepted: 0, recvDecided: 0, partners: {} };
+  (state.allTrades || []).forEach((t) => {
+    const role = roleInTradeFor(t, teamId);
+    if (!role) return;
+    const acc = t.status === 'Accepted';
+    if (role === 'proposer') h.sent++; else h.received++;
+    if (acc) {
+      h.accepted++;
+      const other = state.teams.find((o) => o.id !== teamId && roleInTradeFor(t, o.id));
+      if (other) h.partners[other.id] = (h.partners[other.id] || 0) + 1;
+    }
+    if (role === 'receiver' && ['Accepted', 'Rejected', 'Countered'].includes(t.status)) {
+      h.recvDecided++;
+      if (acc) h.recvAccepted++;
+    }
+  });
+  const top = Object.entries(h.partners).sort((a, b) => b[1] - a[1])[0];
+  h.topPartner = top && top[1] >= 2 ? { id: Number(top[0]), n: top[1] } : null;
+  return h;
+}
+
+function rsOpenScout(teamId) {
+  const sheet = $('#scout-sheet'), body = $('#scout-body');
+  const team = teamById(teamId);
+  if (!sheet || !body || !team || !TC.ctx) return;
+  const m = rsModel();
+  const c = m.teamCtx[teamId];
+  if (!c) return;
+  const mine = teamId === state.myTeamId;
+  const close = () => { sheet.hidden = true; };
+  $('#scout-close').onclick = close;
+  sheet.onclick = (e) => {
+    if (e.target === sheet) { close(); return; }
+    if (e.target.closest('[data-finder-load]')) { close(); rsMovesClick(e); return; }
+    const row = e.target.closest('[data-scout-player]');
+    if (row) { close(); openPlayerProfile(Number(row.dataset.scoutPlayer)); return; }
+    const chip = e.target.closest('.tv-asset-chip[data-player-id]');
+    if (chip) { close(); openPlayerProfile(Number(chip.dataset.playerId)); }
+  };
+  $('#scout-title').innerHTML = `${teamLogoHTML(team, 44)} <span>${escapeHtml(team.name.trim())}</span>`;
+  const roomLine = (pos) => { const r = m.rooms[teamId]?.[pos]; return `${pos}${r ? `: ${ResearchEngine.ordinal(r.rank)} of ${state.teams.length}` : ''}`; };
+  const posList = (list, none) => list.length ? `<ul class="rs-scout-list">${list.map((p) => `<li>${escapeHtml(roomLine(p))}</li>`).join('')}</ul>` : `<p class="tv-note">${none}</p>`;
+  const h = rsTradeHabits(teamId);
+  const rate = h.recvDecided >= 3 ? `${Math.round((h.recvAccepted / h.recvDecided) * 100)}% of offers they received (${h.recvAccepted} of ${h.recvDecided})` : 'Not enough offers yet to judge';
+  const topP = h.topPartner ? teamById(h.topPartner.id) : null;
+  const habits = `<ul class="rs-scout-list">
+      <li>Offers sent: <b>${h.sent}</b></li><li>Offers received: <b>${h.received}</b></li><li>Accepted trades: <b>${h.accepted}</b></li>
+      <li>Acceptance: <b>${escapeHtml(rate)}</b></li>
+      ${topP ? `<li>Most frequent partner: <b>${escapeHtml(topP.name.trim())}</b> (${h.topPartner.n} trades)</li>` : ''}</ul>`;
+  const assets = team.roster.map((p) => ({ p, v: tcPlayer(p.id) })).filter((x) => x.v)
+    .sort((a, b) => b.v.dv - a.v.dv).slice(0, 5);
+  const assetsHTML = assets.length ? assets.map(({ p, v }) => `
+      <div class="rs-mkt-row rs-scout-player" data-scout-player="${p.id}">
+        ${playerPhotoHTML(p)}
+        <div class="rs-mkt-main"><div class="rs-mkt-name">${escapeHtml(p.name)}</div>
+        <div class="rs-room-sub">${escapeHtml(p.pos || v.p || '')} · Value ${tcFmt(v.dv)}</div></div>
+      </div>`).join('') : '<p class="tv-note">No valued players found.</p>';
+  body.innerHTML = `
+    <p class="rs-uth-line">${escapeHtml(team.owner || '')}${team.owner ? ' · ' : ''}${escapeHtml(recordOf(team))} · ${escapeHtml(rsPct(m.odds[teamId]?.playoffPct ?? 0))} playoff odds · <span class="rs-id-${rsSlug(c.approach)}">${escapeHtml(c.approach)}</span></p>
+    <h5>What they need</h5>${posList(c.weakPos, 'No clear holes')}
+    <h5>What they have</h5>${posList(c.strongPos, 'No clear surplus')}
+    <h5>Trade habits</h5>${habits}
+    <h5>Their best assets</h5>${assetsHTML}
+    ${mine ? '' : '<h5>Deals to pitch</h5><div class="rs-fits" id="scout-deals">' + loading('Looking for fair trades...') + '</div>'}`;
+  sheet.hidden = false;
+  if (mine || !myTeam()) return;
+  setTimeout(() => {
+    const out = $('#scout-deals');
+    if (!out) return;
+    const { found, myWindow } = rsFitDeals(teamId);
+    const start = (RS.deals || []).length;
+    RS.deals = (RS.deals || []).concat(found);
+    out.innerHTML = found.length ? found.map((r, i) => tcFinderItemHTML(r, start + i, myTeam(), myWindow)).join('') : '<p class="tv-note">No fair deal that helps both teams right now.</p>';
   }, 30);
 }
 
