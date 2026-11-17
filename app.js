@@ -4988,17 +4988,19 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', saved);
 }
 
-/* ----------------------- Layout: Classic / Simple -----------------------
- * Simple lives in simple.css (+ simple.js), scoped to html[data-density="simple"].
+/* ----------------------- Layout: Classic / Compact / Simple -----------------------
+ * Compact lives in compact.css and Simple in simple.css (+ simple.js), each scoped to
+ * html[data-density="..."].
  * Classic is the default. The gear (or the W logo) opens the Settings sheet:
  * team, layout, colors, notifications, commissioner tools. All per device.
  * Beta 1.35: devices that never picked a layout get the sheet once on launch.
  * ------------------------------------------------------------------ */
 
 const DEFAULT_DENSITY = 'classic';
-// Compact was retired in Beta 1.37: devices that had it fall back to Classic.
+// Compact came back in 1.37.1. Devices that saved it never lost it (initDensity only fell back in memory).
 const DENSITIES = [
   { key: 'classic', title: 'Classic', sub: 'Everything, full detail' },
+  { key: 'compact', title: 'Compact', sub: 'Same features, tighter' },
   { key: 'simple', title: 'Simple', sub: 'Bigger text, just the basics' },
 ];
 // Tabs Simple mode leaves out of the bottom nav.
@@ -7164,7 +7166,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.37.0';
+const BUILD_ID = '1.37.1';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
