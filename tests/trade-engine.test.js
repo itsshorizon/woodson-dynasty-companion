@@ -211,3 +211,46 @@ test('team mode: rebuilders value picks more, contenders less', () => {
   const conGive = TE.fitScore([asset('mid_a')], pick, 'Contender', ctx);
   assert.ok(conGive > rebGive, 'contender is happier turning a pick into a player');
 });
+
+test('trade finder must-includes: every deal carries the named assets', () => {
+  const mine = ['wr1', 'wr15a', 'mid_a', 'bench1', 'pick:2027-1', 'pick:2027-2'].map(asset);
+  const theirs = ['top5', 'wr10', 'rb15', 'mid_b', 'bench2', 'pick:2028-1'].map(asset);
+  const base = { mine, theirs, myWindow: 'Contender', theirWindow: 'Rebuilder', requireMutual: false, maxEdge: 0.249, limit: 50 };
+  const has = (list, a) => list.some((x) => TE.assetValue(x, ctx).key === TE.assetValue(a, ctx).key);
+
+  // One of mine
+  const giveMid = TE.findTrades({ ...base, mustGive: [asset('mid_a')] }, ctx);
+  assert.ok(giveMid.length > 0);
+  for (const r of giveMid) assert.ok(has(r.give, asset('mid_a')), 'gives mid_a');
+
+  // One of theirs: same as the old single target
+  const getRb = TE.findTrades({ ...base, mustGet: [asset('rb15')] }, ctx);
+  const viaTarget = TE.findTrades({ ...base, target: asset('rb15') }, ctx);
+  assert.ok(getRb.length > 0);
+  for (const r of getRb) assert.ok(has(r.get, asset('rb15')), 'gets rb15');
+  assert.deepEqual(getRb, viaTarget);
+
+  // Both sides at once
+  const both = TE.findTrades({ ...base, mustGive: [asset('wr15a')], mustGet: [asset('wr10')] }, ctx);
+  assert.ok(both.length > 0);
+  for (const r of both) { assert.ok(has(r.give, asset('wr15a'))); assert.ok(has(r.get, asset('wr10'))); }
+
+  // Two named on one side means only 2-piece deals on that side
+  const two = TE.findTrades({ ...base, mustGive: [asset('mid_a'), asset('pick:2027-2')] }, ctx);
+  for (const r of two) { assert.equal(r.give.length, 2); assert.ok(has(r.give, asset('mid_a')) && has(r.give, asset('pick:2027-2'))); }
+  assert.deepEqual(TE.findTrades({ ...base, mustGive: [asset('mid_a'), asset('pick:2027-2')], shapes: ['1-1', '1-2'] }, ctx), []);
+
+  // A named pick ignores the "players only" filter
+  const pickForced = TE.findTrades({ ...base, give: { players: true, picks: false }, mustGive: [asset('pick:2027-1')] }, ctx);
+  assert.ok(pickForced.length > 0);
+  for (const r of pickForced) {
+    assert.ok(has(r.give, asset('pick:2027-1')));
+    assert.ok(r.give.filter((a) => a.type === 'pick').length === 1, 'no other picks sneak in');
+  }
+
+  // Naming my best player lifts the "protect my best" rule for him
+  assert.equal(TE.findTrades({ ...base, shapes: ['1-1', '1-2'] }, ctx).filter((r) => has(r.give, asset('wr1')) && !has(r.get, asset('top5'))).length, 0);
+  const sellBest = TE.findTrades({ ...base, mustGive: [asset('wr1')] }, ctx);
+  assert.ok(sellBest.length > 0);
+  for (const r of sellBest) assert.ok(has(r.give, asset('wr1')));
+});

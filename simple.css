@@ -336,3 +336,8 @@
 [data-density="simple"] .modal-team-btn .owner { font-size: 14px; }
 [data-density="simple"] .ds-opt-title { font-size: 19px; }
 [data-density="simple"] .ds-opt-sub { font-size: 15px; }
+
+/* Beta 1.37: Simple runs its own trade flow, so the sub-tabs and their panes step aside. */
+[data-density="simple"] #trade-subnav,
+[data-density="simple"] #trade-interest { display: none !important; }
+[data-density="simple"] .trade-pane[hidden] { display: block !important; }

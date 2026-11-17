@@ -1,12 +1,13 @@
 {
-  "version": "1.35.0",
-  "title": "🧭 Simple Mode + Cleaner Trades",
+  "version": "1.37.0",
+  "title": "🧭 A Simpler Map + Season Impact",
   "notes": [
-    "🧭 New Simple layout: bigger text, bigger buttons, and just three tabs (Standings, Rosters, Trades). Tap the W at the top to pick Classic, Compact or Simple.",
-    "🤝 In Simple, making a trade is step by step: pick a team, tap what you want, tap what you'll give, then see in plain words whether it's fair before you send it.",
-    "📋 The Trade Block is now one small bar on the Trades tab. Tap it to see who's on the block.",
-    "↔️ The trade builder now says \"You give\" and \"You get\", draft picks are tap-to-pick buttons, and Send stays at the bottom of the screen while you build.",
-    "🔍 The trade meter shows the verdict up front; fit, sources and the math are under \"More detail\".",
-    "📬 Pending trades now sit near the top of the Trades tab so offers waiting on you are easy to find."
+    "🔮 New: Season Impact. Build a trade and the meter shows what it does to both teams this year: playoff odds, title odds and points per week, before and after. Trade Finder ideas show it too.",
+    "📋 Research now opens on your Briefing: one screen with your odds, your next game, the one move to make, who's rising and falling on your roster, a buy-low target and the latest headline. Tap any line for the full story.",
+    "🗂️ The Trades tab is now four short tabs: Offers, Find, Build and Feed. A red number on Offers (and a dot on the Trades button) means someone is waiting on you.",
+    "⚙️ One Settings button (the gear, top right) for your team, layout, colors, notifications and patch notes. Commissioner tools live there too.",
+    "📦 Where things moved: your offers are on Trades > Offers. Draft picks are under every team on Rosters. Your trade history is on Trades > Feed > My trades.",
+    "👋 Retired: the old My Team page, the Smart Trade Matchmaker (Find and Plan do its job better) and the Compact layout. If you used Compact, you're on Classic now.",
+    "📜 Activity loads 20 items at a time, so it opens faster."
   ]
 }

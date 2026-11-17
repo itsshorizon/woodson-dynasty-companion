@@ -12,7 +12,7 @@
  * =========================================================== */
 
 const RS = {
-  sub: 'overview',
+  sub: 'brief',
   model: null,     // last buildResearchModel() result
   modelKey: '',    // what it was built from; rebuilt when this changes
 };
@@ -25,7 +25,7 @@ const RS_SIMS = 2000;
 
 function rsInit() {
   try { RS.sub = localStorage.getItem(RS_SUB_KEY) || RS.sub; } catch (e) { /* storage blocked */ }
-  if (!$(`#research-subnav [data-rs="${RS.sub}"]`)) RS.sub = 'overview';
+  if (!$(`#research-subnav [data-rs="${RS.sub}"]`)) RS.sub = 'brief';
   const nav = $('#research-subnav');
   if (nav && !nav.dataset.wired) {
     nav.dataset.wired = '1';
@@ -40,9 +40,159 @@ function rsInit() {
   rsShow();
 }
 
+function rsGo(sub) {
+  RS.sub = sub;
+  try { localStorage.setItem(RS_SUB_KEY, sub); } catch (err) { /* storage blocked */ }
+  rsShow();
+  window.scrollTo({ top: 0 });
+}
+
+/* ----------------------- Briefing -----------------------
+ * The landing pane: one screen that says where my team stands this week and
+ * what to look at next. Every card opens the pane with the full story.
+ */
+
+// Playoff + title odds by week, kept on this device so the Briefing can say
+// how they moved. { "<season>:<teamId>": { "<week>": [playoffPct, titlePct] } }
+const RS_ODDS_KEY = 'researchOddsLog';
+
+function rsOddsSince(team, odds) {
+  const week = state.currentWeek || 1;
+  const k = `${CONFIG.SEASON}:${team.id}`;
+  let log = {};
+  try { log = JSON.parse(localStorage.getItem(RS_ODDS_KEY) || '{}') || {}; } catch (e) { /* storage blocked */ }
+  const mine = log[k] || {};
+  mine[week] = [odds.playoffPct, odds.titlePct];
+  try { localStorage.setItem(RS_ODDS_KEY, JSON.stringify({ [k]: mine })); } catch (e) { /* storage blocked */ }
+  const prev = Object.keys(mine).map(Number).filter((w) => w < week).sort((a, b) => b - a)[0];
+  return prev == null ? null : { week: prev, playoffPct: mine[prev][0], titlePct: mine[prev][1] };
+}
+
+function rsBriefRow(go, icon, kicker, title, sub = '', attrs = '') {
+  return `
+    <button type="button" class="rs-brief-row" data-brief-go="${go}" ${attrs}>
+      <span class="rs-brief-icon" aria-hidden="true">${icon}</span>
+      <span class="rs-brief-main">
+        <span class="rs-brief-kicker">${kicker}</span>
+        <span class="rs-brief-title">${title}</span>
+        ${sub ? `<span class="rs-brief-sub">${sub}</span>` : ''}
+      </span>
+      <span class="rs-brief-chev" aria-hidden="true">›</span>
+    </button>`;
+}
+
+function rsBriefHTML(team) {
+  const m = rsModel();
+  const n = state.teams.length;
+  const odds = m.odds[team.id];
+  const seed = state.teams.findIndex((t) => t.id === team.id) + 1;
+  const prev = odds ? rsOddsSince(team, odds) : null;
+  const moved = (now, was) => {
+    const d = Math.round((now - was) * 100);
+    return d ? `<span class="${d > 0 ? 'tv-up' : 'tv-down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d)} since Wk ${prev.week}</span>` : `same as Wk ${prev.week}`;
+  };
+  const rows = [];
+
+  // Offers waiting on me
+  const { incoming } = tradesForMe();
+  if (incoming.length) {
+    rows.push(rsBriefRow('trades', '📬', 'Waiting on you', `${incoming.length} trade offer${incoming.length > 1 ? 's' : ''} to answer`,
+      escapeHtml(incoming.map((t) => `from ${t.teamProposing}`).join(', '))));
+  }
+
+  // Next game
+  const next = m.remaining.find((g) => g.home === team.id || g.away === team.id);
+  if (next) {
+    const opp = teamById(next.home === team.id ? next.away : next.home);
+    const win = normCdf((m.mean[team.id] - m.mean[opp.id]) / (ResearchEngine.WEEKLY_SD * Math.SQRT2));
+    rows.push(rsBriefRow('outlook', '🗓️', `Week ${next.week}`, `vs ${escapeHtml(opp.name.trim())}`,
+      `${recordOf(opp)} · <b class="${win >= 0.6 ? 'tv-up' : win < 0.4 ? 'tv-down' : ''}">${rsPct(win)}</b> chance to win`));
+  }
+
+  // The one move to make
+  const move = ResearchEngine.moves(rsMoveInput(team, m)).sort((a, b) => a.priority - b.priority)[0];
+  if (move) rows.push(rsBriefRow('moves', '🎯', 'Your move', escapeHtml(move.headline), escapeHtml(move.why[0] || '')));
+
+  // Biggest 30-day value mover on my roster, each way
+  const movers = team.roster.map((p) => ({ p, tr: tcPlayer(p.id)?.tr || 0 })).filter((x) => x.tr);
+  const mover = (x, kicker) => rsBriefRow('player', x.tr > 0 ? '📈' : '📉', kicker, escapeHtml(x.p.name),
+    `<b class="${x.tr > 0 ? 'tv-up' : 'tv-down'}">${x.tr > 0 ? '▲' : '▼'} ${tcFmt(Math.abs(x.tr))}</b> value in 30 days · now ${tcFmt(tcPlayer(x.p.id)?.dv)}`,
+    `data-player-id="${x.p.id}"`);
+  const up = movers.filter((x) => x.tr > 0).sort((a, b) => b.tr - a.tr)[0];
+  const down = movers.filter((x) => x.tr < 0).sort((a, b) => a.tr - b.tr)[0];
+  if (up) rows.push(mover(up, 'Rising'));
+  if (down) rows.push(mover(down, 'Falling'));
+
+  // Best buy-low on another team, at a position I'm weak at when there is one
+  const weak = m.teamCtx[team.id]?.weakPos || [];
+  const buys = Object.entries(m.market).filter(([id, e]) => e.buy && ownerTeamOf(Number(id))?.id !== team.id)
+    .map(([id, e]) => ({ p: findPlayerAnywhere(Number(id)), e: e.buy })).filter((x) => x.p)
+    .sort((a, b) => (weak.includes(b.p.pos) - weak.includes(a.p.pos)) || b.e.score - a.e.score);
+  if (buys[0]) {
+    const b = buys[0];
+    rows.push(rsBriefRow('market', '🛒', weak.includes(b.p.pos) ? `Buy low · fills your ${b.p.pos} need` : 'Buy low',
+      `${escapeHtml(b.p.name)} <span class="tv-dim">${b.p.pos} · ${escapeHtml(ownerTeamOf(b.p.id)?.name.trim() || '')}</span>`, escapeHtml(b.e.reasons[0] || '')));
+  }
+
+  // Latest headline on my players
+  const news = RS.news?.players || {};
+  const latest = team.roster.flatMap((p) => (news[p.id] || []).map((a) => ({ a, p })))
+    .sort((x, y) => (Date.parse(y.a.t) || 0) - (Date.parse(x.a.t) || 0))[0];
+  if (latest) rows.push(rsBriefRow('news', '📰', `News · ${escapeHtml(latest.p.name)}`, escapeHtml(latest.a.h), escapeHtml(rsAgo(latest.a.t))));
+
+  return `
+    <div class="rs-brief-hero" data-brief-go="outlook" role="button" tabindex="0">
+      <div class="rs-brief-id">
+        ${teamLogoHTML(team, 44)}
+        <div>
+          <div class="rs-brief-name">${escapeHtml(team.name.trim())}</div>
+          <div class="rs-brief-sub">${recordOf(team)} · ${ResearchEngine.ordinal(seed)} of ${n} · ${escapeHtml(rsApproach(m).label)}</div>
+        </div>
+      </div>
+      ${odds ? `
+      <div class="rs-brief-odds">
+        <div><span class="rs-brief-big">${rsPct(odds.playoffPct)}</span><span class="rs-stat-label">Playoff odds</span>${prev ? `<span class="rs-stat-note">${moved(odds.playoffPct, prev.playoffPct)}</span>` : ''}</div>
+        <div><span class="rs-brief-big">${rsPct(odds.titlePct)}</span><span class="rs-stat-label">Title odds</span>${prev ? `<span class="rs-stat-note">${moved(odds.titlePct, prev.titlePct)}</span>` : ''}</div>
+        <div><span class="rs-brief-big">${odds.avgWins.toFixed(1)}</span><span class="rs-stat-label">Projected wins</span></div>
+      </div>` : ''}
+    </div>
+    <div class="rs-brief-list">${rows.join('')}</div>
+    <p class="tv-note rs-brief-note">Tap any line for the full story.${prev ? '' : ' Odds changes show here once this device has seen two different weeks.'}</p>`;
+}
+
+function rsRenderBrief() {
+  const el = $('#research-brief');
+  if (!el) return;
+  const team = myTeam();
+  if (!team) {
+    el.innerHTML = '<div class="empty"><p>Pick your team to get your weekly briefing.</p><button class="btn-primary" data-brief-go="pick" style="max-width:240px;margin:14px auto 0;">Choose My Team</button></div>';
+  } else if (typeof ResearchEngine === 'undefined' || !state.teams.length) {
+    el.innerHTML = empty('League data still loading.');
+  } else if (TC.ctx && RS.adv && RS.news) {
+    el.innerHTML = rsBriefHTML(team);
+  } else {
+    el.innerHTML = loading('Building your briefing...');
+    Promise.all([typeof tcLoad === 'function' ? tcLoad() : null, rsLoadAdvanced(), rsLoadNews()]).then(() => {
+      if (RS.sub !== 'brief') return;
+      if (TC.ctx && RS.adv && RS.news) rsRenderBrief();
+      else el.innerHTML = empty('Trade values unavailable right now. Check your connection and reopen the tab.');
+    });
+  }
+  el.onclick = (e) => {
+    const hit = e.target.closest('[data-brief-go]');
+    if (!hit) return;
+    const go = hit.dataset.briefGo;
+    if (go === 'pick') showTeamPicker();
+    else if (go === 'trades') setView('trades');
+    else if (go === 'player') openPlayerProfile(parseInt(hit.dataset.playerId, 10));
+    else rsGo(go);
+  };
+}
+
 function rsShow() {
   $$('#research-subnav [data-rs]').forEach((b) => b.classList.toggle('active', b.dataset.rs === RS.sub));
   $$('#view-myteam .research-pane').forEach((p) => { p.hidden = p.dataset.pane !== RS.sub; });
+  if (RS.sub === 'brief') rsRenderBrief();
   if (RS.sub === 'outlook') rsRenderOutlook();
   if (RS.sub === 'moves') rsRenderMoves();
   if (RS.sub === 'market') rsRenderMarket();
@@ -112,20 +262,19 @@ function buildResearchModel() {
   const injuries = R.injuries(rows, slots);
   // Rest-of-season PPG (data/advanced.json) when we have it: usage-weighted and
   // schedule-adjusted, so it beats raw PPG for "how good is this lineup now".
-  const rosPpg = (p) => rsAdv(p.id)?.ros?.ppg ?? p.ppg;
   const rosLineup = {};
-  rows.forEach((r) => {
-    rosLineup[r.id] = R.lineup(r.players.filter((p) => p.available).map((p) => ({ id: p.id, pos: p.pos, pts: rosPpg(p) })), slots).total;
-  });
+  rows.forEach((r) => { rosLineup[r.id] = rsRosLineup(r.players, slots); });
   const mean = R.strengths(rows.map((r) => ({
     id: r.id,
     seasonAvg: rsAvg(results[r.id].map((g) => g.pts)),
     lineupPpg: rosLineup[r.id],
   })));
-  const odds = R.simulate({
+  // Kept on the model so rsTradeImpact can replay the same season with a trade applied.
+  const sim = {
     teams: state.teams.map((t) => ({ id: t.id, wins: t.wins, losses: t.losses, ties: t.ties, pf: t.pf })),
-    remaining, mean, playoffSpots: state.playoffTeamCount || 6, sims: RS_SIMS, seed: CONFIG.SEASON * 100 + (state.currentWeek || 1),
-  });
+    remaining, playoffSpots: state.playoffTeamCount || 6, sims: RS_SIMS, seed: CONFIG.SEASON * 100 + (state.currentWeek || 1),
+  };
+  const odds = R.simulate({ ...sim, mean });
   const luck = computeSeasonLuck(state.schedule);
   const values = typeof tcLeagueTeamValues === 'function' && TC.ctx ? tcLeagueTeamValues() : [];
 
@@ -166,7 +315,64 @@ function buildResearchModel() {
       };
     })),
   }) : {};
-  return { results, remaining, rooms, injuries, mean, odds, luck, values, rosLineup, identity, teamCtx, market };
+  return { results, remaining, rooms, injuries, mean, odds, luck, values, rosLineup, identity, teamCtx, market, rows, slots, sim };
+}
+
+// Best healthy lineup's rest-of-season points per week.
+function rsRosLineup(players, slots) {
+  return ResearchEngine.lineup(players.filter((p) => p.available).map((p) => ({ id: p.id, pos: p.pos, pts: rsAdv(p.id)?.ros?.ppg ?? p.ppg })), slots).total;
+}
+
+/* ----------------------- Trade impact ----------------------- *
+ * What a trade does to this season: swap the players, rebuild both lineups,
+ * and replay the same simulated season (same seed, so the only thing that
+ * changes is the trade). Picks don't play, so they don't move these numbers.
+ * Returns { a, b } with { before, after } odds rows and the lineup change in
+ * points per week, or null when there is nothing to simulate.
+ */
+function rsTradeImpact(aId, bId, aSendIds, bSendIds) {
+  if (!aSendIds.length && !bSendIds.length) return null;
+  const m = rsModel();
+  const A = m.rows.find((r) => r.id === aId), B = m.rows.find((r) => r.id === bId);
+  if (!A || !B || !m.sim.remaining.length) return null;
+  const after = (own, out, other, inn) => rsRosLineup(
+    own.players.filter((p) => !out.includes(p.id)).concat(other.players.filter((p) => inn.includes(p.id))), m.slots);
+  const lineup = { ...m.rosLineup, [aId]: after(A, aSendIds, B, bSendIds), [bId]: after(B, bSendIds, A, aSendIds) };
+  // Move only these two teams' expected scores, on the same scale strengths()
+  // used. Re-running strengths() would rescale all twelve teams and nudge the
+  // odds of a trade that changes nothing.
+  const avgOf = (id) => rsAvg(m.results[id].map((g) => g.pts));
+  const scored = m.rows.filter((r) => avgOf(r.id) != null && m.rosLineup[r.id] > 0);
+  const k = scored.length ? scored.reduce((s, r) => s + avgOf(r.id), 0) / scored.reduce((s, r) => s + m.rosLineup[r.id], 0) : 1;
+  const mean = { ...m.mean };
+  [aId, bId].forEach((id) => { mean[id] += (avgOf(id) == null ? 1 : 0.5) * k * (lineup[id] - m.rosLineup[id]); });
+  const odds = ResearchEngine.simulate({ ...m.sim, mean });
+  const side = (id) => ({ before: m.odds[id], after: odds[id], lineup: lineup[id] - m.rosLineup[id] });
+  return { a: side(aId), b: side(bId) };
+}
+
+const rsImpactShift = (before, after) => {
+  const cls = after - before >= 0.005 ? 'tv-up' : before - after >= 0.005 ? 'tv-down' : '';
+  return `${rsPct(before)} → <b class="${cls}">${rsPct(after)}</b>`;
+};
+
+// One line per team: "Playoffs 50% → 61% · Title 11% → 15% · Lineup +1.2/wk".
+function rsImpactRowHTML(label, s) {
+  return `<div class="tv-impact-row"><span class="who">${escapeHtml(label)}</span><span class="nums">Playoffs ${rsImpactShift(s.before.playoffPct, s.after.playoffPct)} · Title ${rsImpactShift(s.before.titlePct, s.after.titlePct)} · Lineup ${rsSigned(s.lineup)}/wk</span></div>`;
+}
+
+// Block for the trade meter. ids = { a, b }, sends = { a: [playerIds], b: [...] }.
+function rsImpactHTML(ids, sends, names) {
+  if (!TC.ctx || !state.schedule?.length) return '';
+  const imp = rsTradeImpact(ids.a, ids.b, sends.a, sends.b);
+  if (!imp) return '';
+  return `
+    <div class="tv-impact">
+      <div class="tv-impact-h">This season, if it goes through</div>
+      ${rsImpactRowHTML(names.a, imp.a)}
+      ${rsImpactRowHTML(names.b, imp.b)}
+      <p class="tv-impact-note">The rest of the season played out ${RS_SIMS.toLocaleString()} times with and without this trade.</p>
+    </div>`;
 }
 
 /* ----------------------- Approach (5 steps) ----------------------- *
@@ -367,7 +573,7 @@ function rsRenderOutlook() {
   const el = $('#research-outlook');
   if (!el) return;
   const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
   if (typeof ResearchEngine === 'undefined' || !state.teams.length) { el.innerHTML = empty('League data still loading.'); return; }
   // Injury history lives in player-details.json; draw now, redraw when it lands.
   if (!TC.details && typeof tcLoadDetails === 'function') tcLoadDetails().then(() => { if (RS.sub === 'outlook') rsRenderOutlook(); });
@@ -506,7 +712,7 @@ function rsRenderMoves() {
   const el = $('#research-moves');
   if (!el) return;
   const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
   el.innerHTML = loading('Reading your roster and asking around the league...');
   Promise.all([
     typeof tcLoad === 'function' ? tcLoad() : null,
@@ -608,7 +814,7 @@ function rsRenderNews() {
   const el = $('#research-news');
   if (!el) return;
   const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
   el.innerHTML = loading('Loading news...');
   rsLoadNews().then((news) => {
     if (RS.sub !== 'news') return;
@@ -911,7 +1117,7 @@ function rsRenderAsk() {
   const el = $('#research-ask');
   if (!el) return;
   const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
   const draft = RS.askDraft || '';
   el.innerHTML = rsCard('🤖 Ask Claude', `
     <p class="rs-ask-lede">Ask anything about your team. The app copies your team's full data, then opens Claude on <b>your own Claude account</b>. Paste and send. Free accounts work.</p>
@@ -990,7 +1196,7 @@ function rsRenderMarket() {
   const el = $('#research-market');
   if (!el) return;
   const team = myTeam();
-  if (!team) { el.innerHTML = empty('Pick your team on the Overview tab first.'); return; }
+  if (!team) { el.innerHTML = empty('Pick your team on the Briefing tab first.'); return; }
   el.innerHTML = loading('Scanning every roster...');
   Promise.all([tcLoad(), tcLoadDetails(), rsLoadAdvanced()]).then(() => {
     if (RS.sub !== 'market') return;

@@ -17,3 +17,8 @@ pipeline/node_modules/
 
 # Local Claude Code preview config
 .claude/
+
+# Native app build output (scripts/build-www.js, Capacitor)
+www/
+ios/
+android/

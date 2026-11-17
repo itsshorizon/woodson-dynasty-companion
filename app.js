@@ -391,7 +391,9 @@ async function loadLeagueData(silent = false) {
     state.schedule = raw.schedule || [];
     state.currentWeek = raw.scoringPeriodId || raw.status?.currentMatchupPeriod || 1;
     // The season span is hidden under 400px (styles.css) so the badge fits narrow phones.
-    meta.innerHTML = `<span class="meta-season">${CONFIG.SEASON} • </span>Wk ${state.currentWeek} • ${state.teams.length} Teams`;
+    // The team count is hidden under 430px too: next to the bell and theme buttons it
+    // cut every tab title short ("TRAD…", "RESEA…") on standard phones.
+    meta.innerHTML = `<span class="meta-season">${CONFIG.SEASON} • </span>Wk ${state.currentWeek}<span class="meta-teams"> • ${state.teams.length} Teams</span>`;
     return true;
   } catch (err) {
     console.error('ESPN load failed:', err);
@@ -426,6 +428,7 @@ async function loadAllTrades() {
     const all = await fetchJSON(`${CONFIG.SHEETS_BASE}/trades`);
     state.allTrades = Array.isArray(all) ? all : [];
     state.pendingTrades = state.allTrades.filter((t) => t.status === 'Pending');
+    updateOfferCount();
   } catch (err) {
     console.error('Trades load failed:', err);
     state.allTrades = [];
@@ -1938,8 +1941,44 @@ function renderRoster() {
     </div>
     ${renderGroupedRoster(team, ctx)}
     ${typeof tcTeamValueFooterHTML === 'function' ? tcTeamValueFooterHTML(team.id) : ''}
+    ${rosterPicksHTML(team.id)}
   `;
   wirePlayerActions(el);
+  // Year cards swap the itemized pick list below them.
+  $$('.draft-summary-card[data-year]', el).forEach((card) => {
+    card.onclick = () => {
+      $$('.draft-summary-card[data-year]', el).forEach((c) => c.classList.toggle('active', c === card));
+      $('#roster-draft-detail').innerHTML = renderMyTeamDraftDetail(team.id, parseInt(card.dataset.year, 10));
+    };
+  });
+}
+
+// Draft picks for the team on screen: a count per year, tap a year for the list.
+function rosterPicksHTML(teamId) {
+  if (!state.draftPicks.length) return '';
+  const stats = draftSummaryForMe(teamId);
+  return `
+    <div class="myteam-section roster-picks">
+      <div class="myteam-section-header">
+        <h3>Draft Picks</h3>
+        <span class="count">${stats.total} picks · ${stats.gained}+ / ${stats.lost}-</span>
+      </div>
+      <div class="draft-summary">
+        ${CONFIG.DRAFT_YEARS.map((y, i) => {
+          const yr = stats.byYear[y];
+          return `
+            <button type="button" class="draft-summary-card${i === 0 ? ' active' : ''}" data-year="${y}">
+              <div class="draft-summary-year">${y}</div>
+              <div class="draft-summary-count">${yr.total}</div>
+              <div class="draft-summary-label">
+                ${yr.gained ? `<span style="color:#6f96ff">+${yr.gained}</span> ` : ''}${yr.lost ? `<span style="color:var(--red)">-${yr.lost}</span>` : ''}
+                ${!yr.gained && !yr.lost ? 'All original' : ''}
+              </div>
+            </button>`;
+        }).join('')}
+      </div>
+      <div id="roster-draft-detail" class="myteam-draft-detail">${renderMyTeamDraftDetail(teamId, CONFIG.DRAFT_YEARS[0])}</div>
+    </div>`;
 }
 
 /* -------- Waivers (Rosters tab, Beta 1.26) --------
@@ -2383,6 +2422,7 @@ function populateTradeTeamSelects() {
 
 function applyTradePrefill() {
   if (!state.tradePrefill) return;
+  tradeTab('build');
   const { teamA, teamB, playerIds, aPlayerIds, aPicks, bPlayerIds, bPicks } = state.tradePrefill;
   const aSel = $('#team-a-select'), bSel = $('#team-b-select');
   // Side A is normally locked to state.myTeamId — temporarily allow the prefill to set it
@@ -2413,6 +2453,49 @@ function applyTradePrefill() {
   state.tradePrefill = null;
   // Let the meter and send bar catch up with the ticked boxes.
   $('.trade-builder')?.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/* ----------------------- Trades sub-tabs -----------------------
+ * Offers (pending, interest, trade block) · Find (finder + shop) ·
+ * Build (proposal + meter) · Feed (league trades). One job per pane, so
+ * nobody scrolls past the builder to reach the finder. Simple layout hides
+ * the tabs and runs its own flow (simple.js).
+ */
+const TRADE_TABS = ['offers', 'find', 'build', 'feed'];
+const TRADE_TAB_KEY = 'tradeTab';
+
+function tradeTab(name) {
+  if (!TRADE_TABS.includes(name)) name = 'offers';
+  state.tradeTab = name;
+  try { localStorage.setItem(TRADE_TAB_KEY, name); } catch (err) { /* storage blocked */ }
+  $$('#trade-subnav [data-ts]').forEach((b) => b.classList.toggle('active', b.dataset.ts === name));
+  $$('#view-trades .trade-pane').forEach((pane) => { pane.hidden = pane.dataset.pane !== name; });
+}
+
+// Called on every visit to Trades. A prefilled deal opens Build, an offer
+// waiting on me opens Offers, otherwise the tab I used last.
+function enterTradeTabs() {
+  const nav = $('#trade-subnav');
+  if (nav && !nav.dataset.wired) {
+    nav.dataset.wired = '1';
+    nav.onclick = (e) => {
+      const btn = e.target.closest('[data-ts]');
+      if (!btn) return;
+      tradeTab(btn.dataset.ts);
+      window.scrollTo({ top: 0 });
+    };
+  }
+  let saved = null;
+  try { saved = localStorage.getItem(TRADE_TAB_KEY); } catch (err) { /* storage blocked */ }
+  tradeTab(state.tradePrefill ? 'build' : tradesForMe().incoming.length ? 'offers' : saved || 'offers');
+}
+
+// Offers waiting on me: a count on the Offers tab and a dot on the bottom nav.
+function updateOfferCount() {
+  const n = tradesForMe().incoming.length;
+  const count = $('#trade-offers-count');
+  if (count) { count.hidden = !n; count.textContent = n; }
+  $('.nav-btn[data-view="trades"]')?.classList.toggle('has-new', n > 0);
 }
 
 /* ----------------------- Trade Block UI ----------------------- */
@@ -2469,6 +2552,11 @@ function tradeBlockRowHTML(entry) {
 }
 
 function renderTradeBlockSection() {
+  const interest = $('#trade-interest');
+  if (interest) {
+    interest.innerHTML = myTeam() ? renderMyInterestAlerts(myTeam()) : '';
+    interest.classList.toggle('card', !!interest.innerHTML);
+  }
   const el = $('#trade-block-list');
   const summary = $('#trade-block-summary');
   if (!el) return;
@@ -2661,6 +2749,7 @@ async function sendTradeProposal(a, b) {
     } catch (err) { /* user dismissed share sheet — no-op */ }
     await loadPendingTrades();
     renderPendingTrades();
+    tradeTab('offers'); // show the offer that was just sent
     return true;
   } catch (err) {
     console.error(err);
@@ -2721,13 +2810,13 @@ function renderPendingTrades() {
   // so no trade ever leaks to a non-participant, even if one field is missing.
   const myId = state.myTeamId;
   const myName = myTeamName();
-  if (!myId) { el.innerHTML = empty('Pick your team on the Research tab to see your trades'); return; }
+  if (!myId) { el.innerHTML = empty('Pick your team in Settings (the gear, top right) to see your trades'); return; }
   const mine = state.pendingTrades.filter((t) => {
     const isProposer = (t.teamAId && Number(t.teamAId) === myId) || (t.teamProposing && t.teamProposing === myName);
     const isReceiver = (t.teamBId && Number(t.teamBId) === myId) || (t.teamReceiving && t.teamReceiving === myName);
     return isProposer || isReceiver;
   });
-  if (!mine.length) { el.innerHTML = empty('No pending trades involve you'); return; }
+  if (!mine.length) { el.innerHTML = empty('No offers right now. Find a deal or build one from the tabs above.'); return; }
 
   el.innerHTML = mine.map((t) => {
     const offered = safeParse(t.assestsOffered) || {};
@@ -4458,6 +4547,7 @@ function setMyTeamId(id) {
   state.myTeamId = id;
   localStorage.setItem('myTeamId', String(id));
   renderScores(); // re-pin "Your Matchup"
+  updateOfferCount();
   if (typeof rxRefreshAll === 'function') rxRefreshAll(); // "mine" highlights follow the team
   if (typeof actDataChanged === 'function') actDataChanged();
   if (typeof pushTeamChanged === 'function') pushTeamChanged();
@@ -4681,7 +4771,8 @@ function renderMyInterestAlerts(team) {
   const alerts = state.tradeBlock
     .filter((e) => myPlayerIds.has(String(e.playerId)))
     .map((e) => {
-      const ids = (safeParse(e.interestedTeamIds) || []).map((x) => parseInt(x, 10));
+      // Skip my own team: interest I marked before trading for the player is stale.
+      const ids = (safeParse(e.interestedTeamIds) || []).map((x) => parseInt(x, 10)).filter((id) => id !== team.id);
       const names = ids.map((id) => teamName(id)).filter(Boolean);
       return { entry: e, interestedNames: names };
     })
@@ -4708,169 +4799,11 @@ function renderMyInterestAlerts(team) {
   `;
 }
 
+// The old My Team page is gone (Beta 1.37). Offers and interest alerts live on
+// Trades, the roster and picks on Rosters, team and commissioner tools in
+// Settings. Callers that used to redraw it now redraw Research's open pane.
 function renderMyTeam() {
-  const el = $('#myteam-content');
-
-  if (!state.myTeamId) {
-    el.innerHTML = `
-      <div class="empty">
-        <p>Pick your team to see your incoming trades, history, and draft assets.</p>
-        <button class="btn-primary" id="open-picker-btn" style="max-width:240px;margin:14px auto 0;">Choose My Team</button>
-      </div>
-    `;
-    $('#open-picker-btn').onclick = showTeamPicker;
-    return;
-  }
-
-  const team = teamById(state.myTeamId);
-  if (!team) { el.innerHTML = empty('Team not found. Try changing teams.'); return; }
-
-  const { incoming, outgoing, history } = tradesForMe();
-  const draftStats = draftSummaryForMe(team.id);
-
-  el.innerHTML = `
-    <!-- Hero -->
-    <div class="myteam-hero">
-      <button class="change-team" id="change-team-btn">Change</button>
-      <div class="myteam-id">
-        ${teamLogoHTML(team, 56)}
-        <div class="myteam-id-text">
-          <h2>${escapeHtml(team.name)}</h2>
-          <div class="owner">${escapeHtml(team.owner)}</div>
-        </div>
-      </div>
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-val">${team.wins}-${team.losses}${team.ties ? '-' + team.ties : ''}</span>
-          <span class="stat-label">Record</span>
-        </div>
-        <div class="stat">
-          <span class="stat-val">${team.pf.toFixed(1)}</span>
-          <span class="stat-label">Points For</span>
-        </div>
-        <div class="stat">
-          <span class="stat-val">#${state.teams.findIndex((t) => t.id === team.id) + 1}</span>
-          <span class="stat-label">League Rank</span>
-        </div>
-      </div>
-      ${isCommish() ? `<button class="commish-launch" id="open-commish-btn">★ Commissioner Tools</button>` : ''}
-    </div>
-
-    <!-- Incoming pending (I'm the receiver — I can Accept / Counter / Decline) -->
-    <div class="myteam-section">
-      <div class="myteam-section-header">
-        <h3>Incoming Trade Offers</h3>
-        <span class="count ${incoming.length ? 'attn' : ''}">${incoming.length}</span>
-      </div>
-      <div id="myteam-incoming-list">
-        ${incoming.length ? incoming.map(renderIncomingTradeCard).join('') : empty('No pending offers')}
-      </div>
-    </div>
-
-    <!-- Outgoing pending (I'm the proposer — I can only Cancel) -->
-    <div class="myteam-section">
-      <div class="myteam-section-header">
-        <h3>Outgoing Trade Offers</h3>
-        <span class="count">${outgoing.length}</span>
-      </div>
-      <div id="myteam-outgoing-list">
-        ${outgoing.length ? outgoing.map(renderIncomingTradeCard).join('') : empty('No pending outgoing offers')}
-      </div>
-    </div>
-
-    <!-- Smart Trade Matchmaker (Beta 1.8 carousel — populated by updateMM below) -->
-    <div id="mm-wrap"></div>
-
-    <!-- Interest Alerts: who's eyeing your players -->
-    ${renderMyInterestAlerts(team)}
-
-    <!-- Draft assets by year (Beta 1.7: cards are interactive; click expands detail) -->
-    <div class="myteam-section">
-      <div class="myteam-section-header">
-        <h3>Draft Assets</h3>
-        <span class="count">${draftStats.total} picks · ${draftStats.gained}+ / ${draftStats.lost}-</span>
-      </div>
-      <div class="draft-summary">
-        ${CONFIG.DRAFT_YEARS.map((y, idx) => {
-          const yr = draftStats.byYear[y];
-          const activeCls = idx === 0 ? ' active' : '';
-          return `
-            <button type="button" class="draft-summary-card${activeCls}" data-year="${y}">
-              <div class="draft-summary-year">${y}</div>
-              <div class="draft-summary-count">${yr.total}</div>
-              <div class="draft-summary-label">
-                ${yr.gained ? `<span style="color:#6f96ff">+${yr.gained}</span> ` : ''}${yr.lost ? `<span style="color:var(--red)">-${yr.lost}</span>` : ''}
-                ${!yr.gained && !yr.lost ? 'All original' : ''}
-              </div>
-            </button>
-          `;
-        }).join('')}
-      </div>
-      <div id="myteam-draft-detail" class="myteam-draft-detail">
-        ${renderMyTeamDraftDetail(team.id, CONFIG.DRAFT_YEARS[0])}
-      </div>
-    </div>
-
-    <!-- Full roster -->
-    <div class="myteam-section">
-      <div class="myteam-section-header">
-        <h3>My Roster</h3>
-        <span class="count">${team.roster.length} players</span>
-      </div>
-      <div id="myteam-roster">
-        ${renderGroupedRoster(team, 'mine')}
-      </div>
-      ${typeof tcTeamValueFooterHTML === 'function' ? tcTeamValueFooterHTML(team.id) : ''}
-    </div>
-
-    <!-- Trade history -->
-    <div class="myteam-section">
-      <div class="myteam-section-header">
-        <h3>Trade History</h3>
-        <span class="count">${history.length}</span>
-      </div>
-      ${history.length ? history.map(renderHistoryCard).join('') : empty('No completed trades yet')}
-    </div>
-
-    <!-- Hidden commish docs trigger (looks like a version watermark) -->
-    <button type="button" class="patch-notes-btn" data-open-patch-notes>📜 Patch Notes · every update so far</button>
-    <div id="commish-docs-trigger" class="app-version-tag" title="Open commish docs">Beta ${escapeHtml(BUILD_ID)}</div>
-  `;
-
-  $('#change-team-btn').onclick = showTeamPicker;
-  if (isCommish()) $('#open-commish-btn').onclick = openCommishDashboard;
-  wireIncomingActions();
-  wirePlayerActions(el);
-  const docsTrigger = $('#commish-docs-trigger');
-  if (docsTrigger) docsTrigger.onclick = openCommishDocsModal;
-  // Beta 1.7: draft-asset year cards toggle the itemized detail below them
-  $$('.draft-summary-card[data-year]').forEach((card) => {
-    card.onclick = () => {
-      const year = parseInt(card.dataset.year, 10);
-      $$('.draft-summary-card[data-year]').forEach((c) => c.classList.toggle('active', c === card));
-      const detail = $('#myteam-draft-detail');
-      if (detail) detail.innerHTML = renderMyTeamDraftDetail(team.id, year);
-    };
-  });
-
-  // Beta 1.8: hydrate the Matchmaker carousel (top 5 Z-Score partners).
-  _mmPartners = findSuggestedTradePartners(team.id).slice(0, 5);
-  _mmIndex = 0;
-  const updateMM = () => {
-    const wrap = $('#mm-wrap');
-    if (!wrap) return;
-    wrap.innerHTML = renderMatchmakerBlockHTML();
-    const prev = $('#mm-prev'), next = $('#mm-next');
-    if (prev) prev.onclick = () => {
-      _mmIndex = (_mmIndex - 1 + _mmPartners.length) % _mmPartners.length;
-      updateMM();
-    };
-    if (next) next.onclick = () => {
-      _mmIndex = (_mmIndex + 1) % _mmPartners.length;
-      updateMM();
-    };
-  };
-  updateMM();
+  if (typeof rsShow === 'function' && $('#view-myteam').classList.contains('active')) rsShow();
 }
 
 /* -------- Commissioner Docs Modal (V2.6) -------- */
@@ -5008,85 +4941,6 @@ async function handleCommishAction(btn) {
   }
 }
 
-function renderIncomingTradeCard(t) {
-  const offered = safeParse(t.assestsOffered) || {};
-  const requested = safeParse(t.assetsRequested) || {};
-  const role = myRoleInTrade(t);
-  // Card copy shifts based on role: outgoing (I'm proposer) reads "You sent" / "You'd get";
-  // incoming (I'm receiver) reads "You give" / "You get".
-  const isProposer = role === 'proposer';
-  const header = isProposer ? `To ${escapeHtml(t.teamReceiving)}` : `From ${escapeHtml(t.teamProposing)}`;
-  const leftLabel = isProposer ? 'You send' : 'You give';
-  const rightLabel = isProposer ? 'You get in return' : 'You get';
-  const leftSide = isProposer ? offered : requested;
-  const rightSide = isProposer ? requested : offered;
-  return `
-    <div class="trade-card" data-trade-id="${escapeHtml(t.tradeId || '')}">
-      <div class="trade-header">
-        <span>${header}</span>
-        <span class="trade-status">${escapeHtml(t.status)}</span>
-      </div>
-      <div class="trade-teams">
-        <div class="trade-team">
-          <h5>${leftLabel}</h5>
-          ${renderAssetItems(leftSide)}
-        </div>
-        <div class="trade-team">
-          <h5>${rightLabel}</h5>
-          ${renderAssetItems(rightSide)}
-        </div>
-      </div>
-      ${typeof tcTradeAnalysisHTML === 'function' ? tcTradeAnalysisHTML(t, state.myTeamId) : ''}
-      <div class="trade-actions">
-        ${tradeActionButtonsHTML(role)}
-      </div>
-    </div>
-  `;
-}
-
-// Shared action handler for both #myteam-incoming-list and #myteam-outgoing-list.
-async function handleMyTeamTradeAction(e) {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  const card = btn.closest('.trade-card');
-  const tradeId = card.dataset.tradeId;
-  const trade = state.allTrades.find((x) => x.tradeId === tradeId);
-  if (!trade) return;
-  const action = btn.dataset.action;
-  btn.disabled = true;
-  try {
-    if (action === 'counter') {
-      await handleCounteroffer(trade);
-      return; // handleCounteroffer navigates to Trade Desk; nothing else to do here
-    }
-    const statusMap = { accept: 'Accepted', reject: 'Rejected', cancel: 'Cancelled' };
-    const toastMap = { accept: 'Trade Accepted', reject: 'Trade declined', cancel: 'Trade offer cancelled' };
-    const newStatus = statusMap[action];
-    if (!newStatus) return;
-    if (action === 'accept') {
-      const r = btn.getBoundingClientRect();
-      triggerParticleBurst(r.left + r.width / 2, r.top + r.height / 2,
-        paletteForTrade(teamByName(trade.teamProposing)?.id || 1, teamByName(trade.teamReceiving)?.id || 2));
-    }
-    await updateTradeStatus(tradeId, newStatus);
-    if (action === 'accept') { showAcceptedBanner(trade); await applyTradeToDraftPicks(trade); }
-    toast(toastMap[action], 'success');
-    await loadAllTrades();
-    renderMyTeam();
-  } catch (err) {
-    console.error(err);
-    toast('Update failed', 'error');
-    btn.disabled = false;
-  }
-}
-
-function wireIncomingActions() {
-  const inList = $('#myteam-incoming-list');
-  const outList = $('#myteam-outgoing-list');
-  if (inList) inList.onclick = handleMyTeamTradeAction;
-  if (outList) outList.onclick = handleMyTeamTradeAction;
-}
-
 /* -------- Counteroffer engine (Beta 1.7) --------
  * A counteroffer marks the original trade 'Countered' (so it stops lingering as
  * Pending) and opens the Trade Desk with the assets FLIPPED — what they wanted
@@ -5132,23 +4986,19 @@ function setTheme(t) {
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
-  $('#theme-toggle').onclick = () => {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    setTheme(current === 'dark' ? 'light' : 'dark');
-  };
 }
 
-/* ----------------------- Layout: Classic / Compact / Simple -----------------------
- * Compact lives in compact.css, Simple in simple.css (+ simple.js), each scoped to
- * html[data-density="..."]. Classic stays the default. Tapping the W logo opens
- * the Display sheet (layout, theme, your team); the choice is per device.
+/* ----------------------- Layout: Classic / Simple -----------------------
+ * Simple lives in simple.css (+ simple.js), scoped to html[data-density="simple"].
+ * Classic is the default. The gear (or the W logo) opens the Settings sheet:
+ * team, layout, colors, notifications, commissioner tools. All per device.
  * Beta 1.35: devices that never picked a layout get the sheet once on launch.
  * ------------------------------------------------------------------ */
 
 const DEFAULT_DENSITY = 'classic';
+// Compact was retired in Beta 1.37: devices that had it fall back to Classic.
 const DENSITIES = [
   { key: 'classic', title: 'Classic', sub: 'Everything, full detail' },
-  { key: 'compact', title: 'Compact', sub: 'Same features, tighter' },
   { key: 'simple', title: 'Simple', sub: 'Bigger text, just the basics' },
 ];
 // Tabs Simple mode leaves out of the bottom nav.
@@ -5172,12 +5022,14 @@ function setDensity(d) {
 function initDensity() {
   let saved = null;
   try { saved = localStorage.getItem('density'); } catch (err) { /* storage blocked */ }
+  if (!DENSITIES.some((d) => d.key === saved)) saved = null;
   document.documentElement.setAttribute('data-density', saved || DEFAULT_DENSITY);
+  $('#settings-btn')?.addEventListener('click', () => openDisplaySheet());
   const logo = $('.logo-dot');
   if (logo) {
     logo.setAttribute('role', 'button');
     logo.setAttribute('tabindex', '0');
-    logo.setAttribute('aria-label', 'Display settings');
+    logo.setAttribute('aria-label', 'Settings');
     logo.onclick = () => openDisplaySheet();
     logo.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDisplaySheet(); } };
   }
@@ -5192,6 +5044,16 @@ function initDensity() {
       const th = e.target.closest('[data-theme-opt]');
       if (th) { setTheme(th.dataset.themeOpt); renderDisplaySheet(); return; }
       if (e.target.closest('[data-display-team]')) { close(); showTeamPicker(); return; }
+      if (e.target.closest('[data-open-patch-notes]')) { close(); return; } // the document handler opens them
+      const tool = e.target.closest('[data-settings]')?.dataset.settings;
+      if (tool) {
+        close();
+        if (tool === 'push' && typeof pushOpen === 'function') pushOpen();
+        if (tool === 'commish') openCommishDashboard();
+        if (tool === 'press') $('#press-room-trigger')?.click();
+        if (tool === 'docs') openCommishDocsModal();
+        return;
+      }
       if (e.target.closest('[data-display-done]')) close();
     };
   }
@@ -5231,16 +5093,31 @@ function renderDisplaySheet() {
       </span>
       <span class="arrow">Change →</span>
     </button>
+    ${typeof PUSH !== 'undefined' && PUSH.on ? `
+    <div class="ds-h">Notifications</div>
+    <button type="button" class="modal-team-btn ds-team" data-settings="push">
+      <span><div>${PUSH.subscribed ? 'On for this device' : 'Off for this device'}</div><div class="owner">Pick what pings you</div></span>
+      <span class="arrow">Open →</span>
+    </button>` : ''}
+    ${isCommish() ? `
+    <div class="ds-h">Commissioner</div>
+    <div class="ds-tools">
+      <button type="button" class="btn-ghost" data-settings="commish">★ Trade tools</button>
+      <button type="button" class="btn-ghost" data-settings="press">📰 Press Room</button>
+      <button type="button" class="btn-ghost" data-settings="docs">📚 Docs</button>
+    </div>` : ''}
+    <div class="ds-h">About</div>
+    <button type="button" class="patch-notes-btn" data-open-patch-notes>📜 Patch Notes · Beta ${escapeHtml(BUILD_ID)}</button>
     <button type="button" class="btn-primary ds-done" data-display-done>Done</button>`;
 }
 
 function openDisplaySheet(opts = {}) {
   const sheet = $('#display-sheet');
   if (!sheet) return;
-  $('#display-title').textContent = opts.firstRun ? 'How should the app look?' : 'Display';
+  $('#display-title').textContent = opts.firstRun ? 'How should the app look?' : 'Settings';
   $('#display-sub').textContent = opts.firstRun
-    ? 'Simple has bigger text and just the basics. You can change this any time by tapping the W.'
-    : 'Pick how the app looks on this device.';
+    ? 'Simple has bigger text and just the basics. You can change this any time from the gear at the top.'
+    : 'Your team, how the app looks, and notifications on this device.';
   renderDisplaySheet();
   sheet.hidden = false;
 }
@@ -5319,6 +5196,7 @@ function setView(name) {
     }
   }, 580);
   if (name === 'trades') {
+    enterTradeTabs();
     // Beta 1.5: refresh the identity lock on every tab entry so team switches propagate instantly
     populateTradeTeamSelects();
     loadAllTrades().then(() => {
@@ -5335,9 +5213,10 @@ function setView(name) {
     if (typeof tcInitTradesView === 'function') tcInitTradesView();
   }
   if (name === 'myteam') {
-    loadAllTrades().then(renderMyTeam);
-    loadTradeBlock(); // refresh for badges
     if (typeof rsInit === 'function') rsInit(); // Research subnav (research.js)
+    // The Briefing lists offers waiting on me: redraw it once trades are fresh.
+    loadAllTrades().then(() => { if (typeof RS !== 'undefined' && RS.sub === 'brief') renderMyTeam(); });
+    loadTradeBlock(); // refresh for badges
   }
   if (name === 'rosters') {
     loadTradeBlock().then(renderRoster);
@@ -5827,130 +5706,6 @@ function renderConsistencySummaryAggregate(trade) {
     </div>
   `;
 }
-
-/* -------- Trade Matchmaker -------- */
-
-/* -------- Smart Trade Matchmaker (Beta 1.8 — League-relative Z-Scores) --------
- * Old logic ranked positions by a team's own internal points; a team could be
- * "strong at RB" while still being the worst RB team in the league. The new
- * engine anchors every position against the league mean + stdDev, so surplus/
- * deficit reflects REAL trade leverage. Also serves the top 5 partners in a
- * navigable carousel instead of a single hard-coded suggestion.
- * ------------------------------------------------------------------------- */
-
-let _mmPartners = [];
-let _mmIndex = 0;
-
-const POS_KEYS = ['QB', 'RB', 'WR', 'TE'];
-
-function _teamPositionalTotals(team) {
-  const totals = { QB: 0, RB: 0, WR: 0, TE: 0 };
-  team.roster.forEach((p) => {
-    if (totals[p.pos] == null) return;
-    const proj = projectedPoints(p);
-    if (proj != null) totals[p.pos] += proj;
-  });
-  return totals;
-}
-
-function calculateLeagueAverages() {
-  const perPos = { QB: [], RB: [], WR: [], TE: [] };
-  state.teams.forEach((t) => {
-    const totals = _teamPositionalTotals(t);
-    POS_KEYS.forEach((pos) => { if (totals[pos] > 0) perPos[pos].push(totals[pos]); });
-  });
-  const out = {};
-  POS_KEYS.forEach((pos) => {
-    const arr = perPos[pos];
-    const n = arr.length;
-    const mean = n ? arr.reduce((s, x) => s + x, 0) / n : 0;
-    const variance = n ? arr.reduce((s, x) => s + (x - mean) ** 2, 0) / n : 0;
-    // Floor stdDev at 1 to prevent division-by-zero on flat position distributions
-    out[pos] = { mean, stdDev: Math.max(1, Math.sqrt(variance)) };
-  });
-  return out;
-}
-
-function calculateTeamNeeds(team, leagueAvg) {
-  const totals = _teamPositionalTotals(team);
-  const scores = POS_KEYS.map((pos) => {
-    const pts = totals[pos] || 0;
-    const { mean, stdDev } = leagueAvg[pos];
-    const diff = pts - mean;
-    const zScore = diff / stdDev;
-    return { pos, pts, mean, stdDev, diff, zScore };
-  });
-  // Surplus = highest z-score; deficit = lowest z-score
-  const sorted = [...scores].sort((a, b) => b.zScore - a.zScore);
-  return { surplus: sorted[0], deficit: sorted[sorted.length - 1], scores };
-}
-
-function findSuggestedTradePartners(myTeamId) {
-  const me = teamById(myTeamId);
-  if (!me) return [];
-  const leagueAvg = calculateLeagueAverages();
-  const mine = calculateTeamNeeds(me, leagueAvg);
-  const partners = state.teams
-    .filter((t) => t.id !== myTeamId)
-    .map((t) => {
-      const them = calculateTeamNeeds(t, leagueAvg);
-      // Trade fit: partner's surplus at MY deficit position minus their z-score at MY surplus.
-      // Higher = they have what I need AND want what I can spare.
-      const partnerAtMyDeficit = them.scores.find((s) => s.pos === mine.deficit.pos);
-      const partnerAtMySurplus = them.scores.find((s) => s.pos === mine.surplus.pos);
-      const matchScore = (partnerAtMyDeficit?.zScore || 0) - (partnerAtMySurplus?.zScore || 0);
-      return { team: t, them, mine, matchScore };
-    })
-    .sort((a, b) => b.matchScore - a.matchScore);
-  return partners;
-}
-
-function renderMatchmakerBlockHTML() {
-  if (!_mmPartners.length) return '';
-  const r = _mmPartners[_mmIndex];
-  if (!r || !r.team) return '';
-  const POS_COLORS = { QB: 'pos-QB', RB: 'pos-RB', WR: 'pos-WR', TE: 'pos-TE' };
-  const partnerSurplus = r.them.surplus;
-  const partnerDeficit = r.them.deficit;
-  const mySurplus = r.mine.surplus;
-  const myDeficit = r.mine.deficit;
-  const fmtDiff = (d) => `${d >= 0 ? '+' : ''}${d.toFixed(1)}`;
-  return `
-    <div class="matchmaker-card">
-      <div class="mm-header">
-        <h4>🎯 Smart Trade Matchmaker</h4>
-        <div class="mm-nav">
-          <button type="button" id="mm-prev" aria-label="Previous partner">‹</button>
-          <span class="mm-count">${_mmIndex + 1} of ${_mmPartners.length}</span>
-          <button type="button" id="mm-next" aria-label="Next partner">›</button>
-        </div>
-      </div>
-      <div class="matchmaker-needs">
-        <div class="matchmaker-need">
-          <div class="label">Your Surplus</div>
-          <div class="pos-tag ${POS_COLORS[mySurplus.pos] || ''}">${mySurplus.pos}</div>
-          <div class="pts">${fmtDiff(mySurplus.diff)} pts vs avg</div>
-        </div>
-        <div class="matchmaker-need">
-          <div class="label">Your Deficit</div>
-          <div class="pos-tag ${POS_COLORS[myDeficit.pos] || ''}">${myDeficit.pos}</div>
-          <div class="pts">${fmtDiff(myDeficit.diff)} pts vs avg</div>
-        </div>
-      </div>
-      <div class="matchmaker-suggest">
-        <div class="label">Suggested Trade Partner</div>
-        <div class="partner">${escapeHtml(r.team.name)}</div>
-        <div class="reason">
-          They have a surplus at <b>${partnerSurplus.pos}</b> (${fmtDiff(partnerSurplus.diff)} pts vs avg)
-          and a deficit at <b>${partnerDeficit.pos}</b> (${fmtDiff(partnerDeficit.diff)} pts vs avg).
-          Send them <b>${mySurplus.pos}</b> help in exchange for a <b>${myDeficit.pos}</b> upgrade!
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-/* -------- League Front Page (newsletter hero on Standings) -------- */
 
 /* Front Page story: three states.
  *   collapsed  headline only
@@ -7409,7 +7164,7 @@ function wireLuckPlayback() {
 /* End V2.5 additions */
 
 // Beta 1.7: build-ID bookkeeping so a fresh deploy self-heals stale localStorage schemas
-const BUILD_ID = '1.35.0';
+const BUILD_ID = '1.37.0';
 if (localStorage.getItem('app_build') !== BUILD_ID) {
   localStorage.setItem('app_build', BUILD_ID);
 }
